@@ -1,3 +1,6 @@
 .DS_Store
 node_modules/
 *.log
+
+# 取り込み元の生資料（実名・連絡先などPIIを含むためコミットしない。MD化した成果物のみ追跡）
+data/
