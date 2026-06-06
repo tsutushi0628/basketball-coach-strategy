@@ -1,0 +1,11 @@
+{
+  "name": "practice-plan-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Deterministic weekly basketball practice-plan engine (MVP). Multi-tenant, config-driven, storage-abstracted.",
+  "private": true,
+  "scripts": {
+    "plan": "node bin/plan.js",
+    "test": "node --test"
+  }
+}

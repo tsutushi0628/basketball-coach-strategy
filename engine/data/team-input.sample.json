@@ -1,0 +1,9 @@
+{
+  "team_id": "minami-nakano-boys",
+  "grades": [1, 2],
+  "indicators": [
+    { "id": "FT率", "good_direction": "up", "baseline": 40, "latest": 52, "target": 70, "unit": "%" },
+    { "id": "試合TO", "good_direction": "down", "baseline": 20, "latest": 16, "target": 10, "unit": "本" },
+    { "id": "ゴール下成功率", "good_direction": "up", "baseline": 45, "latest": 55, "target": 70, "unit": "%" }
+  ]
+}
