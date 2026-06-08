@@ -137,8 +137,8 @@
  * @property {ScheduleDay[]} schedule        Weekly schedule.
  * @property {boolean} [shared_gym]          When true (default), one coach runs two
  *                                           groups in a shared gym, so the weekday
- *                                           cross-paired schedule (spec ②) is built.
- *                                           false disables cross-pairing.
+ *                                           rotation schedule (spec ②) is built.
+ *                                           false disables it.
  * @property {string[]} [groups]             Group labels (e.g. ["男子","女子"]).
  *                                           Defaults to ["男子","女子"] when omitted.
  * @property {string[]} [coach_absent_allow]  Categories players may self-run on coach-absent days.
@@ -187,7 +187,7 @@
  *                                  (要コーチ) vs. is player-self-runnable (自走).
  * @property {CoachingMode} [coaching_mode]  Three-way coaching mode stamped at
  *                                  allocation (self/practice/lecture) so format and
- *                                  the cross-paired group view can show 自走/実践/
+ *                                  the rotation group view can show 自走/実践/
  *                                  レクチャ without re-deriving from the catalog.
  */
 
@@ -233,13 +233,16 @@
  * @property {string[]} introduced         Updated introduced list = prior introduced ∪ the
  *                                         drill ids introduced in this week's Saturday lecture.
  * @property {string[]} [warnings]         Non-fatal notices from best-effort gates
- *                                         (philosophy-floor shortfall / underfill).
- * @property {Array<import('./groups.js').WeekdayGroupPlan|import('./groups.js').TogetherGroupPlan>} [weekday_groups]
- *                                         Cross-paired two-group weekday schedule (spec ②):
- *                                         each weekday split into 男子/女子 columns with the
- *                                         lone coach alternating supervision per practice slot,
- *                                         plus the Saturday host as a co-ed together session.
- *                                         Empty when shared_gym is false.
+ *                                         (philosophy-floor shortfall / underfill /
+ *                                         rotation self-fill shortfall).
+ * @property {Array<import('./groups.js').WeekdayRotationPlan|import('./groups.js').SelfParallelDay|import('./groups.js').TogetherGroupPlan>} [weekday_groups]
+ *                                         Two-group weekday schedule (spec ②). Each day is
+ *                                         one of: a coach-present weekday rotation (one
+ *                                         practice drill paired with self-fill drills, then
+ *                                         swap), a coach-absent self_parallel day (both
+ *                                         groups self-run the same menu, no rotation), or the
+ *                                         Saturday host as a co-ed together session. Empty
+ *                                         when shared_gym is false.
  */
 
 export {}; // mark as ES module; types are ambient via JSDoc.

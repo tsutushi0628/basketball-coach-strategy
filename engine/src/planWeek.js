@@ -126,8 +126,8 @@ export function planWeek(drills, config, teamInput) {
     // Spec #4: best-effort gates (philosophy floor / underfill) push non-fatal
     // notices here. Initialized so consumers can always read an array.
     warnings: [],
-    // Spec ②: cross-paired two-group (男子/女子) weekday schedule for a single
-    // coach, populated below once the Saturday host day is known.
+    // Spec ②: two-group (男子/女子) weekday rotation schedule for a single coach,
+    // populated below once the Saturday host day is known.
     weekday_groups: [],
   };
 
@@ -147,10 +147,11 @@ export function planWeek(drills, config, teamInput) {
   plan.saturday_lecture = saturdayLecture;
   plan.introduced = introduced;
 
-  // Post-pass (spec ②): derive the cross-paired two-group weekday schedule. The
+  // Post-pass (spec ②): derive the two-group weekday rotation schedule. The
   // Saturday host (now known from saturday_lecture) is a co-ed together session;
-  // every other day is split into 男子/女子 columns with the lone coach alternating
-  // supervision per practice slot so two groups are never both in 実践 at once.
+  // a coach-present weekday becomes a rotation (the lone coach supervises one
+  // group's practice drill while the other does self drills, then they swap, so two
+  // groups are never both in 実践); a coach-absent day becomes both-groups self-run.
   // Pure derivation over the validated day blocks — does not mutate them.
   plan.weekday_groups = buildWeekdayGroups({ plan, drillIndex, config });
 

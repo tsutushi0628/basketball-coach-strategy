@@ -84,8 +84,9 @@ export function formatPlan(plan) {
   ];
   const body = plan.days.map(formatDay).join('\n\n');
 
-  // Spec ②: cross-paired two-group (男子/女子) weekday schedule for a single coach.
-  // Renders each weekday as two columns with the coach's position per slot, and
+  // Spec ②: two-group (男子/女子) weekday schedule for a single coach. Coach-present
+  // weekdays render as rotation rounds (coach on one group's practice while the
+  // other does self drills, then swap); coach-absent days as both-groups self-run;
   // the Saturday host as a co-ed together session. Empty/absent renders nothing.
   const groups = formatWeekdayGroups(plan.weekday_groups);
 
@@ -108,18 +109,24 @@ export function formatPlan(plan) {
 }
 
 /**
- * Render the cross-paired two-group weekday schedule (spec ②). For each weekday,
- * shows the 男子 / 女子 columns slot by slot with each group's engagement
- * (自走/実践/レクチャ) and a coach marker (▶) on the supervised group, making the
- * "no two groups in 実践 at once" staffing visible. The Saturday host renders as a
- * single co-ed together session. Absent / empty input renders nothing.
+ * Render the two-group weekday schedule (spec ②). Each day is one of:
+ *  - together (土): co-ed session, coach sees both.
+ *  - self_parallel (コーチ不在日 水木): no coach, both groups self-run the same menu.
+ *  - rotation (在席日 火金): the lone coach is split across two groups, alternating
+ *    "コーチ付き(実践): X / その間もう片方は自走: Y → 入れ替え（両組が両方を実施）";
+ *    leftover self runs as "両組まとめて自走（コーチは巡回）".
+ * Absent / empty input renders nothing.
  *
- * @param {Array<import('./groups.js').WeekdayGroupPlan|import('./groups.js').TogetherGroupPlan>} [weekdayGroups]
+ * @param {Array<import('./groups.js').WeekdayRotationPlan|import('./groups.js').SelfParallelDay|import('./groups.js').TogetherGroupPlan>} [weekdayGroups]
  * @returns {string[]}
  */
 function formatWeekdayGroups(weekdayGroups) {
   if (!Array.isArray(weekdayGroups) || weekdayGroups.length === 0) return [];
-  const lines = ['', '=== 組違い週次表（コーチ1人・男女2グループ）==='];
+  const lines = [
+    '',
+    '=== 組違い週次表（コーチ1人・男女2グループ）===',
+    '在席日はローテーション（コーチが片組に実践を付け、もう片組は自走→入れ替え）、不在日は両組が同一メニューを各自で自走、土は男女合同。',
+  ];
   for (const dayPlan of weekdayGroups) {
     if (dayPlan.kind === 'together') {
       lines.push('', `■ ${dayPlan.day}（合同 / ${dayPlan.groups.join('・')}）  コーチは両グループを同時に担当`);
@@ -128,17 +135,33 @@ function formatWeekdayGroups(weekdayGroups) {
       }
       continue;
     }
-    const groupLabels = Object.keys(dayPlan.columns);
-    lines.push('', `■ ${dayPlan.day}（組違い / コーチは▶のグループに付く）`);
-    const slotCount = groupLabels.length ? dayPlan.columns[groupLabels[0]].length : 0;
-    for (let i = 0; i < slotCount; i++) {
-      const cells = groupLabels.map((g) => {
-        const s = dayPlan.columns[g][i];
-        const mark = s.coached ? '▶' : '　';
-        const tag = MODE_LABEL[s.engagement] ?? s.engagement;
-        return `${mark}${g}: ${s.name}（${tag}）`;
-      });
-      lines.push(`   ${cells.join('　｜　')}`);
+    if (dayPlan.kind === 'self_parallel') {
+      lines.push('', `■ ${dayPlan.day}（コーチ不在 / 男女とも同一メニューを各自で自走）`);
+      lines.push('   両組とも上の日次メニューを各自で実施（コーチ不在のため組分け不要）');
+      continue;
+    }
+    // Coach-present rotation weekday
+    const shortfallNote = dayPlan.shortfall_minutes > 0
+      ? `  ⚠ 自走${dayPlan.shortfall_minutes}分不足`
+      : '';
+    lines.push('', `■ ${dayPlan.day}（組違い / ローテーション制）${shortfallNote}`);
+    if (!dayPlan.rounds || dayPlan.rounds.length === 0) {
+      lines.push('   （この日はドリルなし）');
+      continue;
+    }
+    for (const round of dayPlan.rounds) {
+      if (round.kind === 'rotation') {
+        const p = round.practice;
+        const selfNames = round.self_fill.length > 0
+          ? round.self_fill.map((d) => `${d.name}(${d.minutes}分)`).join('・')
+          : '（自走ドリルなし）';
+        lines.push(`   ▶ コーチ付き(実践): ${p.name}　${p.minutes}分　[${p.category}]`);
+        lines.push(`     その間もう片方は自走: ${selfNames}`);
+        lines.push(`     → 終わったら入れ替え（両組が両方を実施）`);
+      } else if (round.kind === 'both_self') {
+        const drillNames = round.drills.map((d) => `${d.name}(${d.minutes}分)`).join('・');
+        lines.push(`   　 両組まとめて自走（コーチは巡回）: ${drillNames}`);
+      }
     }
   }
   return lines;
