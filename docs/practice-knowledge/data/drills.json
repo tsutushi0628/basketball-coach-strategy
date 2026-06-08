@@ -1665,6 +1665,7 @@
     "intensity_class": "低",
     "load_notes": "接触あり・転倒注意。跳躍は単発で低",
     "mastery_stage": "実戦化",
+    "needs_coach": true,
     "philosophy_tags": [
       "フィニッシュ",
       "コンタクト",

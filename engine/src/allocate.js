@@ -25,7 +25,7 @@
  */
 
 import { isHighIntensity } from './loadModel.js';
-import { isCoachAbsentEligible } from './filter.js';
+import { isCoachAbsentEligible, needsCoach, coachingMode } from './filter.js';
 
 /** Block ratios over the day's total minutes (DESIGN.md §4). */
 export const BLOCK_RATIOS = { WU: 0.15, 技術: 0.30, 対人: 0.30, ゲーム: 0.20, CD: 0.05 };
@@ -252,6 +252,8 @@ function fillSkillBlock({
       minutes: dur,
       category: d.category,
       intensity_class: d.intensity_class,
+      needs_coach: needsCoach(d),
+      coaching_mode: coachingMode(d),
     });
     usedIds.add(d.id);
     daySeenIds.add(d.id);
@@ -347,6 +349,8 @@ function fillFloorIntoBlock({ planBlock, target, usedSoFar, pool, floorTracker, 
         minutes: dur,
         category: d.category,
         intensity_class: d.intensity_class,
+        needs_coach: needsCoach(d),
+        coaching_mode: coachingMode(d),
       });
       usedIds.add(d.id);
       daySeenIds.add(d.id);
@@ -396,6 +400,8 @@ function fillCondBlock({ block, target, candidates, daySeenIds = new Set(), budg
       minutes: dur,
       category: d.category,
       intensity_class: d.intensity_class,
+      needs_coach: needsCoach(d),
+      coaching_mode: coachingMode(d),
     });
     daySeenIds.add(d.id);
     used += dur;

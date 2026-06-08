@@ -186,6 +186,17 @@ export function normalizeDrill(raw) {
     mastery_stage: String(raw.mastery_stage ?? ''),
     philosophy_tags: tags.map(String),
     notes: String(raw.notes ?? ''),
+    // Optional manual override for the needsCoach derivation. Preserved as a
+    // boolean only when the record explicitly sets one (borderline hand-fix);
+    // otherwise left undefined so needsCoach falls back to the derived rule.
+    ...(typeof raw.needs_coach === 'boolean' ? { needs_coach: raw.needs_coach } : {}),
+    // Optional manual override for the three-way coachingMode derivation
+    // (self/practice/lecture). Preserved only when the record sets a valid value
+    // (rare borderline hand-fix); otherwise left undefined so coachingMode falls
+    // back to its derived rule.
+    ...(raw.coaching_mode === 'self' || raw.coaching_mode === 'practice' || raw.coaching_mode === 'lecture'
+      ? { coaching_mode: raw.coaching_mode }
+      : {}),
     source_name: raw.source_name,
     source_url: raw.source_url,
     video_url: raw.video_url,

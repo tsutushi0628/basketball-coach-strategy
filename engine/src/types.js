@@ -23,6 +23,15 @@
  */
 
 /**
+ * Three-way coaching mode for a drill (DESIGN.md coach-context).
+ * - "self":     self-runnable, needs no coach (自走).
+ * - "practice": needs a coach AND is live/contact work to supervise (実践).
+ * - "lecture":  needs a coach for a new non-contact skill to teach (レクチャ);
+ *               its intro can be batched into the mixed-gender Saturday lecture.
+ * @typedef {"self"|"practice"|"lecture"} CoachingMode
+ */
+
+/**
  * Grade applicability. Either the literal "全" (all grades) or an ascending
  * array of middle-school year integers (1|2|3).
  * @typedef {"全"|Array<1|2|3>} Grades
@@ -60,6 +69,15 @@
  * @property {string} [video_url]   Demo video URL.
  * @property {string} [provenance]  "手持ち" | "収集".
  * @property {string} [source_kind] "external" | "team_original".
+ * @property {boolean} [needs_coach]  Optional manual override for the needsCoach
+ *                                  derivation (要コーチ=true / 自走=false). When
+ *                                  present it wins over the derived rule; absent
+ *                                  for the vast majority (derivation is the SoT).
+ * @property {CoachingMode} [coaching_mode]  Optional manual override for the
+ *                                  three-way coachingMode derivation
+ *                                  (self/practice/lecture). When present it wins
+ *                                  over the derived rule; absent for the vast
+ *                                  majority (derivation is the SoT).
  * @property {string} searchText    Lowercased concatenation of keyword fields
  *                                  (name+category+notes+sub_skill+tags+gradesRaw)
  *                                  used by deterministic keyword filters.
@@ -117,7 +135,17 @@
  * @property {number} current_month          1-12; drives in-year set-play filter.
  * @property {string} phase                  Macrocycle phase label (e.g. "準備").
  * @property {ScheduleDay[]} schedule        Weekly schedule.
+ * @property {boolean} [shared_gym]          When true (default), one coach runs two
+ *                                           groups in a shared gym, so the weekday
+ *                                           cross-paired schedule (spec ②) is built.
+ *                                           false disables cross-pairing.
+ * @property {string[]} [groups]             Group labels (e.g. ["男子","女子"]).
+ *                                           Defaults to ["男子","女子"] when omitted.
  * @property {string[]} [coach_absent_allow]  Categories players may self-run on coach-absent days.
+ * @property {string[]} [introduced]         Drill ids whose lecture-type intro has already been
+ *                                           delivered (mixed-gender Saturday lecture). A lecture-mode
+ *                                           drill already in this list is NOT re-introduced on Saturday
+ *                                           (it is now repetition / self-run). Defaults to [] (all new).
  * @property {Object<string, PhilosophyFloor>} [philosophy_floors]  Weekly per-category minutes floors.
  * @property {Object<string, number>} phase_category_weights  Base category weights for the phase.
  * @property {LoadCaps} load_caps
@@ -155,6 +183,12 @@
  * @property {number} minutes
  * @property {string} category
  * @property {IntensityClass} intensity_class
+ * @property {boolean} needs_coach  Whether this drill needs a coach's eye
+ *                                  (要コーチ) vs. is player-self-runnable (自走).
+ * @property {CoachingMode} [coaching_mode]  Three-way coaching mode stamped at
+ *                                  allocation (self/practice/lecture) so format and
+ *                                  the cross-paired group view can show 自走/実践/
+ *                                  レクチャ without re-deriving from the catalog.
  */
 
 /**
@@ -175,6 +209,17 @@
  */
 
 /**
+ * The mixed-gender Saturday new-drill lecture (spec). Lists the lecture-mode
+ * drills whose intro is being delivered together on Saturday this week (i.e.
+ * lecture-mode drills that appear in the week's plan and were not yet in
+ * `config.introduced`). Empty when nothing new is being introduced.
+ * @typedef {Object} SaturdayLecture
+ * @property {string} day                   The day the lecture is placed on (Saturday).
+ * @property {Array<{drill_id: string, name: string, category: string}>} items
+ *                                          The lecture-mode drills introduced this week.
+ */
+
+/**
  * @typedef {Object} Plan
  * @property {string} team_id
  * @property {number} month
@@ -182,8 +227,19 @@
  * @property {PlanDay[]} days
  * @property {string} focus_summary        Human-readable focus statement.
  * @property {string} notes                Free-text planning notes.
+ * @property {SaturdayLecture|null} saturday_lecture  The mixed-gender Saturday
+ *                                         new-drill lecture for this week (null when
+ *                                         there is no coach-present longest day to host it).
+ * @property {string[]} introduced         Updated introduced list = prior introduced ∪ the
+ *                                         drill ids introduced in this week's Saturday lecture.
  * @property {string[]} [warnings]         Non-fatal notices from best-effort gates
  *                                         (philosophy-floor shortfall / underfill).
+ * @property {Array<import('./groups.js').WeekdayGroupPlan|import('./groups.js').TogetherGroupPlan>} [weekday_groups]
+ *                                         Cross-paired two-group weekday schedule (spec ②):
+ *                                         each weekday split into 男子/女子 columns with the
+ *                                         lone coach alternating supervision per practice slot,
+ *                                         plus the Saturday host as a co-ed together session.
+ *                                         Empty when shared_gym is false.
  */
 
 export {}; // mark as ES module; types are ambient via JSDoc.

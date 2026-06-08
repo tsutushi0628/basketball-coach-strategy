@@ -22,6 +22,8 @@ import { filterPoolForDay } from './filter.js';
 import { createLoadBudget } from './loadModel.js';
 import { allocateDay } from './allocate.js';
 import { runAllGates } from './gates.js';
+import { buildSaturdayLecture, pickLectureDay } from './lecture.js';
+import { buildWeekdayGroups } from './groups.js';
 
 /**
  * Build the weekly philosophy-floor tracker from config.philosophy_floors:
@@ -77,8 +79,26 @@ export function planWeek(drills, config, teamInput) {
   // minutes; allocateDay decrements it as it places floors on coach-present days.
   const floorTracker = buildFloorTracker(config);
 
-  const days = (config.schedule ?? []).map((scheduleDay) => {
-    const dayPool = filterPoolForDay(drills, config, scheduleDay.court);
+  // Time-series gate (spec ①): NEW lecture-mode drills (not yet taught) are
+  // withheld from weekday (火水木金) practice this week and only surface on the
+  // Saturday lecture host (coach-present longest day) so they can be introduced.
+  // Identify that host day from the schedule up front so the per-day filter knows
+  // which day is allowed to carry not-yet-introduced lecture drills.
+  const introducedSet = new Set(config.introduced ?? []);
+  const schedule = config.schedule ?? [];
+  const lectureHost = pickLectureDay(
+    schedule.map((s) => ({ day: s.day, minutes: s.minutes, coach_present: s.coach_present })),
+  );
+  const lectureHostDay = lectureHost?.day ?? null;
+
+  const days = schedule.map((scheduleDay) => {
+    // The lecture host day may carry brand-new lecture drills (to introduce);
+    // every other (weekday) practice day withholds them until they are taught.
+    const isLectureHost = scheduleDay.day === lectureHostDay;
+    const dayPool = filterPoolForDay(drills, config, scheduleDay.court, {
+      excludeNewLecture: !isLectureHost,
+      introduced: introducedSet,
+    });
     return allocateDay({
       scheduleDay,
       dayPool,
@@ -99,14 +119,40 @@ export function planWeek(drills, config, teamInput) {
     days,
     focus_summary: buildFocusSummary(finalWeights),
     notes: `守備方針: ${config.philosophy?.df ?? '—'} / ショットクロック ${config.philosophy?.shot_clock_sec ?? '—'}秒`,
+    // Mixed-gender Saturday new-drill lecture + updated introduced roster
+    // (populated below from the produced plan).
+    saturday_lecture: null,
+    introduced: [...(config.introduced ?? [])],
     // Spec #4: best-effort gates (philosophy floor / underfill) push non-fatal
     // notices here. Initialized so consumers can always read an array.
     warnings: [],
+    // Spec ②: cross-paired two-group (男子/女子) weekday schedule for a single
+    // coach, populated below once the Saturday host day is known.
+    weekday_groups: [],
   };
 
   // Final defense line: re-check every invariant on the produced plan.
   const drillIndex = new Map(drills.map((d) => [d.id, d]));
   runAllGates({ plan, config, drillIndex, mainFocus });
+
+  // Post-pass: stage this week's NEW lecture-mode drills as one mixed-gender
+  // Saturday lecture (coach-present longest day) and return the updated
+  // introduced roster so next week won't re-introduce them. Pure derivation over
+  // the produced plan — does not alter the day blocks the gates just validated.
+  const { saturdayLecture, introduced } = buildSaturdayLecture({
+    plan,
+    drillIndex,
+    introduced: config.introduced ?? [],
+  });
+  plan.saturday_lecture = saturdayLecture;
+  plan.introduced = introduced;
+
+  // Post-pass (spec ②): derive the cross-paired two-group weekday schedule. The
+  // Saturday host (now known from saturday_lecture) is a co-ed together session;
+  // every other day is split into 男子/女子 columns with the lone coach alternating
+  // supervision per practice slot so two groups are never both in 実践 at once.
+  // Pure derivation over the validated day blocks — does not mutate them.
+  plan.weekday_groups = buildWeekdayGroups({ plan, drillIndex, config });
 
   return plan;
 }
