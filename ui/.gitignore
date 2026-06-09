@@ -1,0 +1,5 @@
+# 生成物（再生成: node ui/build.mjs）
+*.html
+
+# 一時QAスクショ/変種
+_*
