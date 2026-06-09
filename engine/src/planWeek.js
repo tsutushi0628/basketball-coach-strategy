@@ -23,7 +23,6 @@ import { createLoadBudget } from './loadModel.js';
 import { allocateDay } from './allocate.js';
 import { runAllGates } from './gates.js';
 import { buildSaturdayLecture, pickLectureDay } from './lecture.js';
-import { buildWeekdayGroups } from './groups.js';
 
 /**
  * Build the weekly philosophy-floor tracker from config.philosophy_floors:
@@ -126,9 +125,6 @@ export function planWeek(drills, config, teamInput) {
     // Spec #4: best-effort gates (philosophy floor / underfill) push non-fatal
     // notices here. Initialized so consumers can always read an array.
     warnings: [],
-    // Spec ②: two-group (男子/女子) weekday rotation schedule for a single coach,
-    // populated below once the Saturday host day is known.
-    weekday_groups: [],
   };
 
   // Final defense line: re-check every invariant on the produced plan.
@@ -146,14 +142,6 @@ export function planWeek(drills, config, teamInput) {
   });
   plan.saturday_lecture = saturdayLecture;
   plan.introduced = introduced;
-
-  // Post-pass (spec ②): derive the two-group weekday rotation schedule. The
-  // Saturday host (now known from saturday_lecture) is a co-ed together session;
-  // a coach-present weekday becomes a rotation (the lone coach supervises one
-  // group's practice drill while the other does self drills, then they swap, so two
-  // groups are never both in 実践); a coach-absent day becomes both-groups self-run.
-  // Pure derivation over the validated day blocks — does not mutate them.
-  plan.weekday_groups = buildWeekdayGroups({ plan, drillIndex, config });
 
   return plan;
 }

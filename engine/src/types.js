@@ -63,6 +63,12 @@
  * @property {string} load_notes    Load caveats (free text).
  * @property {string} mastery_stage Mastery progression note (free text).
  * @property {string[]} philosophy_tags  Philosophy/skill tags (used in keyword filters).
+ * @property {'solo'|'pair'|'small'|'team'|'group'} peopleShape  Coarse group-shape
+ *                                  enum derived from free-text `people`; ranks
+ *                                  "いずれか" alternatives by drill form.
+ * @property {string} peopleRaw     Original free-text people value (audit trail).
+ * @property {boolean} needs_helper  Whether the drill needs a helper (pad/feeder/coach);
+ *                                  used in alternative-affinity to keep staffing similar.
  * @property {string} notes         Free-text notes (used in zone/sets keyword filters).
  * @property {string} [source_name] Attribution.
  * @property {string} [source_url]  Attribution URL.
@@ -238,16 +244,7 @@
  * @property {string[]} introduced         Updated introduced list = prior introduced ∪ the
  *                                         drill ids introduced in this week's Saturday lecture.
  * @property {string[]} [warnings]         Non-fatal notices from best-effort gates
- *                                         (philosophy-floor shortfall / underfill /
- *                                         rotation self-fill shortfall).
- * @property {Array<import('./groups.js').WeekdayRotationPlan|import('./groups.js').SelfParallelDay|import('./groups.js').TogetherGroupPlan>} [weekday_groups]
- *                                         Two-group weekday schedule (spec ②). Each day is
- *                                         one of: a coach-present weekday rotation (one
- *                                         practice drill paired with self-fill drills, then
- *                                         swap), a coach-absent self_parallel day (both
- *                                         groups self-run the same menu, no rotation), or the
- *                                         Saturday host as a co-ed together session. Empty
- *                                         when shared_gym is false.
+ *                                         (philosophy-floor shortfall / underfill).
  */
 
 export {}; // mark as ES module; types are ambient via JSDoc.

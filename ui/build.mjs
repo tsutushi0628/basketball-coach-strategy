@@ -56,7 +56,7 @@ async function main() {
   for (const p of patterns) {
     const { css, body } = p.render(data);
     const html = page({
-      title: `${data.team.label} ${data.team.month}月 練習メニュー — ${p.meta.name}`,
+      title: `${data.school} ${data.month}月 練習メニュー（男子・女子） — ${p.meta.name}`,
       css,
       body,
     });
@@ -75,9 +75,10 @@ async function main() {
     </a>`,
     )
     .join('');
+  const phase = data.session.month.phase;
   const indexBody = `
-    <h1 style="font-size:clamp(22px,4vw,30px);font-weight:700;letter-spacing:-.01em;margin:2px 0 6px">${esc(data.team.label)}　練習計画</h1>
-    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.team.month}月・${esc(data.team.phase)}期　／　${esc(data.team.players)}　／　見せ方を3パターン用意しました。比べて選んでください。</p>
+    <h1 style="font-size:clamp(22px,4vw,30px);font-weight:700;letter-spacing:-.01em;margin:2px 0 6px">${esc(data.school)}　練習計画</h1>
+    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.month}月・${esc(phase)}　／　練習メニューは男女共通（コーチ1人が両方を見る）。組違い＝コーチ付き段を男女でずらして回す。見せ方を3パターン用意しました。</p>
     <div class="pgrid">${cards}</div>`;
   const indexCss = `
     .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}
@@ -88,7 +89,7 @@ async function main() {
     .pgo{font-size:13px;color:var(--orange-deep);font-weight:700;margin-top:10px}`;
   writeFileSync(
     resolve(__dirname, 'index.html'),
-    page({ title: `${data.team.label} 練習計画`, css: indexCss, body: indexBody, script: '' }),
+    page({ title: `${data.school} 練習計画（男子・女子）`, css: indexCss, body: indexBody, script: '' }),
     'utf8',
   );
 

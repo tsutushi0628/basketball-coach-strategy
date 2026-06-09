@@ -90,13 +90,7 @@ export function formatPlan(plan) {
   ];
   const body = plan.days.map(formatDay).join('\n\n');
 
-  // Spec ②: two-group (男子/女子) weekday schedule for a single coach. Coach-present
-  // weekdays render as rotation rounds (coach on one group's practice while the
-  // other does self drills, then swap); coach-absent days as both-groups self-run;
-  // the Saturday host as a co-ed together session. Empty/absent renders nothing.
-  const groups = formatWeekdayGroups(plan.weekday_groups);
-
-  // Mixed-gender Saturday new-drill lecture: the lecture-mode drills whose intro
+  // Saturday new-drill lecture: the lecture-mode drills whose intro
   // is delivered together this week. Rendered as a dedicated section so the coach
   // can run one co-ed explanation block instead of re-teaching per group. An
   // empty intro list still renders the header so the absence is explicit ("no new
@@ -111,70 +105,11 @@ export function formatPlan(plan) {
       ? ['', '⚠ 注意（計画は生成済み）:', ...plan.warnings.map((w) => `  - ${w}`)]
       : [];
 
-  return [...header, body, ...groups, ...lecture, ...warnings, ''].join('\n');
+  return [...header, body, ...lecture, ...warnings, ''].join('\n');
 }
 
 /**
- * Render the two-group weekday schedule (spec ②). Each day is one of:
- *  - together (土): co-ed session, coach sees both.
- *  - self_parallel (コーチ不在日 水木): no coach, both groups self-run the same menu.
- *  - rotation (在席日 火金): the lone coach is split across two groups, alternating
- *    "コーチ付き(実践): X / その間もう片方は自走: Y → 入れ替え（両組が両方を実施）";
- *    leftover self runs as "両組まとめて自走（コーチは巡回）".
- * Absent / empty input renders nothing.
- *
- * @param {Array<import('./groups.js').WeekdayRotationPlan|import('./groups.js').SelfParallelDay|import('./groups.js').TogetherGroupPlan>} [weekdayGroups]
- * @returns {string[]}
- */
-function formatWeekdayGroups(weekdayGroups) {
-  if (!Array.isArray(weekdayGroups) || weekdayGroups.length === 0) return [];
-  const lines = [
-    '',
-    '=== 組違い週次表（コーチ1人・男女2グループ）===',
-    '在席日はローテーション（コーチが片組に実践を付け、もう片組は自走→入れ替え）、不在日は両組が同一メニューを各自で自走、土は男女合同。',
-  ];
-  for (const dayPlan of weekdayGroups) {
-    if (dayPlan.kind === 'together') {
-      lines.push('', `■ ${dayPlan.day}（合同 / ${dayPlan.groups.join('・')}）  コーチは両グループを同時に担当`);
-      for (const slot of dayPlan.shared) {
-        lines.push(`   - ${slot.name}　${slot.minutes}分　[${slot.category}]　${MODE_LABEL[slot.engagement] ?? slot.engagement}`);
-      }
-      continue;
-    }
-    if (dayPlan.kind === 'self_parallel') {
-      lines.push('', `■ ${dayPlan.day}（コーチ不在 / 男女とも同一メニューを各自で自走）`);
-      lines.push('   両組とも上の日次メニューを各自で実施（コーチ不在のため組分け不要）');
-      continue;
-    }
-    // Coach-present rotation weekday
-    const shortfallNote = dayPlan.shortfall_minutes > 0
-      ? `  ⚠ 自走${dayPlan.shortfall_minutes}分不足`
-      : '';
-    lines.push('', `■ ${dayPlan.day}（組違い / ローテーション制）${shortfallNote}`);
-    if (!dayPlan.rounds || dayPlan.rounds.length === 0) {
-      lines.push('   （この日はドリルなし）');
-      continue;
-    }
-    for (const round of dayPlan.rounds) {
-      if (round.kind === 'rotation') {
-        const p = round.practice;
-        const selfNames = round.self_fill.length > 0
-          ? round.self_fill.map((d) => `${d.name}(${d.minutes}分)`).join('・')
-          : '（自走ドリルなし）';
-        lines.push(`   ▶ コーチ付き(実践): ${p.name}　${p.minutes}分　[${p.category}]`);
-        lines.push(`     その間もう片方は自走: ${selfNames}`);
-        lines.push(`     → 終わったら入れ替え（両組が両方を実施）`);
-      } else if (round.kind === 'both_self') {
-        const drillNames = round.drills.map((d) => `${d.name}(${d.minutes}分)`).join('・');
-        lines.push(`   　 両組まとめて自走（コーチは巡回）: ${drillNames}`);
-      }
-    }
-  }
-  return lines;
-}
-
-/**
- * Render the mixed-gender Saturday new-drill lecture section.
+ * Render the Saturday new-drill lecture section.
  * @param {import('./types.js').SaturdayLecture|null} lecture
  * @returns {string[]}  Lines to splice into the rendered plan (empty when absent).
  */

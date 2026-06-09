@@ -10,9 +10,11 @@
     "shot_clock_sec": 15
   },
   "current_month": 8,
-  "_phase_note": "phase / phase_category_weights は engine/data/annual-plan.json から性別＋暦月で解決して上書きする（女子は約1ヶ月先行）。ここに静的値は持たない。",
+  "phase": "準備（積み上げ）",
   "_gender": "女子",
-  "_shared_gym_note": "男子と体育館を共有する別チーム。組違い（共有時のローテ）は2チームの計画を生成した後にプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false 相当）。",
+  "_phase_note": "phase / phase_category_weights は CLI 単独実行用の静的フォールバック。女子は約1ヶ月先行なので暦8月＝アーク9月（準備・積み上げ）の値を置く。UI は engine/data/annual-plan.json から性別＋暦月で解決して上書きする。",
+  "_shared_gym_note": "男子と体育館を共有する別チーム。組違い（共有時のローテ/合同）は2チームの計画を生成した後にUIのプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false）。",
+  "shared_gym": false,
   "schedule": [
     { "day": "火", "minutes": 100, "court": "全面", "coach_present": true },
     { "day": "水", "minutes": 100, "court": "半面", "coach_present": false },
@@ -32,6 +34,15 @@
   "philosophy_floors": {
     "チームディフェンス(オールコートマンツー/ヘルプ/帰陣)": { "min_minutes_per_week": 40, "place_on_coach_days": true },
     "チームオフェンス(アーリー/トランジション)": { "min_minutes_per_week": 40, "place_on_coach_days": true }
+  },
+  "phase_category_weights": {
+    "ハンドリング/ドリブル": 0.15,
+    "フィニッシュ(ゴール下/レイアップ)": 0.15,
+    "シュート": 0.15,
+    "1on1": 0.25,
+    "意思決定/ゲーム形式": 0.15,
+    "チームディフェンス(オールコートマンツー/ヘルプ/帰陣)": 0.1,
+    "パス&スペーシング": 0.05
   },
   "load_caps": {
     "high_intensity_per_session": 2,
