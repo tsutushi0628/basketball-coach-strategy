@@ -100,42 +100,32 @@ const JUMP_NAME_RE =
   /ポゴ|バウンディング|ジャンプキック|スクワットジャンプ|ジャンプ|跳び|バウンド|ホップ|プライオ/;
 
 /**
- * Conditioning "push" names that must never appear in a cooldown even when their
- * intensity_class is "低" (HIIT-style / sprint / shuttle / burpee / interval).
- * CD is settle-down only, so these are excluded by name (spec #4).
+ * Sub-skills that positively mark a drill as cool-down / settle-down work
+ * (static stretch / breathing / recovery / fascia). The CD block is filled ONLY by
+ * drills that carry a cool-down marker — a POSITIVE test, not elimination. Warm-up
+ * mobility (キャリオカ=横移動, フロントキック=動的伸長) carries no cool-down marker
+ * and is therefore never placed in the cooldown (the old elimination test let those
+ * through because their sub_skill matched none of the exclusion keywords).
  */
-const PUSH_NAME_RE = /HIIT|ボディビルダー|ダッシュ|シャトル|バーピー|インターバル/i;
-/** Conditioning sub-skills that mark a drill as a "push" (anaerobic / cardio / muscular-endurance). */
-const PUSH_SUBSKILL_RE = /無酸素|心肺|筋持久/;
+const COOLDOWN_SUBSKILL_RE = /静的|整理|鎮静|呼吸|クールダウン|筋温|リカバリ|筋膜/;
 
 /**
- * Sub-skills that mark a low-intensity conditioning drill as NOT a settle-down
- * stretch, even though its name carries no jump/push keyword (spec #4). The CD
- * block is range-of-motion / mobility / stretch work only; drills whose trained
- * quality is plyometric elasticity (弾性/ばね/跳躍), power (パワー), sprint / cardio
- * (スプリント/有酸素/無酸素/心肺/筋持久), or rhythmic locomotor activation (リズム/
- * 協調 — warm-up skips) are warm-up activation, not warm-down. The name-based JUMP
- * regex misses these, so the trained-quality sub_skill is the reliable discriminator.
- */
-const NON_STRETCH_SUBSKILL_RE = /弾性|ばね|パワー|スプリント|有酸素|無酸素|心肺|筋持久|跳躍|協調|リズム/;
-
-/**
- * Is a drill eligible for the cooldown block? CD is reserved for low-intensity
- * stretch / settle-down work (DESIGN.md §4, spec #4): intensity "低" AND no jump
- * keyword AND not a conditioning "push" (by name or sub_skill) AND its trained
- * quality is not plyometric / power / cardio / rhythmic activation. What remains is
- * range-of-motion / mobility / stretch / warm-down work only.
+ * Is a drill eligible for the cooldown block? CD is settle-down only (static
+ * stretch / breathing / recovery). A drill qualifies ONLY when it carries a
+ * POSITIVE cool-down marker — a philosophy tag (クールダウン / 整理運動) or a
+ * static-recovery sub_skill — and is not high-intensity or a jump drill. Warm-up
+ * activation drills (dynamic mobility, lateral shuffles, leg swings) carry no such
+ * marker, so they are excluded structurally and can never land in the cooldown.
  *
  * @param {Drill} drill
  * @returns {boolean}
  */
 export function isCoolDownEligible(drill) {
-  if (drill.intensity_class !== '低') return false;
-  if (JUMP_NAME_RE.test(drill.name)) return false;
-  if (PUSH_NAME_RE.test(drill.name)) return false;
-  if (PUSH_SUBSKILL_RE.test(drill.sub_skill ?? '')) return false;
-  if (NON_STRETCH_SUBSKILL_RE.test(drill.sub_skill ?? '')) return false;
-  return true;
+  if (drill.intensity_class === '高') return false; // CD は低〜中強度の整理運動のみ
+  if (JUMP_NAME_RE.test(drill.name)) return false; // 跳躍は整理運動ではない（安全網）
+  const tags = Array.isArray(drill.philosophy_tags) ? drill.philosophy_tags : [];
+  if (tags.includes('クールダウン') || tags.includes('整理運動')) return true;
+  return COOLDOWN_SUBSKILL_RE.test(drill.sub_skill ?? '');
 }
 
 /**
@@ -230,6 +220,35 @@ function categoryCandidates({ pool, category, ftOnlyCategories }) {
 }
 
 /**
+ * Drill-form affinity between a segment's primary and a candidate "いずれか"
+ * alternative, so swap-ins share the primary's shape — a pair/running drill
+ * (e.g. ツーメン: peopleShape=pair) is never offered a solo/stationary drill
+ * (e.g. マイカン: peopleShape=solo) as an alternative just because they share a
+ * category. Pure integer scoring, deterministic (no randomness):
+ *   peopleShape 一致 +3（人数形態が最重要）/ court 一致 +2 /
+ *   sub_skill の主眼トークン共有 +1 / 同じスタッフィング(needs_helper) +1。
+ *
+ * @param {Drill} primary
+ * @param {Drill} cand
+ * @returns {number}
+ */
+function alternativeAffinity(primary, cand) {
+  let score = 0;
+  if (primary.peopleShape && cand.peopleShape && primary.peopleShape === cand.peopleShape) score += 3;
+  if (primary.court && cand.court && primary.court === cand.court) score += 2;
+  const tokens = (s) => new Set(String(s ?? '').split(/[・/、，,\s（）()]+/).filter((t) => t.length >= 2));
+  const pt = tokens(primary.sub_skill);
+  for (const t of tokens(cand.sub_skill)) {
+    if (pt.has(t)) {
+      score += 1;
+      break;
+    }
+  }
+  if (!!primary.needs_helper === !!cand.needs_helper) score += 1;
+  return score;
+}
+
+/**
  * Pick a segment's primary drill (plus its "いずれか" alternatives) from a
  * category's candidates. The primary is the first candidate that is fresh
  * (not used this week, not seen today) and placeable under the load budget;
@@ -264,9 +283,15 @@ function pickSegmentDrill({ candidates, usedIds, daySeenIds, budget }) {
   const altPool = [...fresh, ...reusable].filter(
     (d) => d.id !== primary.id && !daySeenIds.has(d.id),
   );
+  // Rank by drill-form affinity to the primary so swap-ins share its shape
+  // (peopleShape / court / sub_skill / staffing). Ties keep the original stable
+  // order (duration_max desc → id, the altPool order). Deterministic — no randomness.
+  const ranked = altPool
+    .map((d, i) => ({ d, i, aff: alternativeAffinity(primary, d) }))
+    .sort((a, b) => b.aff - a.aff || a.i - b.i);
   const alternatives = [];
   const altSeen = new Set([primary.id]);
-  for (const d of altPool) {
+  for (const { d } of ranked) {
     if (alternatives.length >= MAX_ALTERNATIVES) break;
     if (altSeen.has(d.id)) continue;
     altSeen.add(d.id);
@@ -573,7 +598,7 @@ export function allocateDay({
   // Warm-up / cool-down draw from the unrestricted day pool (they run every day
   // regardless of coach presence). WU is low→中→高 ordered; CD is settle-down only.
   const wuPool = dayPool
-    .filter((d) => d.category === WUCD_CATEGORY)
+    .filter((d) => d.category === WUCD_CATEGORY && !isCoolDownEligible(d))
     .slice()
     .sort((a, b) => intensityRank(a) - intensityRank(b));
   const cdPool = dayPool

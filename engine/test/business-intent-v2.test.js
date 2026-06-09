@@ -273,28 +273,38 @@ test('V5: the 技術 block draws from multiple categories (no single-category mo
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// V6. The cooldown holds no jump work — only low-intensity settle-down drills.
+// V6. The cooldown holds ONLY settle-down (整理運動) drills — static stretch /
+//     breathing / recovery. Warm-up mobility (キャリオカ=横移動, フロントキック=
+//     動的伸長) and jumps must never appear. This verifies the business intent
+//     (ダウン＝整理運動) via a POSITIVE cool-down marker on the source drill, so a
+//     dynamic warm-up drill leaking into the cooldown fails the test.
 // ───────────────────────────────────────────────────────────────────────────
-test('V6: the cooldown block never contains jump drills', async () => {
+test('V6: ダウン(CD)は整理運動のみ — 動的ウォームアップ・跳躍は混入しない', async () => {
   const { drills, config, baseInput } = await loadContext();
   const plan = planWeek(drills, config, baseInput);
+  const idx = new Map(drills.map((d) => [d.id, d]));
+  const COOLDOWN_MARK = /静的|整理|鎮静|呼吸|クールダウン|筋温|リカバリ|筋膜/;
 
+  let inspected = 0;
   for (const day of plan.days) {
     const cd = block(day, 'CD');
     if (!cd) continue;
     for (const it of cd.items) {
-      assert.equal(
-        it.intensity_class,
-        '低',
-        `${day.day} のCDに非低強度「${it.name}」(強度:${it.intensity_class})`,
-      );
-      assert.doesNotMatch(
-        it.name,
-        JUMP_NAME_RE,
-        `${day.day} のCDに跳躍系「${it.name}」が混入`,
+      inspected += 1;
+      assert.notEqual(it.intensity_class, '高', `${day.day} のCDに高強度「${it.name}」`);
+      assert.doesNotMatch(it.name, JUMP_NAME_RE, `${day.day} のCDに跳躍系「${it.name}」が混入`);
+      const src = idx.get(it.drill_id);
+      assert.ok(src, `${day.day} CDの「${it.name}」が catalog に無い`);
+      const tags = Array.isArray(src.philosophy_tags) ? src.philosophy_tags : [];
+      const isSettleDown =
+        tags.includes('クールダウン') || tags.includes('整理運動') || COOLDOWN_MARK.test(src.sub_skill ?? '');
+      assert.ok(
+        isSettleDown,
+        `${day.day} のCDに整理運動でない「${it.name}」(sub_skill:${src.sub_skill})が混入＝ダウン誤分類の再発`,
       );
     }
   }
+  assert.ok(inspected > 0, '検証対象となるCDブロックが少なくとも1日存在するべき');
 });
 
 // ───────────────────────────────────────────────────────────────────────────

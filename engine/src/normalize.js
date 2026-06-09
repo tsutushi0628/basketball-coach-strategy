@@ -150,6 +150,32 @@ export function normalizeIntensity(raw) {
 }
 
 /**
+ * Normalize the free-text `people` field into a coarse group-shape enum
+ * {solo|pair|small|team|group}. The catalog's `people` is ~111 distinct free-text
+ * values ("ペア", "1人", "2人(パッド役…)", "全員", "3対3" …); this is a deterministic
+ * best-effort bucketing (not perfect classification) used to rank "いずれか"
+ * alternatives by drill-shape similarity, so a 2-person running drill (ペア→pair)
+ * is never offered a 1-person stationary drill (1人→solo) as a swap-in. Order
+ * matters: squad → small group → pair → solo → group(default).
+ *
+ * @param {unknown} raw  raw.people free text.
+ * @returns {'solo'|'pair'|'small'|'team'|'group'}
+ */
+export function normalizePeopleShape(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return 'group';
+  // 全体・チーム・5対5以上（コート全体を使う集団規模）
+  if (/全員|チーム|集団|5対5|6人|7人|8人|9人|10|11|12|5人以上|6人以上|4人以上|最低5|最低11/.test(s)) return 'team';
+  // 小集団（3〜4人・3on3/4on4/2on2・列・少人数）
+  if (/3人|4人|少人数|3対|4対|2対2|3ライン|3人組|2〜6|3〜5|4〜6|5〜6|列/.test(s)) return 'small';
+  // ペア・2人・1対1
+  if (/ペア|2人|1組|1対1|2対1|シューター＋|攻撃1・守備1/.test(s)) return 'pair';
+  // 個人（1人始まり・個人練・1人ずつ）
+  if (/^1人|^個人|1人ずつ|1人以上|1人＋|1人（|1人\(/.test(s)) return 'solo';
+  return 'group';
+}
+
+/**
  * Normalize one raw drill record into a typed `Drill`.
  * Preserves original free-text values in `*Raw` fields for audit, and builds a
  * lowercased `searchText` used by keyword-based filters (zone/sets/FT).
@@ -185,6 +211,13 @@ export function normalizeDrill(raw) {
     load_notes: String(raw.load_notes ?? ''),
     mastery_stage: String(raw.mastery_stage ?? ''),
     philosophy_tags: tags.map(String),
+    // Group-shape enum + raw text, used to rank "いずれか" alternatives by drill
+    // form so a pair/running drill isn't offered a solo/stationary one as a swap-in.
+    peopleShape: normalizePeopleShape(raw.people),
+    peopleRaw: String(raw.people ?? ''),
+    // Whether the drill needs a helper (pad partner / feeder / coach). Used in the
+    // alternative-affinity score so swap-ins keep similar staffing logistics.
+    needs_helper: !!raw.needs_helper,
     notes: String(raw.notes ?? ''),
     // Optional manual override for the needsCoach derivation. Preserved as a
     // boolean only when the record explicitly sets one (borderline hand-fix);
