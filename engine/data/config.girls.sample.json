@@ -1,0 +1,41 @@
+{
+  "team_id": "minami-nakano-girls",
+  "team_label": "南中野中 女子",
+  "category": "中学",
+  "grades": [1, 2],
+  "philosophy": {
+    "df": "オールコートマンツー一本",
+    "zone_forbidden": true,
+    "sets_forbidden_in_year": true,
+    "shot_clock_sec": 15
+  },
+  "current_month": 8,
+  "_phase_note": "phase / phase_category_weights は engine/data/annual-plan.json から性別＋暦月で解決して上書きする（女子は約1ヶ月先行）。ここに静的値は持たない。",
+  "_gender": "女子",
+  "_shared_gym_note": "男子と体育館を共有する別チーム。組違い（共有時のローテ）は2チームの計画を生成した後にプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false 相当）。",
+  "schedule": [
+    { "day": "火", "minutes": 100, "court": "全面", "coach_present": true },
+    { "day": "水", "minutes": 100, "court": "半面", "coach_present": false },
+    { "day": "木", "minutes": 100, "court": "半面", "coach_present": false },
+    { "day": "金", "minutes": 100, "court": "全面", "coach_present": true },
+    { "day": "土", "minutes": 165, "court": "全面", "coach_present": true }
+  ],
+  "coach_absent_allow": [
+    "ファンダメンタル基礎",
+    "シュート",
+    "ハンドリング/ドリブル",
+    "フィニッシュ(ゴール下/レイアップ)",
+    "意思決定/ゲーム形式",
+    "コンディショニング/ウォームアップ"
+  ],
+  "introduced": [],
+  "philosophy_floors": {
+    "チームディフェンス(オールコートマンツー/ヘルプ/帰陣)": { "min_minutes_per_week": 40, "place_on_coach_days": true },
+    "チームオフェンス(アーリー/トランジション)": { "min_minutes_per_week": 40, "place_on_coach_days": true }
+  },
+  "load_caps": {
+    "high_intensity_per_session": 2,
+    "high_intensity_per_week": 3,
+    "no_consecutive_high_days": true
+  }
+}

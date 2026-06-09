@@ -1,0 +1,10 @@
+{
+  "team_id": "minami-nakano-girls",
+  "grades": [1, 2],
+  "_note": "合成値（実選手データは PII。Drive『バスケ_選手名簿』接続はオーナー受領後）。男子と差をつけ、女子チームの計画が別物として出ることを確認できる値にしている。",
+  "indicators": [
+    { "id": "FT率", "good_direction": "up", "baseline": 35, "latest": 45, "target": 65, "unit": "%" },
+    { "id": "試合TO", "good_direction": "down", "baseline": 24, "latest": 20, "target": 12, "unit": "本" },
+    { "id": "ゴール下成功率", "good_direction": "up", "baseline": 40, "latest": 48, "target": 65, "unit": "%" }
+  ]
+}
