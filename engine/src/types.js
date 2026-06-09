@@ -189,6 +189,11 @@
  *                                  allocation (self/practice/lecture) so format and
  *                                  the rotation group view can show 自走/実践/
  *                                  レクチャ without re-deriving from the catalog.
+ * @property {Array<{drill_id: string, name: string}>} [alternatives]  For a main
+ *                                  segment, the "いずれか" menu: same-category drills
+ *                                  the coach may swap in for the primary. Display-only
+ *                                  (they carry no minutes and do not consume the load
+ *                                  budget); absent on warm-up / cool-down items.
  */
 
 /**

@@ -64,6 +64,12 @@ function formatDay(day) {
       lines.push(
         `      - ${it.name}　${it.minutes}分　[${it.category}]　強度:${it.intensity_class}　${modeTag(it)}`,
       );
+      // "いずれか" menu: a sustained main segment runs one primary drill, with a
+      // small set of same-category alternatives the coach may swap in. Show them
+      // indented under the primary so the segment reads as one themed slot.
+      if (Array.isArray(it.alternatives) && it.alternatives.length > 0) {
+        lines.push(`          いずれか: ${it.alternatives.map((a) => a.name).join(' / ')}`);
+      }
     }
   }
   return lines.join('\n');

@@ -1,45 +1,99 @@
 /**
- * @file Deterministic per-day block allocation (DESIGN.md §4).
+ * @file Deterministic per-day SEGMENT allocation (DESIGN.md §4).
  *
- * Splits a day's minutes into the five blocks (WU / 技術 / 対人 / ゲーム / CD)
- * by fixed ratios, then fills each block with drills drawn from the day's
- * already-filtered pool. Category priority comes from finalWeights; the load
- * budget (high-intensity caps) is consulted at the moment of selection.
+ * A practice day is built as a small number of *sustained themed segments*, not a
+ * fixed-ratio block stuffed with many short drills. This mirrors how the coach
+ * actually programs a session (real menus: "対人いずれか：15min", "リムアタック
+ * いずれか：15min") and respects the switch-cost rule: too many activity switches
+ * wear youth players out, so the number of main (curriculum) segments is bounded
+ * by the session length — 1h → 2-3, 2h → 3-5, 3h → 4-7 — and biased toward FEWER,
+ * longer segments. Warm-up and cool-down are routine bookends (a bundle of short
+ * mobility drills) and are NOT counted toward that switch-cost budget.
  *
- * Selection is greedy and stable: within a block the minutes are split across
- * the top finalWeight categories proportionally (no single-category monopoly),
- * and within each category drills are taken (by duration_min) until that
- * category's share is met. No randomness — same inputs ⇒ same plan.
+ * Each main segment:
+ *   - belongs to ONE category, drawn only from that category's allowed block
+ *     (技術 = individual skill, 対人 = contested/team tactics, ゲーム = game-form),
+ *     so a finishing/solo drill can never land in the live-game block — the
+ *     category-fit fix.
+ *   - runs for a *sustained* duration (≥15min for a main theme, 5-minute grain),
+ *     decoupled from a single drill's natural length: one primary drill is run as
+ *     the segment with a small "いずれか" menu of alternatives from the same
+ *     category, exactly like the coach's real menu.
  *
- * Week-scope: `usedIds` is owned by the week (planWeek) and shared across days,
- * so the same drill does not repeat across 火水木金土. A category's pool is only
- * allowed to reuse a drill once every fresh-drill option is exhausted.
+ * Time budget: each day's main-segment minutes sum to (day minutes − WU − CD), and
+ * no day ever exceeds its available minutes. Category emphasis (finalWeights) sizes
+ * the segments; the team-identity philosophy floors (defense / fast-break) are
+ * reserved on coach-present days before the gap-driven emphasis is laid out.
+ *
+ * Week-scope: `usedIds` is owned by the week (planWeek) and shared across days, so a
+ * segment's primary drill does not repeat across 火水木金土 (variety). Warm-up /
+ * cool-down are exempt from that dedup (the same stretch is fine daily).
  *
  * Coach context (DESIGN.md §1 / config.coach_present): on coach-absent days the
- * pool is pre-restricted to player-self-runnable content before allocation.
+ * main pool is pre-restricted to player-self-runnable content before allocation.
+ *
+ * Selection is greedy and stable — no randomness: same inputs ⇒ same plan.
  *
  * @typedef {import('./types.js').Drill} Drill
  * @typedef {import('./types.js').Config} Config
  * @typedef {import('./types.js').PlanBlock} PlanBlock
+ * @typedef {import('./types.js').PlanItem} PlanItem
  * @typedef {import('./types.js').PlanDay} PlanDay
  */
 
 import { isHighIntensity } from './loadModel.js';
 import { isCoachAbsentEligible, needsCoach, coachingMode } from './filter.js';
 
-/** Block ratios over the day's total minutes (DESIGN.md §4). */
-export const BLOCK_RATIOS = { WU: 0.15, 技術: 0.30, 対人: 0.30, ゲーム: 0.20, CD: 0.05 };
-
+/** Warm-up / cool-down category. WU and CD draw only from here. */
 const WUCD_CATEGORY = 'コンディショニング/ウォームアップ';
-/** Categories that count as "live game form" for the ゲーム block. */
-const GAME_CATEGORIES = ['意思決定/ゲーム形式', '1on1'];
 
 /**
- * How many top categories a single skill block (技術/対人/ゲーム) spreads its
- * minutes across, so one category cannot monopolize the block. Minimal sensible
- * default: 3 — enough variety without fragmenting a block into 1-drill slivers.
+ * Category → main block-type. The three court blocks each accept ONLY the
+ * categories mapped to them here, which is the category-fit fix (handoff 却下理由4):
+ *   - 技術: individual skill (shoot / finish / handle / pass / footwork)
+ *   - 対人: contested / live-vs-opponent / team tactics (1on1 / teamD / teamO / rebound)
+ *   - ゲーム: game-form decision play (意思決定/ゲーム形式)
+ * Conditioning / 傷害予防 are not main-segment categories (WU/CD bookends only),
+ * so they are deliberately absent from this map.
  */
-const BLOCK_SPREAD_CATEGORIES = 3;
+const CATEGORY_BLOCK = {
+  'シュート': '技術',
+  'フィニッシュ(ゴール下/レイアップ)': '技術',
+  'ハンドリング/ドリブル': '技術',
+  'パス&スペーシング': '技術',
+  'フットワーク/アジリティ/ピボット': '技術',
+  '1on1': '対人',
+  'チームディフェンス(オールコートマンツー/ヘルプ/帰陣)': '対人',
+  'チームオフェンス(アーリー/トランジション)': '対人',
+  'リバウンド/ボックスアウト': '対人',
+  '意思決定/ゲーム形式': 'ゲーム',
+};
+
+/** Presentation order of the three main blocks (coach's 定石: skill → contested → game). */
+export const MAIN_BLOCK_ORDER = ['技術', '対人', 'ゲーム'];
+
+/** The game-form category — a session culminates in a game (3on3 / 5on5). */
+const GAME_CATEGORY = '意思決定/ゲーム形式';
+
+/** A main (curriculum) segment is sustained — never shorter than this. */
+const MIN_MAIN_SEGMENT = 15;
+/** ...nor longer than this (one theme past ~40min loses focus; use two segments). */
+const MAX_MAIN_SEGMENT = 40;
+/** Target average minutes per main segment. Longer ⇒ fewer switches (switch-cost rule). */
+const PER_SEGMENT_TARGET = 27;
+/** Minutes a single coach-day philosophy-floor top-up segment aims for. */
+const FLOOR_SEGMENT = 20;
+/** Max "いずれか" alternative drills offered alongside a segment's primary. */
+const MAX_ALTERNATIVES = 2;
+
+/** Round to the nearest 5 minutes (the coach's display / planning grain). */
+function round5(x) {
+  return Math.round(x / 5) * 5;
+}
+/** clamp(x, lo, hi). */
+function clamp(x, lo, hi) {
+  return Math.min(hi, Math.max(lo, x));
+}
 
 /** Jump-drill names that must never appear in a cooldown (DESIGN.md §4 / spec #4). */
 const JUMP_NAME_RE =
@@ -57,74 +111,19 @@ const PUSH_SUBSKILL_RE = /無酸素|心肺|筋持久/;
 /**
  * Sub-skills that mark a low-intensity conditioning drill as NOT a settle-down
  * stretch, even though its name carries no jump/push keyword (spec #4). The CD
- * block is for range-of-motion / mobility / stretch work only; drills whose
- * trained quality is plyometric elasticity (弾性/ばね/跳躍), power output (パワー),
- * sprint / cardio (スプリント/有酸素/無酸素/心肺/筋持久), or rhythmic locomotor
- * activation (リズム/協調 — warm-up skips such as Aスキップ / エルボーtoニー skip)
- * are warm-up activation, not warm-down. The name-based JUMP regex misses these
- * (e.g. CND-018 Aスキップ「リズム・弾性協調」, CND-008 スキップ(エルボー to ニー)
- * 「体幹連動・協調」, CND-017 縄跳び「下肢弾性・有酸素基礎」), so the trained-quality
- * sub_skill is the reliable discriminator. Pure mobility sub_skills (可動/伸ばし/
- * 伸長/温め/旋/捻転) are kept.
+ * block is range-of-motion / mobility / stretch work only; drills whose trained
+ * quality is plyometric elasticity (弾性/ばね/跳躍), power (パワー), sprint / cardio
+ * (スプリント/有酸素/無酸素/心肺/筋持久), or rhythmic locomotor activation (リズム/
+ * 協調 — warm-up skips) are warm-up activation, not warm-down. The name-based JUMP
+ * regex misses these, so the trained-quality sub_skill is the reliable discriminator.
  */
 const NON_STRETCH_SUBSKILL_RE = /弾性|ばね|パワー|スプリント|有酸素|無酸素|心肺|筋持久|跳躍|協調|リズム/;
 
 /**
- * Compute integer block targets that sum exactly to the day's minutes.
- * Remainders are pushed onto the 技術 block (per spec "端数は技術へ寄せる").
- *
- * @param {number} dayMinutes
- * @returns {Record<'WU'|'技術'|'対人'|'ゲーム'|'CD', number>}
- */
-export function computeBlockTargets(dayMinutes) {
-  const wu = Math.floor(dayMinutes * BLOCK_RATIOS.WU);
-  const tech = Math.floor(dayMinutes * BLOCK_RATIOS.技術);
-  const vs = Math.floor(dayMinutes * BLOCK_RATIOS.対人);
-  const game = Math.floor(dayMinutes * BLOCK_RATIOS.ゲーム);
-  const cd = Math.floor(dayMinutes * BLOCK_RATIOS.CD);
-  const remainder = dayMinutes - (wu + tech + vs + game + cd);
-  return { WU: wu, 技術: tech + remainder, 対人: vs, ゲーム: game, CD: cd };
-}
-
-/**
- * Order categories by descending finalWeight. Categories absent from
- * finalWeights are appended (weight 0) so the pool is never artificially
- * starved when weights don't cover everything.
- *
- * @param {Object<string, number>} finalWeights
- * @param {Drill[]} pool
- * @returns {string[]}
- */
-function categoriesByWeight(finalWeights, pool) {
-  const poolCats = new Set(pool.map((d) => d.category));
-  const ranked = Object.keys(finalWeights)
-    .filter((c) => poolCats.has(c))
-    .sort((a, b) => finalWeights[b] - finalWeights[a]);
-  for (const c of poolCats) if (!ranked.includes(c)) ranked.push(c);
-  return ranked;
-}
-
-/**
- * Does a drill belong to the FT-only subset? Per DESIGN.md §2, FT matching is
- * limited to `name` and `sub_skill` (NOT the broad searchText).
- * @param {Drill} drill
- * @returns {boolean}
- */
-function isFtDrill(drill) {
-  return /フリースロー|FT/i.test(`${drill.name} ${drill.sub_skill}`);
-}
-
-/**
  * Is a drill eligible for the cooldown block? CD is reserved for low-intensity
- * stretch / settle-down work (DESIGN.md §4, spec #4): intensity_class must be
- * "低" AND the name must not contain any jump keyword (so 低-intensity jump
- * drills like ポゴジャンプ / スクワットジャンプ are still excluded) AND the drill
- * must not be a conditioning "push" (HIIT / sprint / shuttle / burpee / interval
- * by name, or anaerobic / cardio / muscular-endurance by sub_skill) AND the
- * trained quality (sub_skill) must not be plyometric / power / cardio / rhythmic
- * locomotor activation (弾性/ばね/パワー/スプリント/有酸素/無酸素/心肺/筋持久/跳躍/
- * 協調/リズム) — this catches low-intensity warm-up activation drills the name-
- * based jump regex misses (Aスキップ, 縄跳び, エルボーtoニー skip). What remains is
+ * stretch / settle-down work (DESIGN.md §4, spec #4): intensity "低" AND no jump
+ * keyword AND not a conditioning "push" (by name or sub_skill) AND its trained
+ * quality is not plyometric / power / cardio / rhythmic activation. What remains is
  * range-of-motion / mobility / stretch / warm-down work only.
  *
  * @param {Drill} drill
@@ -140,254 +139,375 @@ export function isCoolDownEligible(drill) {
 }
 
 /**
- * Build the per-category ordered candidate map for a block. Each category maps
- * to its drills in selection order (shorter first). FT-only categories are
- * narrowed to FT drills when any exist.
- *
- * @param {Object} args
- * @param {Drill[]} args.pool         Day-filtered pool (court/grades/zone/sets ok).
- * @param {string[]} args.categories  Allowed categories for this block (ranked).
- * @param {Set<string>} args.ftOnlyCategories  Categories restricted to FT drills.
- * @returns {Map<string, Drill[]>}
+ * Does a drill belong to the FT-only subset? Per DESIGN.md §2, FT matching is
+ * limited to `name` and `sub_skill` (NOT the broad searchText).
+ * @param {Drill} drill
+ * @returns {boolean}
  */
-function candidatesByCategory({ pool, categories, ftOnlyCategories }) {
-  /** @type {Map<string, Drill[]>} */
-  const map = new Map();
-  for (const cat of categories) {
-    let inCat = pool.filter((d) => d.category === cat);
-    if (ftOnlyCategories.has(cat)) {
-      const ftSubset = inCat.filter(isFtDrill);
-      // Honor FT emphasis when such drills exist; otherwise keep the category usable.
-      if (ftSubset.length > 0) inCat = ftSubset;
-    }
-    // Stable secondary order: shorter drills first so we can pack tightly.
-    inCat = inCat.slice().sort((a, b) => a.duration_min - b.duration_min);
-    if (inCat.length > 0) map.set(cat, inCat);
-  }
-  return map;
+function isFtDrill(drill) {
+  return /フリースロー|FT/i.test(`${drill.name} ${drill.sub_skill}`);
+}
+
+/** Intensity ordering helper for WU (低=0, 中=1, 高=2). */
+function intensityRank(drill) {
+  return drill.intensity_class === '低' ? 0 : drill.intensity_class === '中' ? 1 : 2;
+}
+
+// ---------------------------------------------------------------------------
+// Session shape: how a day's minutes split, and how many main segments fit.
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the day's shape: warm-up minutes, cool-down minutes, the main-segment
+ * minute budget, and the switch-cost-bounded count of main (curriculum) segments.
+ *
+ * Switch-cost rule (owner): a 1h session carries 2-3 curriculum segments, 2h 3-5,
+ * 3h 4-7 — warm-up / cool-down are routine bookends and excluded from that count.
+ * The band is `[round(min/60)+1, round(min/30)+1]` (exactly 2-3 / 3-5 / 4-7 at 60 /
+ * 120 / 180), and the target is biased LOW (≈one segment per `PER_SEGMENT_TARGET`
+ * minutes) so segments stay long and sustained rather than many and choppy.
+ *
+ * All of WU / CD / mainMinutes are multiples of 5 (minutes is a multiple of 5 and
+ * both bookends round to 5), so segment sizing stays on a clean 5-minute grain.
+ *
+ * @param {number} minutes
+ * @returns {{wu:number, cd:number, mainMinutes:number, minMain:number, maxMain:number, targetMain:number}}
+ */
+export function computeSessionShape(minutes) {
+  const wu = clamp(round5(minutes * 0.15), 10, 30);
+  const cd = clamp(round5(minutes * 0.06), 5, 10);
+  const mainMinutes = Math.max(0, minutes - wu - cd);
+  const minMain = Math.round(minutes / 60) + 1;
+  const maxMain = Math.round(minutes / 30) + 1;
+  // Can't have more segments than there are 15-minute slots in the main budget.
+  const capByMinutes = Math.floor(mainMinutes / MIN_MAIN_SEGMENT);
+  const lo = Math.min(minMain, capByMinutes);
+  const hi = Math.min(maxMain, capByMinutes);
+  const target = clamp(Math.round(mainMinutes / PER_SEGMENT_TARGET), lo, hi);
+  return { wu, cd, mainMinutes, minMain, maxMain, targetMain: Math.max(0, target) };
 }
 
 /**
- * Compute per-category minute shares for a block, distributing the block target
- * across the top categories proportionally to finalWeight (spec #3 — stop the
- * single-category monopoly). Shares are advisory soft-caps; the packer falls
- * back to any remaining category to fill leftover time.
+ * Order the main-segment-eligible categories present in a pool by descending
+ * finalWeight. Only categories mapped to a main block (技術/対人/ゲーム) are
+ * considered — conditioning / injury-prevention are excluded. Categories with no
+ * finalWeight entry sort last (weight 0) but are still available.
  *
- * @param {Object} args
- * @param {number} args.target
- * @param {string[]} args.categories  Ranked, with candidates available.
- * @param {Object<string, number>} args.finalWeights
- * @returns {Map<string, number>}  category → soft-cap minutes.
+ * @param {Object<string, number>} finalWeights
+ * @param {Drill[]} pool
+ * @returns {string[]}
  */
-function categoryShares({ target, categories, finalWeights }) {
-  const top = categories.slice(0, BLOCK_SPREAD_CATEGORIES);
-  /** @type {Map<string, number>} */
-  const shares = new Map();
-  if (top.length === 0) return shares;
-
-  // Use finalWeight as the proportion; if all weights are 0 (e.g. fallback
-  // categories), split the block evenly so it is still spread, not monopolized.
-  const weights = top.map((c) => Math.max(0, finalWeights[c] ?? 0));
-  const sum = weights.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < top.length; i++) {
-    const frac = sum > 0 ? weights[i] / sum : 1 / top.length;
-    shares.set(top[i], Math.max(1, Math.round(target * frac)));
-  }
-  return shares;
+function mainCategoriesByWeight(finalWeights, pool) {
+  const poolCats = new Set(
+    pool.map((d) => d.category).filter((c) => CATEGORY_BLOCK[c]),
+  );
+  return [...poolCats].sort(
+    (a, b) => (finalWeights[b] ?? 0) - (finalWeights[a] ?? 0) || (a < b ? -1 : a > b ? 1 : 0),
+  );
 }
 
 /**
- * Fill one skill block (技術/対人/ゲーム) up to its target, spreading minutes
- * across the top categories by their soft-cap share, then topping up from any
- * remaining candidates so the block is packed as fully as possible without
- * overflowing.
+ * Build the ordered candidate list for one category: drills of that category in
+ * the pool, narrowed to FT drills when the category is FT-only (and any exist),
+ * sorted so the segment's primary is a substantial, stable choice (longer natural
+ * length first, then id) — deterministic and varied across the week via usedIds.
  *
  * @param {Object} args
- * @param {string} args.block
- * @param {number} args.target
- * @param {string[]} args.categories          Ranked categories with candidates.
- * @param {Map<string, Drill[]>} args.candMap  category → ordered drills.
- * @param {Object<string, number>} args.finalWeights
- * @param {Set<string>} args.usedIds           Week-scope used drill ids (mutated).
+ * @param {Drill[]} args.pool
+ * @param {string} args.category
+ * @param {Set<string>} args.ftOnlyCategories
+ * @returns {Drill[]}
+ */
+function categoryCandidates({ pool, category, ftOnlyCategories }) {
+  let inCat = pool.filter((d) => d.category === category);
+  if (ftOnlyCategories.has(category)) {
+    const ft = inCat.filter(isFtDrill);
+    if (ft.length > 0) inCat = ft; // honor FT emphasis when such drills exist
+  }
+  return inCat
+    .slice()
+    .sort((a, b) => b.duration_max - a.duration_max || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Pick a segment's primary drill (plus its "いずれか" alternatives) from a
+ * category's candidates. The primary is the first candidate that is fresh
+ * (not used this week, not seen today) and placeable under the load budget;
+ * already-used drills are a reuse fallback only when fresh ones are exhausted.
+ * A high-intensity primary is only taken when the budget allows it (so the
+ * load caps and no-consecutive-day rule bind). Alternatives are up to
+ * MAX_ALTERNATIVES other candidates from the same category (display-only menu
+ * options; they do not consume the budget or the week-scope used set).
+ *
+ * @param {Object} args
+ * @param {Drill[]} args.candidates       Ordered candidate drills for the category.
+ * @param {Set<string>} args.usedIds      Week-scope used ids (read; primary mutates via caller).
+ * @param {Set<string>} args.daySeenIds   Ids already placed today.
  * @param {ReturnType<import('./loadModel.js').createLoadBudget>} args.budget
- * @returns {PlanBlock}
+ * @returns {{primary: Drill, alternatives: Drill[]}|null}
  */
-function fillSkillBlock({
-  block,
-  target,
-  categories,
-  candMap,
-  finalWeights,
-  usedIds,
-  budget,
-  planBlock = { block, items: [] },
-  usedSoFar = 0,
-  daySeenIds = new Set(),
-}) {
-  let used = usedSoFar;
-
-  const shares = categoryShares({ target, categories, finalWeights });
-
-  /**
-   * Try to place one drill; returns minutes added (0 if none placed).
-   * @param {Drill} d
-   * @param {number} blockUsed
-   * @param {boolean} [allowReuse]  When true, a drill already used in a PRIOR
-   *   week-day may be reused (fallback only — used once fresh drills are
-   *   exhausted, per spec "あるカテゴリのプールが尽きた時のみ再利用許可").
-   *   A drill already placed earlier TODAY is never reused, even in fallback.
-   */
-  const tryPlace = (d, blockUsed, allowReuse = false) => {
-    if (daySeenIds.has(d.id)) return 0; // never repeat a drill within the same day
-    if (!allowReuse && usedIds.has(d.id)) return 0;
-    const dur = d.duration_min;
-    if (blockUsed + dur > target) return 0; // never overflow the block
-    if (isHighIntensity(d)) {
-      if (!budget.canPlaceHigh()) return 0; // load cap / consecutive-day guard
-      budget.recordHigh();
-    }
-    planBlock.items.push({
-      drill_id: d.id,
-      name: d.name,
-      minutes: dur,
-      category: d.category,
-      intensity_class: d.intensity_class,
-      needs_coach: needsCoach(d),
-      coaching_mode: coachingMode(d),
-    });
-    usedIds.add(d.id);
-    daySeenIds.add(d.id);
-    return dur;
+function pickSegmentDrill({ candidates, usedIds, daySeenIds, budget }) {
+  const placeable = (d) => {
+    if (daySeenIds.has(d.id)) return false; // never repeat within a day
+    if (isHighIntensity(d) && !budget.canPlaceHigh()) return false; // honor load cap
+    return true;
   };
+  // Prefer fresh (unused this week) candidates; fall back to reuse only if needed.
+  const fresh = candidates.filter((d) => !usedIds.has(d.id) && placeable(d));
+  const reusable = candidates.filter((d) => usedIds.has(d.id) && placeable(d));
+  const ordered = fresh.length > 0 ? fresh : reusable;
+  if (ordered.length === 0) return null;
 
-  // Pass 1: honor each category's proportional share (spread across categories).
-  for (const cat of shares.keys()) {
-    const cap = shares.get(cat);
-    let inCat = 0;
-    for (const d of candMap.get(cat) ?? []) {
-      if (used >= target) break;
-      if (inCat >= cap) break;
-      const added = tryPlace(d, used);
-      if (added > 0) {
-        used += added;
-        inCat += added;
-      }
-    }
+  const primary = ordered[0];
+  // Alternatives: other category drills (fresh-first), excluding the primary and
+  // anything already placed today. Pure menu suggestions — no budget / used-set use.
+  const altPool = [...fresh, ...reusable].filter(
+    (d) => d.id !== primary.id && !daySeenIds.has(d.id),
+  );
+  const alternatives = [];
+  const altSeen = new Set([primary.id]);
+  for (const d of altPool) {
+    if (alternatives.length >= MAX_ALTERNATIVES) break;
+    if (altSeen.has(d.id)) continue;
+    altSeen.add(d.id);
+    alternatives.push(d);
   }
-
-  // Pass 2: top up any remaining block minutes from all categories in priority
-  // order (so a small leftover never wastes the block) without overflowing.
-  for (const cat of categories) {
-    if (used >= target) break;
-    for (const d of candMap.get(cat) ?? []) {
-      if (used >= target) break;
-      const added = tryPlace(d, used);
-      if (added > 0) used += added;
-    }
-  }
-
-  // Pass 3 (reuse fallback): only when fresh drills are exhausted and the block
-  // is still short, reuse already-placed-this-week drills so the block is not
-  // left under-filled. Spec #3: reuse permitted only once a category's fresh
-  // pool is exhausted. Avoids the same drill appearing twice within this block.
-  if (used < target) {
-    for (const cat of categories) {
-      if (used >= target) break;
-      for (const d of candMap.get(cat) ?? []) {
-        if (used >= target) break;
-        const added = tryPlace(d, used, true);
-        if (added > 0) used += added;
-      }
-    }
-  }
-
-  return planBlock;
+  return { primary, alternatives };
 }
 
 /**
- * Place philosophy-floor drills (team defense / fast-break) into a block on a
- * coach-present day (spec #2). Draws from the floor categories up to the lesser
- * of the block's remaining minutes and the category's still-owed weekly minutes,
- * decrementing the shared weekly `floorTracker` as it places. These categories
- * (the team's identity: all-court man / early offense) otherwise never surface
- * from the attack-only gap signal, so they are injected explicitly here.
+ * Turn a chosen drill into a sustained PlanItem of the given segment minutes
+ * (decoupled from the drill's natural duration — the segment is run for its full
+ * allotted time), recording the primary in the budget / used sets and attaching
+ * the "いずれか" alternatives as display-only menu options.
  *
  * @param {Object} args
- * @param {PlanBlock} args.planBlock          Block being filled (mutated).
- * @param {number} args.target                Block target minutes.
- * @param {number} args.usedSoFar             Minutes already placed in the block.
- * @param {Drill[]} args.pool                 Day pool to draw from.
- * @param {Map<string, number>} args.floorTracker  category → remaining weekly minutes (mutated).
- * @param {Set<string>} args.usedIds          Week-scope used ids (mutated).
- * @param {Set<string>} args.daySeenIds       Ids already placed today (mutated).
+ * @param {Drill} args.primary
+ * @param {Drill[]} args.alternatives
+ * @param {number} args.minutes
+ * @param {Set<string>} args.usedIds
+ * @param {Set<string>} args.daySeenIds
  * @param {ReturnType<import('./loadModel.js').createLoadBudget>} args.budget
- * @returns {number}  minutes added to the block.
+ * @param {boolean} args.dedup           When true the primary joins usedIds (main blocks);
+ *                                       WU/CD pass false (reused daily).
+ * @returns {PlanItem}
  */
-function fillFloorIntoBlock({ planBlock, target, usedSoFar, pool, floorTracker, usedIds, daySeenIds, budget }) {
-  let used = usedSoFar;
-  for (const [cat, owed] of floorTracker) {
-    if (owed <= 0) continue;
-    if (used >= target) break;
-    const candidates = pool
-      .filter((d) => d.category === cat)
-      .slice()
-      .sort((a, b) => a.duration_min - b.duration_min);
-    let placedForCat = 0;
-    for (const d of candidates) {
-      if (used >= target) break;
-      if (placedForCat >= owed) break;
-      if (usedIds.has(d.id) || daySeenIds.has(d.id)) continue;
-      const dur = d.duration_min;
-      if (used + dur > target) continue;
-      if (isHighIntensity(d)) {
-        if (!budget.canPlaceHigh()) continue;
-        budget.recordHigh();
-      }
-      planBlock.items.push({
-        drill_id: d.id,
-        name: d.name,
-        minutes: dur,
-        category: d.category,
-        intensity_class: d.intensity_class,
-        needs_coach: needsCoach(d),
-        coaching_mode: coachingMode(d),
-      });
-      usedIds.add(d.id);
-      daySeenIds.add(d.id);
-      used += dur;
-      placedForCat += dur;
+function toPlanItem({ primary, alternatives, minutes, usedIds, daySeenIds, budget, dedup }) {
+  if (isHighIntensity(primary)) budget.recordHigh();
+  daySeenIds.add(primary.id);
+  if (dedup) usedIds.add(primary.id);
+  return {
+    drill_id: primary.id,
+    name: primary.name,
+    minutes,
+    category: primary.category,
+    intensity_class: primary.intensity_class,
+    needs_coach: needsCoach(primary),
+    coaching_mode: coachingMode(primary),
+    alternatives: alternatives.map((d) => ({ drill_id: d.id, name: d.name })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main-segment selection and sizing.
+// ---------------------------------------------------------------------------
+
+/**
+ * Choose the day's main segments: which categories, in what block, at how many
+ * minutes. Philosophy-floor categories (team defense / fast-break) are reserved
+ * first on coach-present days (each a `FLOOR_SEGMENT`-minute top-up that drains the
+ * weekly `floorTracker`), leaving room for at least the gap-driven emphasis; the
+ * remaining slots go to the heaviest-weighted categories that have a placeable
+ * drill. Every returned segment is guaranteed to have at least one candidate.
+ *
+ * @param {Object} args
+ * @param {Drill[]} args.pool             Day pool already filtered (court/grade/coach).
+ * @param {Object<string, number>} args.finalWeights
+ * @param {Set<string>} args.ftOnlyCategories
+ * @param {{wu:number,cd:number,mainMinutes:number,minMain:number,maxMain:number,targetMain:number}} args.shape
+ * @param {boolean} args.coachPresent
+ * @param {Map<string, number>} [args.floorTracker]  category → remaining weekly minutes (read here).
+ * @param {Set<string>} args.usedIds
+ * @param {Set<string>} args.daySeenIds
+ * @returns {Array<{category:string, block:string, minutes:number, floor:boolean}>}
+ */
+function chooseMainSegments({
+  pool,
+  finalWeights,
+  ftOnlyCategories,
+  shape,
+  coachPresent,
+  floorTracker,
+  usedIds,
+  daySeenIds,
+}) {
+  const { mainMinutes, targetMain } = shape;
+  if (targetMain <= 0 || mainMinutes < MIN_MAIN_SEGMENT) return [];
+
+  // A category is usable as a segment only if it has at least one candidate drill.
+  const hasCandidate = (cat) =>
+    categoryCandidates({ pool, category: cat, ftOnlyCategories }).length > 0;
+
+  /** @type {Array<{category:string, block:string, floorMinutes?:number}>} */
+  const chosen = [];
+  const used = new Set();
+
+  // 1) Philosophy floors first (coach-present days only): reserve up to
+  //    (targetMain − 2) floor slots so at least two slots remain for the gap focus.
+  if (coachPresent && floorTracker instanceof Map) {
+    const owed = [...floorTracker.entries()]
+      .filter(([cat, m]) => m > 0 && CATEGORY_BLOCK[cat] && hasCandidate(cat))
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+    const floorSlots = clamp(targetMain - 2, 0, owed.length);
+    for (let i = 0; i < floorSlots; i++) {
+      const [cat, owedMin] = owed[i];
+      const floorMinutes = clamp(round5(Math.min(owedMin, FLOOR_SEGMENT)), 5, owedMin);
+      chosen.push({ category: cat, block: CATEGORY_BLOCK[cat], floorMinutes });
+      used.add(cat);
     }
-    floorTracker.set(cat, owed - placedForCat);
   }
-  return used - usedSoFar;
+
+  // 2) Reserve one game-form segment — the coach's 定石 is that a session
+  //    culminates in a game (3on3 / 5on5). Its weight alone rarely floats it into
+  //    the top picks, so reserve a slot when one remains beyond the floors and at
+  //    least one gap slot would still survive. Sized by weight like a gap segment.
+  if (
+    !used.has(GAME_CATEGORY) &&
+    hasCandidate(GAME_CATEGORY) &&
+    targetMain - chosen.length >= 2
+  ) {
+    chosen.push({ category: GAME_CATEGORY, block: CATEGORY_BLOCK[GAME_CATEGORY] });
+    used.add(GAME_CATEGORY);
+  }
+
+  // 3) Fill remaining slots with the heaviest-weighted available categories.
+  for (const cat of mainCategoriesByWeight(finalWeights, pool)) {
+    if (chosen.length >= targetMain) break;
+    if (used.has(cat)) continue;
+    if (!hasCandidate(cat)) continue;
+    chosen.push({ category: cat, block: CATEGORY_BLOCK[cat] });
+    used.add(cat);
+  }
+
+  if (chosen.length === 0) return [];
+
+  // 4) Size the segments. Floor segments keep their reserved minutes; the rest of
+  //    the main budget is split across the gap segments proportional to weight,
+  //    each clamped to [MIN_MAIN_SEGMENT, MAX_MAIN_SEGMENT] on a 5-minute grain.
+  const floorTotal = chosen.reduce((s, c) => s + (c.floorMinutes ?? 0), 0);
+  const gaps = chosen.filter((c) => c.floorMinutes == null);
+  const gapBudget = Math.max(0, mainMinutes - floorTotal);
+  const gapMinutes = distributeGapMinutes(gaps, finalWeights, gapBudget);
+
+  /** @type {Array<{category:string, block:string, minutes:number, floor:boolean}>} */
+  const segments = [];
+  let gi = 0;
+  for (const c of chosen) {
+    if (c.floorMinutes != null) {
+      segments.push({ category: c.category, block: c.block, minutes: c.floorMinutes, floor: true });
+    } else {
+      segments.push({ category: c.category, block: c.block, minutes: gapMinutes[gi++], floor: false });
+    }
+  }
+  // Drop any zero-minute gap segment (when the budget couldn't seat them all).
+  return segments.filter((s) => s.minutes >= MIN_MAIN_SEGMENT || s.floor);
 }
 
 /**
- * Fill a conditioning block (WU/CD) from an ordered candidate list.
+ * Split `budget` minutes across the gap segments proportional to finalWeight, each
+ * at least MIN_MAIN_SEGMENT and at most MAX_MAIN_SEGMENT, on a 5-minute grain, so
+ * the parts sum to `budget` exactly (largest-remainder, capped). If the budget
+ * can't seat every segment at the minimum, the lowest-weighted ones get 0 (dropped
+ * by the caller). Heavier-weighted categories get more time (gap-driven emphasis).
  *
- * Conditioning blocks are exempt from the week-scope `usedIds` dedup: warm-up
- * and cool-down are meant to be reused every day (the same stretch/settle-down
- * work is fine daily), so they neither read nor write `usedIds`. Only the
- * same-day guard (`daySeenIds`) applies — no drill repeats within one day. Week-
- * scope variety is reserved for the 技術/対人/ゲーム main blocks. This prevents
- * the CD block from going empty on later days once an early day "used up" the
- * shared conditioning drills.
+ * @param {Array<{category:string}>} gaps
+ * @param {Object<string, number>} finalWeights
+ * @param {number} budget
+ * @returns {number[]}  minutes per gap segment (parallel to `gaps`).
+ */
+function distributeGapMinutes(gaps, finalWeights, budget) {
+  const n = gaps.length;
+  if (n === 0) return [];
+  // How many segments can we afford at the minimum? Keep the heaviest.
+  let keep = Math.min(n, Math.floor(budget / MIN_MAIN_SEGMENT));
+  const out = new Array(n).fill(0);
+  if (keep <= 0) return out;
+
+  const order = gaps
+    .map((g, i) => ({ i, w: Math.max(0, finalWeights[g.category] ?? 0) }))
+    .sort((a, b) => b.w - a.w || a.i - b.i);
+  const kept = order.slice(0, keep).map((o) => o.i);
+  const wsum = kept.reduce((s, i) => s + Math.max(0, finalWeights[gaps[i].category] ?? 0), 0);
+
+  // Base everyone at the minimum, then distribute the remainder by weight in
+  // 5-minute steps via largest remainder, capping each at MAX_MAIN_SEGMENT.
+  let remaining = budget - MIN_MAIN_SEGMENT * keep;
+  for (const i of kept) out[i] = MIN_MAIN_SEGMENT;
+  const steps = Math.max(0, Math.round(remaining / 5));
+  const raw = kept.map((i) => {
+    const w = wsum > 0 ? Math.max(0, finalWeights[gaps[i].category] ?? 0) / wsum : 1 / keep;
+    return { i, exact: w * steps };
+  });
+  const floored = raw.map((r) => ({ i: r.i, n: Math.floor(r.exact), frac: r.exact - Math.floor(r.exact) }));
+  let assigned = floored.reduce((s, f) => s + f.n, 0);
+  let leftover = steps - assigned;
+  floored.sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; k < floored.length && leftover > 0; k++) {
+    floored[k].n += 1;
+    leftover -= 1;
+  }
+  // Apply, respecting the per-segment max; push any overflow back to the pool.
+  let overflow = 0;
+  for (const f of floored) {
+    let add = f.n * 5;
+    const room = MAX_MAIN_SEGMENT - out[f.i];
+    if (add > room) {
+      overflow += add - room;
+      add = room;
+    }
+    out[f.i] += add;
+  }
+  // Re-seat overflow on segments that still have room (heaviest first).
+  for (const i of kept) {
+    if (overflow <= 0) break;
+    const room = MAX_MAIN_SEGMENT - out[i];
+    if (room <= 0) continue;
+    const add = Math.min(room, overflow);
+    out[i] += add;
+    overflow -= add;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Conditioning blocks (WU / CD): a bundle of short routine drills (unchanged
+// switch-cost-exempt behavior — warm-up / cool-down are routine, not curriculum).
+// ---------------------------------------------------------------------------
+
+/**
+ * Fill a conditioning block (WU/CD) from an ordered candidate list up to its
+ * target minutes. These blocks are exempt from the week-scope `usedIds` dedup
+ * (the same stretch / settle-down work is fine every day) and from the switch-cost
+ * segment budget (warm-up is a routine bundle of short mobility drills, not a
+ * curriculum switch). Only the same-day guard applies.
  *
  * @param {Object} args
  * @param {string} args.block
  * @param {number} args.target
  * @param {Drill[]} args.candidates
- * @param {Set<string>} args.daySeenIds
  * @param {ReturnType<import('./loadModel.js').createLoadBudget>} args.budget
+ * @param {Set<string>} [args.daySeenIds]  Shared day-scope seen set so warm-up and
+ *   cool-down don't list the same stretch twice in one session. A fresh set is used
+ *   when omitted.
  * @returns {PlanBlock}
  */
-function fillCondBlock({ block, target, candidates, daySeenIds = new Set(), budget }) {
+function fillCondBlock({ block, target, candidates, budget, daySeenIds = new Set() }) {
   /** @type {PlanBlock} */
   const planBlock = { block, items: [] };
   let used = 0;
   for (const d of candidates) {
     if (used >= target) break;
-    if (daySeenIds.has(d.id)) continue; // same-day only; WU/CD reuse across days is allowed
+    if (daySeenIds.has(d.id)) continue;
     const dur = d.duration_min;
     if (used + dur > target) continue;
     if (isHighIntensity(d)) {
@@ -409,8 +529,12 @@ function fillCondBlock({ block, target, candidates, daySeenIds = new Set(), budg
   return planBlock;
 }
 
+// ---------------------------------------------------------------------------
+// Day allocation.
+// ---------------------------------------------------------------------------
+
 /**
- * Allocate a single day's plan: split into blocks and fill each from the pool.
+ * Allocate a single day's plan as warm-up + sustained main segments + cool-down.
  *
  * @param {Object} args
  * @param {import('./types.js').ScheduleDay} args.scheduleDay
@@ -418,9 +542,9 @@ function fillCondBlock({ block, target, candidates, daySeenIds = new Set(), budg
  * @param {Object<string, number>} args.finalWeights
  * @param {Set<string>} args.ftOnlyCategories
  * @param {ReturnType<import('./loadModel.js').createLoadBudget>} args.budget
- * @param {Set<string>} [args.usedIds]    Week-scope used ids (shared across days). A
- *                                        fresh per-day set is used when omitted.
+ * @param {Set<string>} [args.usedIds]    Week-scope used ids (shared across days).
  * @param {Config} [args.config]          For coach-context pool restriction.
+ * @param {Map<string, number>} [args.floorTracker]  Weekly philosophy-floor remaining minutes (mutated).
  * @returns {PlanDay}
  */
 export function allocateDay({
@@ -435,138 +559,74 @@ export function allocateDay({
 }) {
   const { day, minutes, court } = scheduleDay;
   const coachPresent = scheduleDay.coach_present !== false; // default present when unset
-  const targets = computeBlockTargets(minutes);
+  const shape = computeSessionShape(minutes);
 
-  // Day-scope guard: a drill never appears twice in the same day, even when the
-  // week-scope reuse fallback (exhausted fresh pool) kicks in.
+  // Day-scope guard: a drill never appears twice in one day.
   /** @type {Set<string>} */
   const daySeenIds = new Set();
 
-  // Coach-absent days: narrow the pool to player-self-runnable content
-  // (coach_absent_allow categories, mastery 反復/実戦化, no team-intro / 習得).
-  const effectivePool = coachPresent
+  // Coach-absent days: narrow the MAIN pool to player-self-runnable content.
+  const mainPool = coachPresent
     ? dayPool
     : dayPool.filter((d) => isCoachAbsentEligible(d, config));
 
-  // WU / CD draw from the conditioning/warm-up category.
-  // Warm-up and cool-down are run every day regardless of whether a coach is
-  // present, so they draw from the unrestricted day pool (NOT effectivePool):
-  // the coach-absent restriction is for the technical/対人/ゲーム main blocks only
-  // (spec #2). WU keeps the existing behavior (low→中→高). CD is restricted to
-  // low-intensity non-jump non-push settle-down work only (spec #4).
+  // Warm-up / cool-down draw from the unrestricted day pool (they run every day
+  // regardless of coach presence). WU is low→中→高 ordered; CD is settle-down only.
   const wuPool = dayPool
     .filter((d) => d.category === WUCD_CATEGORY)
     .slice()
-    .sort((a, b) => intensityRank(a) - intensityRank(b)); // 低→中→高
+    .sort((a, b) => intensityRank(a) - intensityRank(b));
   const cdPool = dayPool
     .filter((d) => d.category === WUCD_CATEGORY && isCoolDownEligible(d))
     .slice()
     .sort((a, b) => a.duration_min - b.duration_min);
 
-  // 技術 / 対人 / ゲーム draw from the rest, by finalWeight priority.
-  const skillCategories = categoriesByWeight(finalWeights, effectivePool).filter(
-    (c) => c !== WUCD_CATEGORY,
-  );
+  const wuBlock = fillCondBlock({ block: 'WU', target: shape.wu, candidates: wuPool, budget, daySeenIds });
 
-  // WU/CD use their own per-block same-day sets (not the shared daySeenIds) so a
-  // warm-up drill doesn't starve the cool-down: the conditioning category never
-  // overlaps the skill blocks, and WU/CD are reused daily, so each only needs to
-  // avoid repeating a drill within its own block.
-  const wuBlock = fillCondBlock({
-    block: 'WU',
-    target: targets.WU,
-    candidates: wuPool,
-    daySeenIds: new Set(),
-    budget,
-  });
-
-  const techCandMap = candidatesByCategory({
-    pool: effectivePool,
-    categories: skillCategories,
-    ftOnlyCategories,
-  });
-  const techCats = skillCategories.filter((c) => techCandMap.has(c));
-  const techBlock = fillSkillBlock({
-    block: '技術',
-    target: targets.技術,
-    categories: techCats,
-    candMap: techCandMap,
+  // Choose and size the main segments, then fill each with one sustained primary
+  // drill (+ いずれか alternatives) grouped into its 技術/対人/ゲーム block.
+  const segments = chooseMainSegments({
+    pool: mainPool,
     finalWeights,
+    ftOnlyCategories,
+    shape,
+    coachPresent,
+    floorTracker,
     usedIds,
     daySeenIds,
-    budget,
   });
 
-  // 対人 rebuilds candidates against the same pool; week-scope usedIds already
-  // prevents reusing the drills the 技術 block just consumed.
-  // On coach-present days we first reserve philosophy-floor minutes (team
-  // defense / fast-break) in this block (spec #2), then fill the remainder by
-  // the normal weighted spread.
-  /** @type {PlanBlock} */
-  const vsBlock = { block: '対人', items: [] };
-  let vsUsed = 0;
-  if (coachPresent && floorTracker) {
-    vsUsed += fillFloorIntoBlock({
-      planBlock: vsBlock,
-      target: targets.対人,
-      usedSoFar: vsUsed,
-      pool: dayPool, // floors draw from the unrestricted day pool
-      floorTracker,
+  /** @type {Map<string, PlanBlock>} */
+  const mainBlocks = new Map(MAIN_BLOCK_ORDER.map((b) => [b, { block: b, items: [] }]));
+  for (const seg of segments) {
+    const candidates = categoryCandidates({ pool: mainPool, category: seg.category, ftOnlyCategories });
+    const pick = pickSegmentDrill({ candidates, usedIds, daySeenIds, budget });
+    if (!pick) continue; // no placeable primary (e.g. all blocked by the load cap)
+    const item = toPlanItem({
+      primary: pick.primary,
+      alternatives: pick.alternatives,
+      minutes: seg.minutes,
       usedIds,
       daySeenIds,
       budget,
+      dedup: true,
     });
+    mainBlocks.get(seg.block).items.push(item);
+    // A satisfied floor decrements the weekly tracker by the minutes actually placed.
+    if (seg.floor && floorTracker instanceof Map) {
+      floorTracker.set(seg.category, Math.max(0, (floorTracker.get(seg.category) ?? 0) - seg.minutes));
+    }
   }
-  const vsCandMap = candidatesByCategory({
-    pool: effectivePool,
-    categories: skillCategories,
-    ftOnlyCategories,
-  });
-  const vsCats = skillCategories.filter((c) => vsCandMap.has(c));
-  fillSkillBlock({
-    block: '対人',
-    target: targets.対人,
-    categories: vsCats,
-    candMap: vsCandMap,
-    finalWeights,
-    usedIds,
-    daySeenIds,
-    budget,
-    planBlock: vsBlock,
-    usedSoFar: vsUsed,
-  });
 
-  // ゲーム prefers live-game-form categories, then falls back to weighted rest.
-  const gameRanked = [
-    ...GAME_CATEGORIES.filter((c) => skillCategories.includes(c)),
-    ...skillCategories.filter((c) => !GAME_CATEGORIES.includes(c)),
-  ];
-  const gameCandMap = candidatesByCategory({
-    pool: effectivePool,
-    categories: gameRanked,
-    ftOnlyCategories,
-  });
-  const gameCats = gameRanked.filter((c) => gameCandMap.has(c));
-  const gameBlock = fillSkillBlock({
-    block: 'ゲーム',
-    target: targets.ゲーム,
-    categories: gameCats,
-    candMap: gameCandMap,
-    finalWeights,
-    usedIds,
-    daySeenIds,
-    budget,
-  });
+  // Cool-down avoids the warm-up's stretches (shared daySeenIds). If that empties
+  // it (a tiny pool where warm-up consumed every settle-down drill), refill with a
+  // fresh set so every practice day still ends with a non-empty cool-down.
+  let cdBlock = fillCondBlock({ block: 'CD', target: shape.cd, candidates: cdPool, budget, daySeenIds });
+  if (cdBlock.items.length === 0 && cdPool.length > 0) {
+    cdBlock = fillCondBlock({ block: 'CD', target: shape.cd, candidates: cdPool, budget });
+  }
 
-  const cdBlock = fillCondBlock({
-    block: 'CD',
-    target: targets.CD,
-    candidates: cdPool,
-    daySeenIds: new Set(),
-    budget,
-  });
-
-  const blocks = [wuBlock, techBlock, vsBlock, gameBlock, cdBlock];
+  const blocks = [wuBlock, ...MAIN_BLOCK_ORDER.map((b) => mainBlocks.get(b)), cdBlock];
   const total_minutes = blocks.reduce(
     (sum, b) => sum + b.items.reduce((s, it) => s + it.minutes, 0),
     0,
@@ -588,9 +648,4 @@ export function allocateDay({
     total_minutes,
     high_intensity_count,
   };
-}
-
-/** Intensity ordering helper for WU (低=0, 中=1, 高=2). */
-function intensityRank(drill) {
-  return drill.intensity_class === '低' ? 0 : drill.intensity_class === '中' ? 1 : 2;
 }
