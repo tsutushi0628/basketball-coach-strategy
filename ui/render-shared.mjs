@@ -26,7 +26,7 @@ export const BASE_CSS = `
 :root{${TOKENS}}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--ink)}
-body{font-family:"Hiragino Sans","Helvetica Neue",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 .wrap{max-width:840px;margin:0 auto;padding:32px 18px 80px}
 a{color:var(--orange-deep)}
 
@@ -60,27 +60,35 @@ a{color:var(--orange-deep)}
 .gchip.boys::before{background:var(--boys)}
 .gchip.girls::before{background:var(--girls)}
 
-/* 日ヘッダ＋組違いパネル */
-.interact{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:15px 18px;margin-bottom:14px}
-.interact h4{font-size:14px;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
-.interact .ides{font-size:12px;color:var(--mute);line-height:1.6;margin-bottom:10px}
+/* 日ヘッダ */
 .dayhead{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:16px 20px;margin-bottom:14px}
 .dayhead .dh-t{font-size:clamp(17px,3vw,21px);font-weight:700;letter-spacing:-.01em}
 .dayhead .dh-court{font-size:12px;color:var(--mute);font-weight:600;margin-left:10px;background:var(--bg);box-shadow:var(--inset);border-radius:999px;padding:3px 11px;vertical-align:middle}
 .dayhead .dh-aim{margin-top:11px;font-size:15px;font-weight:700;line-height:1.5;background:var(--bg);box-shadow:var(--inset);border-radius:14px;padding:11px 15px}
 .dayhead .dh-aiml{display:block;font-size:11px;letter-spacing:.08em;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
-.rotphase{background:var(--bg);box-shadow:var(--inset);border-radius:14px;padding:11px 14px;margin-bottom:9px}
-.rotphase:last-of-type{margin-bottom:0}
-.rotphase .rp-h{font-size:13px;font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.rp-tag{font-size:11px;border-radius:999px;padding:2px 10px;font-weight:600;white-space:nowrap}
-.rp-coach{background:var(--orange);color:var(--orange-ink)}
-.rp-self{background:var(--surface);color:var(--mute);box-shadow:var(--inset)}
-.rotline{display:flex;gap:9px;align-items:baseline;font-size:13px;padding:4px 0}
-.rotline .rl-who{flex:0 0 48px;font-size:12px;color:var(--orange-deep);font-weight:700}
-.rotline .rl-list{flex:1;min-width:0;line-height:1.5}
-.rotswap{font-size:12px;color:var(--orange-deep);font-weight:700;margin-top:9px;line-height:1.5}
 .inote{font-size:13px;line-height:1.6}
 .inote b{color:var(--orange-deep);font-weight:700}
+
+/* 2列グリッド（組違い2列表示）*/
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
+.twocol-header{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
+.tcrow{display:contents}
+.tccell{background:var(--bg);border-radius:12px;box-shadow:var(--shadow-soft);padding:9px 12px;font-size:13px}
+.tccell.tc-coach{background:var(--surface);box-shadow:var(--shadow-soft)}
+.tccell.tc-self{box-shadow:var(--inset)}
+.tc-shared{grid-column:1/-1;background:var(--bg);border-radius:11px;box-shadow:var(--inset);padding:8px 13px;font-size:13px;color:var(--mute)}
+.tc-from{font-size:11px;color:var(--orange-deep);font-weight:700;margin-bottom:3px}
+.tc-name{font-size:14px;font-weight:600;line-height:1.4}
+.tc-half{font-size:10px;letter-spacing:.06em;color:var(--mute);margin-bottom:3px}
+.tc-comp{display:block;font-size:11px;color:var(--mute);margin-top:3px;line-height:1.5}
+@media (max-width:580px){
+  .twocol,.twocol-header{grid-template-columns:1fr}
+  .tc-shared{grid-column:1}
+}
+@media print{
+  .twocol,.twocol-header{grid-template-columns:1fr 1fr}
+  .tc-shared{grid-column:1/-1}
+}
 
 /* 目標（共通の今月/今週/定性 ＋ 男女別KPI） */
 .goals{background:var(--surface);border-radius:22px;box-shadow:var(--shadow-soft);padding:18px 20px}
@@ -110,14 +118,16 @@ a{color:var(--orange-deep)}
 .vid{display:inline-flex;align-items:center;gap:3px;color:var(--orange-deep);text-decoration:none;font-size:12px;background:var(--bg);padding:2px 9px;border-radius:999px;box-shadow:var(--inset)}
 .vid:hover{text-decoration:underline}
 
-/* 年アーク */
-.arcwrap{display:flex;gap:7px;align-items:stretch;flex-wrap:wrap}
-.arccell{flex:1 1 0;min-width:64px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow-soft);padding:11px 11px;display:flex;flex-direction:column;gap:5px}
+/* 年の流れ（男子行・女子行の2段） */
+.arcrows{display:flex;flex-direction:column;gap:10px}
+.arcrow-label{font-size:12px;font-weight:700;margin-bottom:-4px}
+.arcwrap{display:flex;gap:5px;align-items:stretch;flex-wrap:nowrap;overflow-x:auto}
+.arccell{flex:1 1 0;min-width:58px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow-soft);padding:9px 9px;display:flex;flex-direction:column;gap:4px}
 .arccell.peak2{background:var(--orange-soft)}
 .arccell.peak1{background:var(--bg);box-shadow:var(--inset)}
+.arccell.arccell-now{outline:2px solid var(--orange);outline-offset:1px}
 .arccell .am{font-size:13px;font-weight:700}
-.arccell .ap{font-size:11px;color:var(--mute);line-height:1.4;min-height:30px}
-.arccell .amk{display:flex;flex-wrap:wrap;gap:4px}
+.arccell .ap{font-size:10px;color:var(--mute);line-height:1.4;min-height:28px}
 .peakchip{font-size:10px;background:var(--orange-deep);color:var(--orange-ink);border-radius:999px;padding:2px 7px;font-weight:700;align-self:flex-start}
 .nowchip{font-size:10px;border-radius:999px;padding:2px 7px;font-weight:700;white-space:nowrap}
 .nowchip.boys{background:var(--boys);color:var(--orange-ink)}
@@ -125,6 +135,7 @@ a{color:var(--orange-deep)}
 .arclegend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:var(--mute)}
 .arclegend .lk{display:inline-flex;align-items:center;gap:6px}
 .arclegend .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+@media (max-width:680px){.arcwrap{flex-wrap:wrap}.arccell{flex-basis:30%;min-width:58px}}
 
 /* 月（原典フェーズ＋主眼＋KPI・共通） */
 .monthcard{background:var(--surface);border-radius:20px;box-shadow:var(--shadow-soft);padding:18px 20px}
@@ -212,49 +223,42 @@ export function dayHeader(pd, month) {
   </div>`;
 }
 
-/** 組違いON時のコーチ付き段ずらしローテ。 */
-function coachSplitBody(pd) {
-  const cs = pd.coachSplit;
-  const rounds = (cs?.coachRounds ?? [])
-    .map(
-      (r) => `<div class="rotphase">
-      <div class="rp-h"><span class="rp-tag rp-coach">コーチ付き</span>${esc(r.from)}〜　${esc(r.name)}（${r.minutes}分）</div>
-      <div class="rotline"><span class="rl-who">前半</span><span class="rl-list">${genderChip(r.first)}にコーチが付く（${esc(r.second)}は同じ段を自走）</span></div>
-      <div class="rotline"><span class="rl-who">後半</span><span class="rl-list">入れ替え：${genderChip(r.second)}にコーチ（${esc(r.first)}は自走）</span></div>
-    </div>`,
-    )
-    .join('');
-  const self = (cs?.selfSegs ?? []).map((s) => esc(s.name)).join(' ／ ');
-  return `<h4>組違い：同じメニューを、コーチ付き段だけ男女でずらす</h4>
-    <p class="ides">練習メニューは男女共通（下のとおり）。体育館を半面ずつ分けて男女が同時に進める。コーチは1人なので「コーチ付き」の段だけ前半・後半で男女を入れ替えて見る——同時刻にコーチが見るのは必ず片方、もう片方はその段を自走で進める。コート割り（左/右）は暫定。</p>
-    ${rounds || '<p class="inote">この日はコーチ付き段がなく、男女とも自走で同時に進められる。</p>'}
-    ${self ? `<p class="rotswap">自走の段（${self}）は男女が同時に実施（コーチ不要）。</p>` : ''}`;
-}
-
 /**
- * 組違い相互作用パネル（ON/OFF両方を出力。トグルで切替）。1日分。
+ * 2列グリッド描画（組違い ON 時の日ビジュアル本体）。
+ * 行ループのみを担い、各セルの描画は renderCell コールバックで各パターンが注入する。
+ *
+ * @param {object} pd buildDays の day（pd.rotation.rows を持つ）
+ * @param {function(row:{type,boys?,girls?,drill?,label?,from,minutes,half?,coachSide?}, side:'boys'|'girls'|'shared'):string} renderCell
+ *   各セルのHTML文字列を返すコールバック。side='shared' のとき colspan セル1つ。
+ * @returns {string} HTML
  */
-export function interactionPanel(pd) {
-  const offNote = `<div class="interact" data-interact="off" hidden>
-    <h4>組違いOFF：男女が別時間に同じメニューを各自フル</h4>
-    <p class="inote">体育館を共有しない日は、<b>男女が別々の時間</b>に同じメニューをそれぞれフルで実施する（コーチが全部の段に付ける）。メニューの中身は下のとおりで男女共通。</p>
+export function genderTwoColumn(pd, renderCell) {
+  const rot = pd.rotation;
+  if (!rot || !rot.rows || rot.rows.length === 0) return '';
+
+  const header = `<div class="twocol-header">
+    <div>${genderChip('男子')}</div>
+    <div>${genderChip('女子')}</div>
   </div>`;
 
-  let onBody;
-  if (pd.sharedKind === 'rotation') {
-    onBody = `<div class="interact" data-interact="on">${coachSplitBody(pd)}</div>`;
-  } else if (pd.sharedKind === 'together') {
-    onBody = `<div class="interact" data-interact="on">
-      <h4>男女合同（コーチが両方を同時に見る）</h4>
-      <p class="inote">最長日の土曜は<b>男女合同</b>。コーチが両チームを同時に見て、合同のウォーム・ゲーム形式で進める。メニューは下のとおり。</p>
-    </div>`;
-  } else {
-    onBody = `<div class="interact" data-interact="on">
-      <h4>コーチ不在日（男女とも各自で自走）</h4>
-      <p class="inote">コーチ不在日は組分け不要。<b>男女とも</b>下のメニューを自走で進める（要監督ドリルはこの日には入れていない）。</p>
-    </div>`;
-  }
-  return onBody + offNote;
+  const rowsHtml = rot.rows
+    .map((row) => {
+      if (row.type === 'together') {
+        // WU・主自走・CD・both_self: 全幅の合同行
+        return `<div class="tc-shared">${renderCell(row, 'shared')}</div>`;
+      }
+      if (row.type === 'rotation') {
+        // コーチ段: boys / girls の2セル
+        return `<div class="twocol">
+        <div class="tccell ${row.boys.mode === 'practice' ? 'tc-coach' : 'tc-self'}">${renderCell(row, 'boys')}</div>
+        <div class="tccell ${row.girls.mode === 'practice' ? 'tc-coach' : 'tc-self'}">${renderCell(row, 'girls')}</div>
+      </div>`;
+      }
+      return '';
+    })
+    .join('');
+
+  return `${header}<div class="twocol-wrap">${rowsHtml}</div>`;
 }
 
 /** KPIメーター（1チーム分）。 */
@@ -271,12 +275,12 @@ function kpiCard(label, gender, g) {
   return `<div class="kteam"><div class="kth">${genderChip(gender)}の指標</div><div class="kpis">${meters}</div></div>`;
 }
 
-/** 目標セクション（今月/今週/定性は共通、KPIは男女別）。 */
+/** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
 export function goalsSection(data) {
   const g = data.session.goals;
   const qual = g.qualitative.map((q) => `・${esc(q)}`).join('<br>');
   return `<section class="goals">
-    <h3>目標（練習は男女共通／指標は各チーム別）</h3>
+    <h3>目標（練習は男女共通／チェックする数字は各チーム別）</h3>
     <div class="gline"><span class="lab">今月</span><span class="txt">${esc(g.monthMain)}</span></div>
     <div class="gline"><span class="lab">今週</span><span class="txt">${esc(g.week)}</span></div>
     <div class="gline"><span class="lab">質</span><span class="txt">${qual || '—'}</span></div>
@@ -287,54 +291,69 @@ export function goalsSection(data) {
   </section>`;
 }
 
-/** 年セクション（新チーム12ヶ月アーク・2山・男女の「いま」が1ヶ月ズレる）。 */
+/**
+ * 年の流れ（男子行・女子行の2段で表示）。
+ * 男女で大会の時期が約1ヶ月ずれる（女子先行）のが2行のズレで分かる。
+ */
 export function yearSection(data) {
   const y = data.year;
-  const cells = y.arc
-    .map((a) => {
-      const peakCls = a.peakLevel === 2 ? ' peak2' : a.peakLevel === 1 ? ' peak1' : '';
-      const peakChip = a.peakLevel === 2 ? '<span class="peakchip">山</span>' : '';
-      const marks = [];
-      if (a.month === y.currentBoys) marks.push('<span class="nowchip boys">男子いま</span>');
-      if (a.month === y.currentGirls) marks.push('<span class="nowchip girls">女子いま</span>');
-      const shortPhase = esc(a.phase.replace(/（.*$/, '').replace(/\(.*$/, ''));
-      return `<div class="arccell${peakCls}" title="${esc(a.headline)}">
-        <span class="am">${a.month}月</span>
-        <span class="ap">${shortPhase}</span>
-        ${peakChip}
-        <span class="amk">${marks.join('')}</span>
-      </div>`;
-    })
-    .join('');
+
+  /** 1行分のセル列を作る（gender='boys'|'girls'、currentMonth=その性別の現在月）。 */
+  function buildRow(gender, currentMonth) {
+    return y.arc
+      .map((a) => {
+        const peakCls = a.peakLevel === 2 ? ' peak2' : a.peakLevel === 1 ? ' peak1' : '';
+        const peakChip = a.peakLevel === 2 ? '<span class="peakchip">目標の大会</span>' : '';
+        const isNow = a.month === currentMonth;
+        const nowChip = isNow ? `<span class="nowchip ${gender}">${gender === 'boys' ? '男子' : '女子'}いま</span>` : '';
+        const shortPhase = esc(a.phase.replace(/（.*$/, '').replace(/\(.*$/, ''));
+        return `<div class="arccell${peakCls}${isNow ? ' arccell-now' : ''}" title="${esc(a.headline)}">
+          <span class="am">${a.month}月</span>
+          <span class="ap">${shortPhase}</span>
+          ${peakChip}
+          ${nowChip}
+        </div>`;
+      })
+      .join('');
+  }
+
+  const boysRow = buildRow('boys', y.currentBoys);
+  const girlsRow = buildRow('girls', y.currentGirls);
   const peakLabels = y.peaks.map((p) => `${esc(p.label)}（${p.months.join('・')}月）`).join(' ／ ');
-  return `<h3 class="lvh">年間アーク（夏に発足 → 冬の新人大会 → 翌夏の中体連で集大成）</h3>
-    <div class="arcwrap">${cells}</div>
+
+  return `<h3 class="lvh">1年の流れ（夏に新チーム発足 → 冬の新人大会 → 翌夏の中体連）</h3>
+    <p class="note">男子・女子それぞれの「今月の位置」と「目標の大会の時期」を2行で並べています。女子は男子より約1ヶ月先行するので、2行のズレが組み方の参考になります。</p>
+    <div class="arcrows">
+      <div class="arcrow-label"><span class="gchip boys">男子</span></div>
+      <div class="arcwrap">${boysRow}</div>
+      <div class="arcrow-label"><span class="gchip girls">女子</span></div>
+      <div class="arcwrap">${girlsRow}</div>
+    </div>
     <div class="arclegend">
-      <span class="lk"><span class="sw" style="background:var(--orange-soft)"></span>山（ピーク）：${peakLabels}</span>
+      <span class="lk"><span class="sw" style="background:var(--orange-soft)"></span>目標の大会：${peakLabels}</span>
       <span class="lk"><span class="sw" style="background:var(--boys)"></span>男子いま（${y.currentBoys}月）</span>
       <span class="lk"><span class="sw" style="background:var(--girls)"></span>女子いま（${y.currentGirls}月）</span>
-    </div>
-    <p class="note">夏の大会（6〜7月の中野区→都選手権）は前の代＝現3年の集大成で、新チームには出発点で山ではありません。新チームの山は2つ：冬の新人大会と翌夏の中体連。練習メニューは男女共通ですが、大会の山は時期が男女で約1ヶ月ずれます（女子先行）。</p>`;
+    </div>`;
 }
 
-/** 月セクション（原典フェーズ＋主眼＋追う指標・共通）。 */
+/** 月セクション（今月やること・フェーズ・チェックする数字・共通）。 */
 export function monthSection(data) {
   const m = data.session.month;
   const peak = m.peak
-    ? `<div class="mc-peak">この月は山に向かう期（${esc(peakName(data, m.peak))}）</div>`
+    ? `<div class="mc-peak">大会に向けて仕上げる時期（${esc(peakName(data, m.peak))}）</div>`
     : '';
   const kpi =
     m.kpiHints && m.kpiHints.length
-      ? `<div class="mc-kpi"><div class="kk">追う指標（計測台帳）</div><div class="kv">${m.kpiHints.map(esc).join('・')}</div></div>`
+      ? `<div class="mc-kpi"><div class="kk">チェックする数字</div><div class="kv">${m.kpiHints.map(esc).join('・')}</div></div>`
       : '';
-  return `<h3 class="lvh">${data.month}月の主眼（原典の年間計画より・男女共通）</h3>
+  return `<h3 class="lvh">${data.month}月にやること（年間予定より・男女共通）</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${data.month}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
       <div class="mc-aim">${esc(m.headline)}</div>
       ${peak}
       ${kpi}
     </div>
-    <p class="note">月の主眼・フェーズ・追う指標は原典「年間計画」に忠実。練習メニューは男女共通で、大会の山の時期だけ男女でずれます（女子先行）。</p>`;
+    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定に忠実。練習メニューは男女共通で、目標の大会の時期だけ男女でずれます（女子先行）。</p>`;
 }
 
 /** ピークkeyから表示名を引く。 */
@@ -379,21 +398,43 @@ export function clientScript() {
 })();`;
 }
 
-/** 貼り付け用プレーンテキスト（男女共通メニュー＋組違いの回し方）。 */
+/** 貼り付け用プレーンテキスト（男女2列スワップの段取り＋共通メニュー）。 */
 export function plainText(data, pd) {
   const L = [];
   L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・${pd.start}〜${pd.end}）練習メニュー（男女共通）`);
   L.push('');
   L.push(`■ 本日の狙い：${pd.aim}`);
-  if (pd.sharedKind === 'rotation' && pd.coachSplit) {
-    L.push('■ 組違い（コーチ1人）：コーチ付きの段だけ男女でずらす。前半は片方にコーチ、その間もう片方は同じ段を自走→後半で入れ替え。');
+
+  if (pd.sharedKind === 'rotation' && pd.rotation) {
+    L.push('■ 組違い（コーチ1人）：要監督ドリルを男女左右2列でずらす。');
+    L.push('  前半：コーチ付き側が要監督ドリル、もう片方は別の自走ドリル');
+    L.push('  後半：左右入れ替え（入れ替え後にコーチ付き側が変わる）');
+    L.push('  ─ 前後半を合わせて両グループが同じカリキュラムを全部こなす ─');
+    L.push('');
+    L.push('■ 組違いスケジュール（男子左列 / 女子右列）');
+    for (const row of pd.rotation.rows) {
+      if (row.type === 'together') {
+        // drill.name が集約主見出し（例: ダイナミックストレッチ）を使う
+        const togetherName = row.drill?.name || row.label || '';
+        const compNote = row.drill?.components?.length
+          ? `（内訳：${row.drill.components.join('／')}）`
+          : '';
+        L.push(`  ${row.from}  [両] ${togetherName}（${row.minutes}分）${compNote}`);
+      } else if (row.type === 'rotation') {
+        const bTag = row.boys.mode === 'practice' ? '●' : '自走';
+        const gTag = row.girls.mode === 'practice' ? '●' : '自走';
+        L.push(`  ${row.from}（${row.half}）`);
+        L.push(`    男子(${bTag}) ${row.boys.name}  ／  女子(${gTag}) ${row.girls.name}`);
+      }
+    }
   } else if (pd.sharedKind === 'together') {
     L.push('■ 土曜は男女合同（コーチが両方を同時に）。');
   } else {
     L.push('■ コーチ不在日：男女とも各自で自走。');
   }
+
   L.push('');
-  L.push('■ メニュー');
+  L.push('■ 共通メニュー（男女同一の内容）');
   for (const b of pd.blocks) {
     L.push(`${b.from}〜${b.to}　${b.label}（${b.minutes}分）`);
     for (const it of b.items) {

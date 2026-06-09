@@ -7,7 +7,7 @@
 
 import {
   esc, modeTag, altLine, videoLink, plainText,
-  modeToggle, interactionPanel, dayHeader,
+  modeToggle, genderTwoColumn, dayHeader,
   goalsSection, monthSection, yearSection, assumptionsNote,
 } from './render-shared.mjs';
 
@@ -36,12 +36,51 @@ function menuDoc(pd) {
   </div>`;
 }
 
+/**
+ * 左右2列の文書（rotation 日の日ビジュアル本体）。
+ * 行＝時刻見出し＋左右2カラム（左=男子・右=女子のドリル行）。
+ * @media print で2列grid を維持。
+ */
+function rotationDoc(pd) {
+  const renderCell = (row, side) => {
+    if (side === 'shared') {
+      const compHtml = row.drill?.components?.length
+        ? `<div class="hdc-comp">${row.drill.components.map(esc).join(' / ')}</div>`
+        : '';
+      const drillName = row.drill?.name || row.label || '';
+      const blockLabel = row.drill?.name && row.label && row.drill.name !== row.label ? row.label : '';
+      return `<div class="hdoc-shared">
+        <span class="hbr">${esc(row.from)}</span>
+        ${blockLabel ? `<span class="hbn hbn-block">${esc(blockLabel)}</span>` : ''}
+        <span class="hbn">${esc(drillName)}</span>
+        <span class="hbm">${row.minutes}分</span>
+        ${compHtml}
+      </div>`;
+    }
+    const cell = row[side];
+    return `<div class="hdoc-cell${cell.mode === 'practice' ? ' hdc-coach' : ' hdc-self'}">
+      <div class="hdc-from">${esc(row.from)}（${esc(row.half)}）</div>
+      ${modeTag(cell.mode)}
+      <div class="hdc-name">${esc(cell.name)}${videoLink(cell.video)}</div>
+      ${altLine(cell.alternatives)}
+    </div>`;
+  };
+
+  const onContent = genderTwoColumn(pd, renderCell);
+  const offNote = `<div data-interact="off" hidden>
+    <div class="inote"><b>組違いOFF</b>：男女が別時間に同じ内容を各自フル実施。</div>
+    ${menuDoc(pd)}
+  </div>`;
+
+  return `<div data-interact="on">${onContent}</div>${offNote}`;
+}
+
 /** 1日ぶんの配布物。 */
 function dayDoc(data, pd, idx) {
+  const isRotation = pd.sharedKind === 'rotation' && pd.rotation;
   return `<article class="day pageb" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
     ${dayHeader(pd, data.month)}
-    ${interactionPanel(pd)}
-    ${menuDoc(pd)}
+    ${isRotation ? rotationDoc(pd) : menuDoc(pd)}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
   </article>`;
 }
@@ -73,6 +112,21 @@ function weekLevel(data) {
 }
 
 const PATTERN_CSS = `
+/* 2列文書（rotation 日） */
+.hdoc-shared{display:flex;align-items:baseline;flex-wrap:wrap;gap:9px;background:var(--bg);box-shadow:var(--inset);border-radius:11px;padding:8px 13px;font-size:13px;color:var(--mute)}
+.hdoc-cell{border-radius:12px;padding:9px 13px;display:flex;flex-direction:column;gap:4px}
+.hdoc-cell.hdc-coach{background:var(--surface);box-shadow:var(--shadow-soft)}
+.hdoc-cell.hdc-self{background:var(--bg);box-shadow:var(--inset)}
+.hdc-from{font-size:11px;color:var(--orange-deep);font-weight:700}
+.hdc-name{font-size:14px;font-weight:600;line-height:1.4;margin-top:3px}
+.hbn-block{font-size:10px;color:var(--mute);letter-spacing:.04em}
+.hdc-comp{flex-basis:100%;font-size:11px;color:var(--mute);opacity:.8;line-height:1.5;margin-top:2px}
+@media print{
+  .twocol{grid-template-columns:1fr 1fr}
+  .tc-shared{grid-column:1/-1}
+  .hdoc-cell{break-inside:avoid}
+}
+
 .hmenu{margin-top:2px}
 .hblock{background:var(--bg);border-radius:14px;box-shadow:var(--inset);padding:11px 14px;margin-bottom:9px}
 .hbh{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}

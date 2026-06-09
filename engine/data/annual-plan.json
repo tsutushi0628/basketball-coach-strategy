@@ -6,8 +6,8 @@
   "_category_keys": "focus_weights のキーはエンジン正準カテゴリ（allocate/gap と一致）。和は各月1.0。",
 
   "peaks": [
-    { "key": "winter_shinjin", "label": "冬の新人大会（第1の山）", "months": [11, 12, 1, 2] },
-    { "key": "summer_chutairen", "label": "翌夏の中体連（集大成・最大の山）", "months": [6, 7] }
+    { "key": "winter_shinjin", "label": "冬の新人大会（最初の目標）", "months": [11, 12, 1, 2] },
+    { "key": "summer_chutairen", "label": "翌夏の中体連（いちばんの目標）", "months": [6, 7] }
   ],
 
   "months": {
@@ -164,8 +164,8 @@
       "kpi_hints": ["試合TO", "FG%", "被FG%"]
     },
     "6": {
-      "phase": "試合期（中体連＝集大成）",
-      "headline": "中野区選手権→（勝ち上がれば）都選手権。この代が3年として迎える集大成・最大の山。持てるものを出し切る",
+      "phase": "試合期（中体連が本番）",
+      "headline": "中野区選手権→（勝ち上がれば）都選手権。この代が3年として迎えるいちばん大事な大会。持てるものを出し切る",
       "peak": "summer_chutairen",
       "peak_level": 2,
       "focus_weights": {
@@ -178,8 +178,8 @@
       "kpi_hints": ["試合スタッツ全般"]
     },
     "7": {
-      "phase": "試合期（中体連＝集大成）",
-      "headline": "中体連の続き・最大の山。勝ち上がれば都選手権まで。ここを終えると3年が引退し次の代へ",
+      "phase": "試合期（中体連が本番）",
+      "headline": "中体連の続き・いちばんの目標。勝ち上がれば都選手権まで。ここを終えると3年が引退し次の代へ",
       "peak": "summer_chutairen",
       "peak_level": 2,
       "focus_weights": {

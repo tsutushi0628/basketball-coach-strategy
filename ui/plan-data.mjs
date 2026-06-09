@@ -25,6 +25,8 @@ import { createLocalStorage } from '../engine/src/storage.js';
 import { normalizeDrills } from '../engine/src/normalize.js';
 import { planWeek } from '../engine/src/planWeek.js';
 import { loadAnnualPlan, resolveMonth, yearArc, peaks as annualPeaks } from '../engine/src/annualPlan.js';
+import { coachingMode } from '../engine/src/filter.js';
+import { buildRotation } from './rotation.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const engineRoot = resolve(__dirname, '../engine');
@@ -56,13 +58,44 @@ const SHORT_CAT = {
   'フットワーク/アジリティ/ピボット': 'フットワーク',
 };
 const BLOCK_LABEL = { WU: 'ウォームアップ', 技術: '技術', 対人: '対人', ゲーム: 'ゲーム形式', CD: 'ダウン' };
-/** その日の開始時刻（実スケジュール: 平日16:00開始、土は09:00開始）。 */
+/** その日の開始時刻（実スケジュール: 平日16:05開始、土は09:00開始）。 */
 const START_CLOCK = { 土: 9 * 60, 日: 9 * 60 };
-const DEFAULT_START_MIN = 16 * 60;
+const DEFAULT_START_MIN = 16 * 60 + 5; // 16:05（準備時間5分込み・窓95分=16:05〜17:40）
 
 const shortCat = (c) => SHORT_CAT[c] || c;
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+const timeToMin2 = (hm) => { const [h, m] = String(hm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 const fullDayLabel = (d) => `${d}曜`;
+
+/**
+ * 組違い用 self-fill プールを作る。
+ * その日の主眼カテゴリに同主眼で自走可能なドリルを catalog から affinity 順で返す。
+ * selfFillPool は共通メニュー本体には追加しない（rotation.mjs の補充用候補のみ）。
+ *
+ * @param {Array} drills 正規化済みドリル全件
+ * @param {string|null} dominantCat その日の主要カテゴリ（null なら全自走が対象）
+ * @param {string[]} usedNames 既に共通メニューで使われているドリル名（重複排除）
+ * @returns {Array<{name:string,minutes:number,category:string,mode:'self',video:string|null,alternatives:string[]}>}
+ */
+function buildSelfFillPool(drills, dominantCat, usedNames) {
+  const usedSet = new Set(usedNames);
+  return drills
+    .filter((d) => coachingMode(d) === 'self' && !usedSet.has(d.name))
+    .map((d) => {
+      // 同カテゴリ優先（affinity スコア: 同カテゴリ=2、それ以外=0）
+      const score = d.category === dominantCat ? 2 : 0;
+      return { score, d };
+    })
+    .sort((a, b) => b.score - a.score || a.d.id.localeCompare(b.d.id))
+    .map(({ d }) => ({
+      name: d.name,
+      minutes: Math.max(d.duration_min || 10, 10),
+      category: d.category,
+      mode: 'self',
+      video: d.video_url || null,
+      alternatives: [],
+    }));
+}
 
 /**
  * 男女共通の練習メニュー（1本）を生成する。コーチ1人が男女を同時に見るので、日々の中身は
@@ -174,6 +207,50 @@ function buildSession({ annual, drills, config, teamInput }) {
         items,
       });
     }
+
+    // WU集約: CND-001（ダイナミックストレッチ）が主見出し、
+    // 「可動域」タグの1分micro動作（CND-002〜006相当）をその components に畳む。
+    // presentation のみ（engine データ・ブロック実尺は不変）。
+    for (const bl of blocks) {
+      if (!bl.isBundle || bl.block !== 'WU') continue;
+      const dynIdx = bl.items.findIndex((it) => it.name === 'ダイナミックストレッチ');
+      if (dynIdx === -1) continue;
+      // 同WUブロック内の、主見出し以外の「可動域」micro動作を抽出
+      const microNames = [];
+      const kept = [];
+      for (let i = 0; i < bl.items.length; i++) {
+        const it = bl.items[i];
+        if (i === dynIdx) { kept.push(it); continue; }
+        // duration_min<=2 かつ philosophy_tags に「可動域」が含まれる drill が micro 対象
+        const rawDrill = drills.find((d) => d.name === it.name);
+        const isMicro = rawDrill
+          && (rawDrill.duration_max || rawDrill.duration_min || 99) <= 2
+          && Array.isArray(rawDrill.philosophy_tags)
+          && rawDrill.philosophy_tags.includes('可動域');
+        if (isMicro) {
+          microNames.push(it.name);
+          // micro の実尺を主見出しに合算（合計尺は変わらない）
+          bl.items[dynIdx].minutes += it.minutes;
+        } else {
+          kept.push(it);
+        }
+      }
+      if (microNames.length > 0) {
+        bl.items[dynIdx].components = microNames;
+        bl.items = kept;
+        // from/to/minutes を再算（items が変わったので）
+        let t = timeToMin2(bl.from);
+        for (const it of bl.items) { it._from = hhmm(t); t += it.minutes; }
+        bl.to = hhmm(t);
+        bl.minutes = timeToMin2(bl.to) - timeToMin2(bl.from);
+      }
+    }
+
+    // 組違い用 self-fill プール（rotation 日のみ buildDays で使用）
+    const domCat = dominantCategory(day);
+    const usedNames = blocks.flatMap((b) => b.items.map((it) => it.name));
+    const selfFillPool = buildSelfFillPool(drills, domCat, usedNames);
+
     return {
       day: day.day,
       dayLabel: fullDayLabel(day.day),
@@ -184,6 +261,7 @@ function buildSession({ annual, drills, config, teamInput }) {
       totalMinutes: cur - startMin,
       aim: practiceAim(day),
       blocks,
+      selfFillPool,
     };
   });
 
@@ -213,41 +291,11 @@ function teamGoals(teamInput) {
 }
 
 /**
- * 組違いローテを導出する（コーチ在席平日のみ）。共通メニューのコーチ付き段（要監督）を、
- * 男女でずらしてコーチが交互に見る。各コーチ付き段は「前半=先攻チームにコーチ付き／その間
- * もう片方は同じ段を自走→後半で入れ替え」。先攻は段ごとに男女交互にして公平にする。
- * 自走段は男女同時にできる（コーチ不要）。これでコーチ付きが同時刻に重ならない。
- *
- * @param {object} day buildSession の day
- * @returns {{coachRounds:Array, selfSegs:Array}|null}
- */
-function deriveCoachSplit(day) {
-  if (!day.coachPresent || day.day === '土') return null;
-  const coachRounds = [];
-  const selfSegs = [];
-  let ci = 0;
-  for (const b of day.blocks) {
-    if (b.isBundle) continue;
-    for (const it of b.items) {
-      if (it.mode === 'practice' || it.mode === 'lecture') {
-        const first = ci % 2 === 0 ? '男子' : '女子';
-        const second = first === '男子' ? '女子' : '男子';
-        coachRounds.push({ name: it.name, minutes: it.minutes, from: b.from, first, second });
-        ci += 1;
-      } else {
-        selfSegs.push({ name: it.name, minutes: it.minutes, from: b.from });
-      }
-    }
-  }
-  return { coachRounds, selfSegs };
-}
-
-/**
  * 各曜日の表示単位を作る。日々のメニューは男女共通（1本）。組違いの ON/OFF はプレゼン層で
  * 切り替える:
- *   - 火金（コーチ在席・土以外）: ON=コーチ付き段を男女でずらすローテ／OFF=男女が別時間に各自フル。
- *   - 水木（コーチ不在）: ON/OFF とも男女同時に各自で自走（independent）。
- *   - 土（コーチ在席・最長）: ON=男女合同（together）／OFF=各自独立。
+ *   - 火金（コーチ在席・土以外）: ON=左右2列ローテ（pd.rotation.rows）／OFF=男女が別時間に各自フル。
+ *   - 水木（コーチ不在）: 2列だが左右同一・全自走（independent）。
+ *   - 土（コーチ在席・最長）: 1列・男女合同（together）。
  *
  * @param {object} session buildSession の結果
  * @returns {Array<object>}
@@ -259,6 +307,13 @@ function buildDays(session) {
     if (isSaturday && day.coachPresent) kind = 'together';
     else if (day.coachPresent) kind = 'rotation';
     else kind = 'independent';
+
+    // rotation 日に pd.rotation を付与（buildRotation は純関数）
+    let rotation = null;
+    if (kind === 'rotation') {
+      rotation = buildRotation(day, day.selfFillPool || []);
+    }
+
     return {
       day: day.day,
       dayLabel: day.dayLabel,
@@ -271,7 +326,7 @@ function buildDays(session) {
       aim: day.aim,
       blocks: day.blocks, // 男女共通メニュー
       sharedKind: kind,
-      coachSplit: kind === 'rotation' ? deriveCoachSplit(day) : null,
+      rotation, // kind='rotation' の日のみ非 null
     };
   });
 }
@@ -331,8 +386,8 @@ export async function buildPlanData() {
     year,
     assumptions: [
       '練習メニューは男女共通（コーチ1人が両方を見るため）。組違いはコーチ付き段を男女でずらして回す。',
-      '体育館のコート割り（男女どちらが左/右半面・どの曜日に合同/分離）は原典に明記がなく暫定。',
-      '大会の山は男女で約1ヶ月ずれる（女子先行）ため年リボンの「いま」が1ヶ月ずれる。先行幅はコーチ確認で確定。',
+      '体育館のコート割り（男女どちらが左/右半面・どの曜日に合同/分離）は年間予定に書かれていないため暫定。',
+      '目標の大会の時期は男女で約1ヶ月ずれる（女子が先）ため「いま」の位置も1ヶ月ずれる。ずれ幅はコーチ確認で確定。',
       '選手の指標は合成値（実選手データは個人情報のため未接続）。',
     ],
     warnings: session.warnings,

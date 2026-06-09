@@ -9,7 +9,7 @@
 
 import {
   esc, modeTag, altLine, videoLink, plainText, BLOCK_TINT,
-  modeToggle, interactionPanel, dayHeader,
+  modeToggle, genderTwoColumn, dayHeader,
   goalsSection, monthSection, yearSection, assumptionsNote,
 } from './render-shared.mjs';
 
@@ -51,12 +51,50 @@ function detailBlock(b) {
   </section>`;
 }
 
-function dayPanel(data, pd, idx) {
-  return `<article class="day" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
-    ${dayHeader(pd, data.month)}
-    ${interactionPanel(pd)}
+/**
+ * 2列の段リスト（rotation 日の日ビジュアル本体）。
+ * 各 rotation 行を左右2チップ（左=男子・右=女子、coach 側にコーチタグ）。
+ * shared 行は全幅チップ。
+ */
+function rotationBoardBody(pd) {
+  const renderCell = (row, side) => {
+    if (side === 'shared') {
+      const compHtml = row.drill?.components?.length
+        ? `<span class="brot-comp">${row.drill.components.map(esc).join(' / ')}</span>`
+        : '';
+      const drillName = row.drill?.name || row.label || '';
+      const blockLabel = row.drill?.name && row.label && row.drill.name !== row.label ? row.label : '';
+      return `<div class="brot-shared">
+        ${blockLabel ? `<span class="brot-block">${esc(blockLabel)}</span>` : ''}
+        <span class="brn">${esc(drillName)}</span>
+        <span class="brm">${row.minutes}分</span>
+        ${compHtml}
+      </div>`;
+    }
+    const cell = row[side];
+    return `<div class="brot-cell${cell.mode === 'practice' ? ' brc-coach' : ' brc-self'}">
+      ${modeTag(cell.mode)}
+      <span class="brn">${esc(cell.name)}${videoLink(cell.video)}</span>
+      <span class="brm">${row.minutes}分</span>
+      ${altLine(cell.alternatives)}
+    </div>`;
+  };
+
+  const onContent = genderTwoColumn(pd, renderCell);
+  const offNote = `<div data-interact="off" hidden>
+    <div class="inote"><b>組違いOFF</b>：男女が別時間に同じ内容を各自フル実施。</div>
     ${ratioBar(pd)}
     <div class="dlist">${pd.blocks.map(detailBlock).join('')}</div>
+  </div>`;
+
+  return `<div data-interact="on">${onContent}</div>${offNote}`;
+}
+
+function dayPanel(data, pd, idx) {
+  const isRotation = pd.sharedKind === 'rotation' && pd.rotation;
+  return `<article class="day" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
+    ${dayHeader(pd, data.month)}
+    ${isRotation ? rotationBoardBody(pd) : (ratioBar(pd) + `<div class="dlist">${pd.blocks.map(detailBlock).join('')}</div>`)}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
   </article>`;
 }
@@ -126,6 +164,17 @@ const PATTERN_CSS = `
 
 @media (max-width:680px){.board{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:460px){.board{grid-template-columns:1fr}.ratiobar{height:auto;flex-direction:column}.rseg{flex:none}}
+
+/* rotation 2列ボード */
+.brot-shared{display:flex;align-items:center;flex-wrap:wrap;gap:9px;background:var(--bg);box-shadow:var(--inset);border-radius:11px;padding:8px 12px;font-size:13px;color:var(--mute)}
+.brot-block{font-size:10px;color:var(--mute);letter-spacing:.04em;flex:0 0 auto}
+.brot-cell{border-radius:12px;padding:9px 12px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
+.brot-cell.brc-coach{background:var(--surface);box-shadow:var(--shadow-soft)}
+.brot-cell.brc-self{background:var(--bg);box-shadow:var(--inset)}
+.brn{flex:1;font-size:14px;font-weight:600;line-height:1.35;min-width:0}
+.brm{flex:0 0 auto;font-size:12px;color:var(--mute);padding-top:2px}
+.brot-cell .alt{flex-basis:100%}
+.brot-comp{flex-basis:100%;font-size:11px;color:var(--mute);opacity:.8;line-height:1.5}
 `;
 
 export const meta = { id: 'board', name: '週間ボード', tagline: '週を5列ボードで俯瞰・男女共通メニュー' };
