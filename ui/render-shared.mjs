@@ -15,7 +15,7 @@ export const TOKENS = `
   --orange:#ef7a32; --orange-ink:#fffaf2; --orange-soft:#ffd7b9; --orange-deep:#c4521b;
   --terra:#b8623b; --gold:#cf9a3e; --sage:#7c8a5a;
   --boys:#ef7a32; --girls:#b8623b;
-  --line:rgba(168,110,64,.13); --line-2:rgba(168,110,64,.22);
+  --line:rgba(168,110,64,.13); --line-2:rgba(168,110,64,.22); --hair:rgba(42,32,26,.09);
   --shadow:14px 18px 46px rgba(168,110,64,.15), -6px -8px 18px rgba(255,255,255,.9);
   --shadow-soft:0 8px 20px rgba(168,110,64,.09);
   --inset:inset 3px 3px 8px rgba(168,110,64,.10), inset -3px -3px 8px rgba(255,255,255,.85);
@@ -293,7 +293,7 @@ export function goalsSection(data) {
 
 /**
  * 年の流れ（男子行・女子行の2段で表示）。
- * 男女で大会の時期が約1ヶ月ずれる（女子先行）のが2行のズレで分かる。
+ * 今は男女とも同じ暦月に「いま」が立つ（大会の男女差はコーチ確認で確定後に反映）。
  */
 export function yearSection(data) {
   const y = data.year;
@@ -322,7 +322,7 @@ export function yearSection(data) {
   const peakLabels = y.peaks.map((p) => `${esc(p.label)}（${p.months.join('・')}月）`).join(' ／ ');
 
   return `<h3 class="lvh">1年の流れ（夏に新チーム発足 → 冬の新人大会 → 翌夏の中体連）</h3>
-    <p class="note">男子・女子それぞれの「今月の位置」と「目標の大会の時期」を2行で並べています。女子は男子より約1ヶ月先行するので、2行のズレが組み方の参考になります。</p>
+    <p class="note">男子・女子それぞれの「今月の位置」と「目標の大会の時期」を2行で並べています。今は男女とも同じ流れです（大会の男女差はコーチ確認で確定）。</p>
     <div class="arcrows">
       <div class="arcrow-label"><span class="gchip boys">男子</span></div>
       <div class="arcwrap">${boysRow}</div>
@@ -331,8 +331,7 @@ export function yearSection(data) {
     </div>
     <div class="arclegend">
       <span class="lk"><span class="sw" style="background:var(--orange-soft)"></span>目標の大会：${peakLabels}</span>
-      <span class="lk"><span class="sw" style="background:var(--boys)"></span>男子いま（${y.currentBoys}月）</span>
-      <span class="lk"><span class="sw" style="background:var(--girls)"></span>女子いま（${y.currentGirls}月）</span>
+      <span class="lk"><span class="sw" style="background:var(--boys)"></span>いま（${y.currentBoys}月・男女共通）</span>
     </div>`;
 }
 
@@ -353,7 +352,7 @@ export function monthSection(data) {
       ${peak}
       ${kpi}
     </div>
-    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定に忠実。練習メニューは男女共通で、目標の大会の時期だけ男女でずれます（女子先行）。</p>`;
+    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定どおり。練習メニューは男女共通です。</p>`;
 }
 
 /** ピークkeyから表示名を引く。 */

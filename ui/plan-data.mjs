@@ -10,7 +10,7 @@
  *   2. 組違い＝コーチ付き段を男女でずらすローテ。同時刻にコーチ付きは必ず片方だけ。
  *      ON＝体育館共有でこのローテ、OFF＝男女が別時間に同じメニューを各自フル（コーチが全段見る）。
  *   3. 年/月は原典 encode（annual-plan.json）から決定論的に解決（夏は山でない／山は冬の新人大会と
- *      翌夏の中体連の2つ）。大会の山は男女で時期がずれる（女子が約1ヶ月先行）ので年リボンに併記。
+ *      翌夏の中体連の2つ）。今は男女とも同じ流れ（大会の男女差は未確定・コーチ確認で確定後に反映）。
  *
  * 表示規約:
  *   - 時刻は `HH:MM`（平日16:00開始・土09:00開始）。各段は持続尺（エンジンが5分丸めで保証）。
@@ -359,8 +359,8 @@ export async function buildPlanData() {
   const days = buildDays(session);
   const currentMonth = config.current_month;
 
-  // 年リボン: 新チーム12ヶ月アーク（8→7月）。フェーズは共通、大会の山に向かう「今」が男女で
-  // 約1ヶ月ずれる（女子先行）。1本のリボンに男子今・女子今の2マーカー。
+  // 年リボン: 新チーム12ヶ月アーク（8→7月）。フェーズは共通（男子基準の1本arc）。
+  // 男女の「いま」は両方とも暦月に固定する（男女は同じ時間に生きているので現在位置はずれない）。
   const arc = yearArc(annual, '男子', currentMonth).map((e) => ({
     month: e.month,
     phase: e.phase,
@@ -370,8 +370,10 @@ export async function buildPlanData() {
   }));
   const year = {
     arc,
-    currentBoys: resolveMonth(annual, '男子', currentMonth).arcMonth,
-    currentGirls: resolveMonth(annual, '女子', currentMonth).arcMonth,
+    // 年の「いま」は男女とも同じ暦月。女子先行offset（_gender_offset）は arc 構造の遠因であり、
+    // 「いま」の位置には効かせない（男女は同じ時間に生きているので現在位置はずれない）。
+    currentBoys: currentMonth,
+    currentGirls: currentMonth,
     peaks: annualPeaks(annual),
   };
 
@@ -387,7 +389,7 @@ export async function buildPlanData() {
     assumptions: [
       '練習メニューは男女共通（コーチ1人が両方を見るため）。組違いはコーチ付き段を男女でずらして回す。',
       '体育館のコート割り（男女どちらが左/右半面・どの曜日に合同/分離）は年間予定に書かれていないため暫定。',
-      '目標の大会の時期は男女で約1ヶ月ずれる（女子が先）ため「いま」の位置も1ヶ月ずれる。ずれ幅はコーチ確認で確定。',
+      '今は男女とも同じ年間の流れにいる。大会の時期に男女差があるかは未確定（コーチ確認）。確認が取れるまで男女差は表示に出さない。',
       '選手の指標は合成値（実選手データは個人情報のため未接続）。',
     ],
     warnings: session.warnings,
