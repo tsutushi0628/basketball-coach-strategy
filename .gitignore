@@ -12,3 +12,10 @@ node_modules/
 e2e/screenshots/
 # 生成HTML（再生成= node ui/build.mjs）
 ui/*.html
+# QA検証スクリプト・一時生成物（Playwright/スクショ用一時HTML・再生成可）
+e2e/*.mjs
+ui/_shot/
+ui/e2e/
+# ルート直下のQA足場（製品依存は engine/package.json。ルートは Playwright 検証用のローカル足場）
+/package.json
+/package-lock.json
