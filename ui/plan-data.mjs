@@ -27,13 +27,14 @@ import { planWeek } from '../engine/src/planWeek.js';
 import { loadAnnualPlan, resolveMonth, yearArc, peaks as annualPeaks } from '../engine/src/annualPlan.js';
 import { coachingMode } from '../engine/src/filter.js';
 import { buildRotation } from './rotation.mjs';
+import { buildDrillRegistry } from './drill-detail.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const engineRoot = resolve(__dirname, '../engine');
 const repoRoot = resolve(__dirname, '..');
 
 // ── 表記辞書（カテゴリ→狙い／短縮名）──────────────────────────────────────────
-const AIM_MAP = {
+export const AIM_MAP = {
   'フィニッシュ(ゴール下/レイアップ)': 'リム付近でのフィニッシュ力を上げよう',
   シュート: 'シュートタッチと集中（フリースロー含む）を高めよう',
   'ハンドリング/ドリブル': 'プレッシャー下でもボールを失わない手を作ろう',
@@ -45,7 +46,7 @@ const AIM_MAP = {
   'コンディショニング/ウォームアップ': '怪我をしない身体の使い方を整えよう',
   'フットワーク/アジリティ/ピボット': '止まる・切り返すの足元を鍛えよう',
 };
-const SHORT_CAT = {
+export const SHORT_CAT = {
   'フィニッシュ(ゴール下/レイアップ)': 'ゴール下フィニッシュ',
   シュート: 'シュート',
   'ハンドリング/ドリブル': 'ボールハンドリング',
@@ -377,6 +378,11 @@ export async function buildPlanData() {
     peaks: annualPeaks(annual),
   };
 
+  // ── ドリル詳細レジストリ（素カタログ直読み・notesクレンジング済み）──────────────
+  // normalize.js 経由では balls 等が落ちるため、drill-detail.mjs が素 drills.json を直読みして構築。
+  // 名前→詳細オブジェクトの Map。タイムラインのドリル名が Map に無い場合は throw。
+  const drillIndex = buildDrillRegistry();
+
   return {
     school: '南中野中',
     month: currentMonth,
@@ -386,6 +392,7 @@ export async function buildPlanData() {
     girlsGoals: teamGoals(girlsInput),
     days,
     year,
+    drillIndex,
     assumptions: [
       '練習メニューは男女共通（コーチ1人が両方を見るため）。組違いはコーチ付き段を男女でずらして回す。',
       '体育館のコート割り（男女どちらが左/右半面・どの曜日に合同/分離）は年間予定に書かれていないため暫定。',

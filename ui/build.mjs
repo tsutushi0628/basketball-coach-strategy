@@ -78,15 +78,16 @@ async function main() {
   const phase = data.session.month.phase;
   const indexBody = `
     <h1 style="font-size:clamp(22px,4vw,30px);font-weight:700;letter-spacing:-.01em;margin:2px 0 6px">${esc(data.school)}　練習計画</h1>
-    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.month}月・${esc(phase)}　／　練習メニューは男女共通（コーチ1人が両方を見る）。組違い＝コーチ付き段を男女でずらして回す。見せ方を3パターン用意しました。</p>
+    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.month}月・${esc(phase)}　／　練習メニューは男女共通（コーチ1人が両方を見る）。組違い＝コーチ付き段を男女でずらして回す。</p>
     <div class="pgrid">${cards}</div>`;
+  // T5: pcard は surface+line-2（shadow廃止）・17px（H2段）
   const indexCss = `
     .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}
-    .pcard{display:block;background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:22px 22px;text-decoration:none;color:var(--ink);transition:transform .16s ease}
+    .pcard{display:block;background:var(--surface);border-radius:14px;border:1px solid var(--line-2);padding:22px;text-decoration:none;color:var(--ink);transition:transform .16s ease}
     .pcard:hover{transform:translateY(-3px)}
-    .pn{font-size:18px;font-weight:700;margin-bottom:6px}
-    .pt{font-size:13px;color:var(--mute);line-height:1.6;min-height:42px}
-    .pgo{font-size:13px;color:var(--orange-deep);font-weight:700;margin-top:10px}`;
+    .pn{font-size:17px;font-weight:700;margin-bottom:6px}
+    .pt{font-size:12px;color:var(--mute);line-height:1.6;min-height:42px}
+    .pgo{font-size:12px;color:var(--orange-deep);font-weight:700;margin-top:10px}`;
   writeFileSync(
     resolve(__dirname, 'index.html'),
     page({ title: `${data.school} 練習計画（男子・女子）`, css: indexCss, body: indexBody, script: '' }),

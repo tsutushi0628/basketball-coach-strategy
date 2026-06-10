@@ -9,19 +9,20 @@
  * gradient見出し・全幅centered hero・定型AIナビ）は基盤から排除している。
  */
 
-/** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。 */
+/** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。
+ * T5: --shadow/--shadow-soft/--inset を削除し、border+面の濃淡2値で区切りを表現する。
+ * 残すのは: 強い区切り=--line-2（セクション外周）、弱い区切り=--hair（カード・行間）。
+ */
 export const TOKENS = `
   --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#7a6a5c;
   --orange:#ef7a32; --orange-ink:#fffaf2; --orange-soft:#ffd7b9; --orange-deep:#c4521b;
   --terra:#b8623b; --gold:#cf9a3e; --sage:#7c8a5a;
   --boys:#ef7a32; --girls:#b8623b;
   --line:rgba(168,110,64,.13); --line-2:rgba(168,110,64,.22); --hair:rgba(42,32,26,.09);
-  --shadow:14px 18px 46px rgba(168,110,64,.15), -6px -8px 18px rgba(255,255,255,.9);
-  --shadow-soft:0 8px 20px rgba(168,110,64,.09);
-  --inset:inset 3px 3px 8px rgba(168,110,64,.10), inset -3px -3px 8px rgba(255,255,255,.85);
+  --scrim:rgba(42,32,26,.32);
 `;
 
-/** 共通ベースCSS。 */
+/** 共通ベースCSS。T5: shadow廃止→border+面の濃淡2値で区切りを表現。タイポ6段統一。 */
 export const BASE_CSS = `
 :root{${TOKENS}}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -32,55 +33,66 @@ a{color:var(--orange-deep)}
 
 /* レベル切替＆配布ツールバー */
 .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
-.btn{appearance:none;border:none;cursor:pointer;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-soft);border-radius:999px;padding:10px 18px;font:inherit;font-size:13px;letter-spacing:.02em;white-space:nowrap;transition:transform .16s ease,color .16s ease}
+/* T5: btn は surface+hair（shadow廃止）・14px（本文段） */
+.btn{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--ink);border-radius:999px;padding:10px 18px;font:inherit;font-size:14px;letter-spacing:.02em;white-space:nowrap;transition:transform .16s ease,color .16s ease}
 .btn:hover{transform:translateY(-2px);color:var(--orange)}
 .btn:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.btn-primary{background:var(--orange);color:var(--orange-ink)}
+.btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .btn-primary:hover{color:var(--orange-ink)}
 .levels{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
-.lvtab{appearance:none;border:none;cursor:pointer;background:var(--surface);color:var(--mute);box-shadow:var(--shadow-soft);border-radius:14px;padding:8px 16px;font:inherit;font-size:14px;font-weight:600;transition:transform .16s ease}
+/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。 */
+.lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 16px;font:inherit;font-size:17px;font-weight:600;transition:transform .16s ease}
 .lvtab:hover{transform:translateY(-2px)}
-.lvtab.on{background:var(--orange);color:var(--orange-ink);box-shadow:var(--shadow)}
+.lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
 .daytabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
-.daytab{appearance:none;border:none;cursor:pointer;background:var(--surface);color:var(--mute);box-shadow:var(--shadow-soft);border-radius:16px;padding:8px 14px;font:inherit;font-size:15px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:52px;transition:transform .16s ease}
+/* T5: daytab は surface+hair・15px（H3段相当） */
+.daytab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:999px;padding:8px 14px;font:inherit;font-size:15px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:52px;transition:transform .16s ease}
+/* T5: small は 10px（ラベル段） */
 .daytab small{font-weight:400;font-size:10px;opacity:.82}
 .daytab:hover{transform:translateY(-2px)}
-.daytab.on{background:var(--orange);color:var(--orange-ink);box-shadow:var(--shadow)}
+.daytab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 
-/* 組違いON/OFFトグル */
-.modetoggle{display:inline-flex;gap:6px;background:var(--bg);box-shadow:var(--inset);border-radius:999px;padding:4px}
-.modetoggle .mt{appearance:none;border:none;cursor:pointer;background:transparent;color:var(--mute);border-radius:999px;padding:7px 15px;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;transition:color .16s ease}
-.modetoggle .mt.on{background:var(--surface);color:var(--orange-deep);box-shadow:var(--shadow-soft)}
+/* T5: modetoggle は bg+hair（inset廃止） */
+.modetoggle{display:inline-flex;gap:6px;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:4px}
+.modetoggle .mt{appearance:none;border:none;cursor:pointer;background:transparent;color:var(--mute);border-radius:999px;padding:7px 15px;font:inherit;font-size:14px;font-weight:600;white-space:nowrap;transition:color .16s ease}
+/* T5: mt.on は surface+hair */
+.modetoggle .mt.on{background:var(--surface);color:var(--orange-deep);border:1px solid var(--hair)}
 .modetoggle .mt:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 
-/* 男女チップ（見出し横の小さな実体ブロック・色帯ではない） */
+/* 男女チップ */
 .gchip{display:inline-flex;align-items:center;gap:6px;font-weight:700}
 .gchip::before{content:"";width:12px;height:12px;border-radius:4px;flex:0 0 auto}
 .gchip.boys::before{background:var(--boys)}
 .gchip.girls::before{background:var(--girls)}
 
-/* 日ヘッダ */
-.dayhead{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:16px 20px;margin-bottom:14px}
-.dayhead .dh-t{font-size:clamp(17px,3vw,21px);font-weight:700;letter-spacing:-.01em}
-.dayhead .dh-court{font-size:12px;color:var(--mute);font-weight:600;margin-left:10px;background:var(--bg);box-shadow:var(--inset);border-radius:999px;padding:3px 11px;vertical-align:middle}
-.dayhead .dh-aim{margin-top:11px;font-size:15px;font-weight:700;line-height:1.5;background:var(--bg);box-shadow:var(--inset);border-radius:14px;padding:11px 15px}
-.dayhead .dh-aiml{display:block;font-size:11px;letter-spacing:.08em;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
-.inote{font-size:13px;line-height:1.6}
+/* T5: 日ヘッダ は surface+line-2（shadow廃止）。17px（H2段） */
+.dayhead{background:var(--surface);border-radius:14px;border:1px solid var(--line-2);padding:16px 20px;margin-bottom:14px}
+.dayhead .dh-t{font-size:17px;font-weight:700;letter-spacing:-.01em}
+/* T5: dh-court は bg+hair・12px（補助段） */
+.dayhead .dh-court{font-size:12px;color:var(--mute);font-weight:600;margin-left:10px;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:3px 11px;vertical-align:middle}
+/* T5: dh-aim は bg+hair・14px（本文段） */
+.dayhead .dh-aim{margin-top:11px;font-size:14px;font-weight:600;line-height:1.5;background:var(--bg);border:1px solid var(--hair);border-radius:10px;padding:11px 15px}
+/* T5: dh-aiml は 10px/700（ラベル段） */
+.dayhead .dh-aiml{display:block;font-size:10px;letter-spacing:.06em;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
+.inote{font-size:14px;line-height:1.6}
 .inote b{color:var(--orange-deep);font-weight:700}
 
-/* 2列グリッド（組違い2列表示）*/
+/* 2列グリッド（board/handout用・timeline は中央スパイン版を使用） */
 .twocol{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
 .twocol-header{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
 .tcrow{display:contents}
-.tccell{background:var(--bg);border-radius:12px;box-shadow:var(--shadow-soft);padding:9px 12px;font-size:13px}
-.tccell.tc-coach{background:var(--surface);box-shadow:var(--shadow-soft)}
-.tccell.tc-self{box-shadow:var(--inset)}
-.tc-shared{grid-column:1/-1;background:var(--bg);border-radius:11px;box-shadow:var(--inset);padding:8px 13px;font-size:13px;color:var(--mute)}
-.tc-from{font-size:11px;color:var(--orange-deep);font-weight:700;margin-bottom:3px}
+/* T5: tccell は border（shadow廃止） */
+.tccell{background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:9px 12px;font-size:14px}
+.tccell.tc-coach{background:var(--surface);border:1px solid var(--line-2)}
+.tccell.tc-self{background:var(--bg);border:1px solid var(--hair)}
+.tc-shared{grid-column:1/-1;background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:8px 13px;font-size:14px;color:var(--mute)}
+/* T5: tc-from は 10px/700（ラベル段） */
+.tc-from{font-size:10px;color:var(--orange-deep);font-weight:700;margin-bottom:3px}
 .tc-name{font-size:14px;font-weight:600;line-height:1.4}
+/* T5: tc-half は 10px/700（ラベル段） */
 .tc-half{font-size:10px;letter-spacing:.06em;color:var(--mute);margin-bottom:3px}
-.tc-comp{display:block;font-size:11px;color:var(--mute);margin-top:3px;line-height:1.5}
+.tc-comp{display:block;font-size:12px;color:var(--mute);margin-top:3px;line-height:1.5}
 @media (max-width:580px){
   .twocol,.twocol-header{grid-template-columns:1fr}
   .tc-shared{grid-column:1}
@@ -91,42 +103,61 @@ a{color:var(--orange-deep)}
 }
 
 /* 目標（共通の今月/今週/定性 ＋ 男女別KPI） */
-.goals{background:var(--surface);border-radius:22px;box-shadow:var(--shadow-soft);padding:18px 20px}
-.goals h3{font-size:13px;margin-bottom:12px;color:var(--orange-deep);letter-spacing:.06em;font-weight:700}
+/* T5: goals は surface+hair（shadow廃止） */
+.goals{background:var(--surface);border-radius:14px;border:1px solid var(--hair);padding:18px 20px}
+/* T5: goals h3 は 10px/700（ラベル段） */
+.goals h3{font-size:10px;margin-bottom:12px;color:var(--orange-deep);letter-spacing:.06em;font-weight:700}
 .gline{display:flex;gap:13px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
 .gline:last-child{border-bottom:none}
-.gline .lab{flex:0 0 56px;font-size:11px;letter-spacing:.06em;color:var(--orange-deep);font-weight:700}
+/* T5: .lab は 10px/700（ラベル段） */
+.gline .lab{flex:0 0 56px;font-size:10px;letter-spacing:.06em;color:var(--orange-deep);font-weight:700}
+/* T5: .txt は 14px（本文段） */
 .gline .txt{font-size:14px;line-height:1.55}
 .kgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
-.kteam{background:var(--bg);border-radius:16px;padding:13px 15px;box-shadow:var(--inset)}
-.kteam .kth{font-size:13px;margin-bottom:9px}
+/* T5: kteam は bg+hair（inset廃止） */
+.kteam{background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:13px 15px}
+/* T5: kth は 17px（H2段） */
+.kteam .kth{font-size:17px;font-weight:700;margin-bottom:9px}
 .kpis{display:grid;grid-template-columns:1fr;gap:8px}
+/* T5: kpi.name は 12px（補助段） */
 .kpi .name{font-size:12px;color:var(--mute);margin-bottom:5px}
+/* T5: kpi.val は 15px/700（H3段） */
 .kpi .val{font-size:15px;font-weight:700}
 .kpi .val .arrow{color:var(--mute);font-weight:400;font-size:12px;margin:0 4px}
 .kpi .val .tgt{color:var(--orange-deep)}
 .kpi .bar{height:6px;border-radius:999px;background:var(--orange-soft);margin-top:6px;overflow:hidden}
 .kpi .bar>span{display:block;height:100%;border-radius:999px;background:var(--orange)}
 
-/* タグ（自走/コーチ付き/レクチャ） */
-.tag{flex:0 0 auto;font-size:11px;border-radius:999px;padding:3px 10px;white-space:nowrap;font-weight:600}
-.tag-coach{background:var(--orange);color:var(--orange-ink)}
-.tag-self{background:var(--bg);color:var(--mute);box-shadow:var(--inset)}
-.tag-lec{background:var(--orange-soft);color:var(--orange-deep)}
-.alt{color:var(--mute);font-size:13px;margin-top:3px}
+/* §3.3: タグは文字ラベルのみ（ピル廃止・自走は空文字で非表示）。10px/700（ラベル段） */
+.tag{flex:0 0 auto;font-size:10px;font-weight:700;white-space:nowrap;letter-spacing:.04em}
+.tag-coach{color:var(--orange-deep)}
+.tag-lec{color:var(--terra)}
+/* §3.3: mode-mark は dot + テキストの横並び。dot は 6px 丸●（コーチ付き=orange） */
+.mode-mark{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto}
+.mode-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.coach-dot{background:var(--orange)}
+.alt{color:var(--mute);font-size:12px;margin-top:3px}
 .alt b{color:var(--orange-deep);font-weight:700;font-style:normal}
-.vid{display:inline-flex;align-items:center;gap:3px;color:var(--orange-deep);text-decoration:none;font-size:12px;background:var(--bg);padding:2px 9px;border-radius:999px;box-shadow:var(--inset)}
+/* drill-trig: ドリル名タップ要素（ハッシュ駆動詳細を開く）。インライン・border なし */
+.drill-trig{background:none;border:none;padding:0;cursor:pointer;font:inherit;color:var(--ink);text-decoration:none;text-align:left}
+.drill-trig:hover{color:var(--orange-deep);text-decoration:underline}
+/* T5: vid は bg+hair（inset廃止）・12px */
+.vid{display:inline-flex;align-items:center;gap:3px;color:var(--orange-deep);text-decoration:none;font-size:12px;background:var(--bg);padding:2px 9px;border-radius:999px;border:1px solid var(--hair)}
 .vid:hover{text-decoration:underline}
 
 /* 年の流れ（男子行・女子行の2段） */
 .arcrows{display:flex;flex-direction:column;gap:10px}
 .arcrow-label{font-size:12px;font-weight:700;margin-bottom:-4px}
 .arcwrap{display:flex;gap:5px;align-items:stretch;flex-wrap:nowrap;overflow-x:auto}
-.arccell{flex:1 1 0;min-width:58px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow-soft);padding:9px 9px;display:flex;flex-direction:column;gap:4px}
-.arccell.peak2{background:var(--orange-soft)}
-.arccell.peak1{background:var(--bg);box-shadow:var(--inset)}
+/* T5: arccell は surface+hair（shadow廃止）・10px */
+.arccell{flex:1 1 0;min-width:58px;background:var(--surface);border-radius:10px;border:1px solid var(--hair);padding:9px;display:flex;flex-direction:column;gap:4px}
+.arccell.peak2{background:var(--orange-soft);border-color:var(--orange-soft)}
+/* T5: peak1 は bg+hair（inset廃止） */
+.arccell.peak1{background:var(--bg);border:1px solid var(--hair)}
 .arccell.arccell-now{outline:2px solid var(--orange);outline-offset:1px}
-.arccell .am{font-size:13px;font-weight:700}
+/* T5: arccell .am は 12px（補助段） */
+.arccell .am{font-size:12px;font-weight:700}
+/* T5: arccell .ap は 10px（ラベル段） */
 .arccell .ap{font-size:10px;color:var(--mute);line-height:1.4;min-height:28px}
 .peakchip{font-size:10px;background:var(--orange-deep);color:var(--orange-ink);border-radius:999px;padding:2px 7px;font-weight:700;align-self:flex-start}
 .nowchip{font-size:10px;border-radius:999px;padding:2px 7px;font-weight:700;white-space:nowrap}
@@ -138,35 +169,46 @@ a{color:var(--orange-deep)}
 @media (max-width:680px){.arcwrap{flex-wrap:wrap}.arccell{flex-basis:30%;min-width:58px}}
 
 /* 月（原典フェーズ＋主眼＋KPI・共通） */
-.monthcard{background:var(--surface);border-radius:20px;box-shadow:var(--shadow-soft);padding:18px 20px}
+/* T5: monthcard は surface+hair（shadow廃止） */
+.monthcard{background:var(--surface);border-radius:14px;border:1px solid var(--hair);padding:18px 20px}
 .monthcard .mc-h{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
-.monthcard .mc-phase{font-size:12px;color:var(--orange-deep);font-weight:700;background:var(--bg);box-shadow:var(--inset);border-radius:999px;padding:3px 11px}
+/* T5: mc-phase は bg+hair・10px/700（ラベル段） */
+.monthcard .mc-phase{font-size:10px;color:var(--orange-deep);font-weight:700;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:3px 11px;letter-spacing:.04em}
+/* T5: mc-mon は 15px/700（H3段） */
 .monthcard .mc-mon{font-size:15px;font-weight:700}
+/* T5: mc-aim は 14px（本文段） */
 .monthcard .mc-aim{font-size:14px;line-height:1.6}
 .monthcard .mc-peak{font-size:12px;color:var(--orange-deep);font-weight:700;margin-top:10px}
 .monthcard .mc-kpi{margin-top:11px}
-.monthcard .mc-kpi .kk{font-size:11px;letter-spacing:.06em;color:var(--orange-deep);font-weight:700;margin-bottom:5px}
-.monthcard .mc-kpi .kv{font-size:13px;color:var(--mute);line-height:1.6}
+/* T5: .kk は 10px/700（ラベル段） */
+.monthcard .mc-kpi .kk{font-size:10px;letter-spacing:.06em;color:var(--orange-deep);font-weight:700;margin-bottom:5px}
+/* T5: .kv は 12px（補助段） */
+.monthcard .mc-kpi .kv{font-size:12px;color:var(--mute);line-height:1.6}
 
-.lvh{font-size:14px;color:var(--orange-deep);font-weight:700;margin:6px 2px 14px}
-.note{font-size:12px;color:var(--mute);background:var(--surface);box-shadow:var(--shadow-soft);border-radius:14px;padding:11px 15px;margin:14px 0;line-height:1.6}
+/* T5: lvh は 17px/700（H2段） */
+.lvh{font-size:17px;color:var(--orange-deep);font-weight:700;margin:6px 2px 14px}
+/* T5: note は surface+hair（shadow廃止）・12px */
+.note{font-size:12px;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 15px;margin:14px 0;line-height:1.6}
 .assume{font-size:12px;color:var(--mute);line-height:1.7;margin-top:6px}
 .assume li{margin-left:18px}
-.foot{margin-top:34px;color:var(--mute);font-size:11px;text-align:center;letter-spacing:.03em;line-height:1.7}
+/* T5: foot は 10px（ラベル段） */
+.foot{margin-top:34px;color:var(--mute);font-size:10px;text-align:center;letter-spacing:.03em;line-height:1.7}
 
 @media (max-width:680px){
   .kgrid{grid-template-columns:1fr}
   .arccell{flex-basis:30%}
 }
+/* T5: print規則 — 画面と印刷が同一構造（罫線ベース）なので border 差し替えは不要。
+ * 操作系非表示・タブ全展開・page-break の既存3点のみ維持。背景色は #fff に。 */
 @media print{
   body{background:#fff}
   .toolbar,.levels,.daytabs,.modetoggle,.foot{display:none}
   [data-print-hide]{display:none!important}
   .day[hidden],.level[hidden]{display:block!important}
   .interact[hidden]{display:none!important}
-  .dayhead,.goals,.interact,.monthcard,.arccell,.note,.kteam{box-shadow:none;border:1px solid var(--line-2)}
   .wrap{max-width:none;padding:0}
   .pageb{page-break-after:always}
+  .drill-overlay{display:none!important}
 }
 `;
 
@@ -187,20 +229,38 @@ export const esc = (s) =>
 export const VIDEO_SVG =
   '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z"/></svg>';
 
-const MODE_LABEL = { self: '自走', practice: 'コーチ付き', lecture: 'レクチャ' };
-/** 自走/コーチ付き/レクチャのタグHTML。 */
-export const modeTag = (mode) => {
-  const cls = mode === 'practice' ? 'tag tag-coach' : mode === 'lecture' ? 'tag tag-lec' : 'tag tag-self';
-  return `<span class="${cls}">${MODE_LABEL[mode] || mode}</span>`;
+/**
+ * §3.3: モードマーク（dot + 文字ラベル）。自走は空文字（多数派の自走全行にマークを置くと
+ * コーチ付きの希少性が消えるため、コーチ付き・レクチャのみ表示）。
+ * dot: 6pxの行頭●（コーチ付き=--orange）。自走は dot も非表示。
+ */
+export const modeMark = (mode) => {
+  if (mode === 'practice') return `<span class="mode-mark"><span class="mode-dot coach-dot"></span><span class="tag tag-coach">コーチ</span></span>`;
+  if (mode === 'lecture')  return `<span class="mode-mark"><span class="tag tag-lec">レクチャ</span></span>`;
+  return ''; // 自走はマーク非表示
 };
+
+/** T4互換エイリアス（既存呼び出し側が modeTag を参照しているため残す）。 */
+export const modeTag = modeMark;
 
 /** 動画リンク（あれば）。 */
 export const videoLink = (url) =>
   url ? ` <a class="vid" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${VIDEO_SVG}<span>動画</span></a>` : '';
 
-/** 「いずれか」候補行。 */
-export const altLine = (alts) =>
-  alts && alts.length ? `<div class="alt"><b>いずれか</b>　${alts.map(esc).join(' ／ ')}</div>` : '';
+/**
+ * 「いずれか」候補行。registry があれば候補名を data-drill タップ要素にする（ハッシュ駆動詳細）。
+ * @param {string[]} alts 候補名配列
+ * @param {Map} [registry] 名前→詳細（省略可）
+ */
+export const altLine = (alts, registry) => {
+  if (!alts || !alts.length) return '';
+  const items = alts.map((name) => {
+    const detail = registry && registry.get(name);
+    if (detail) return `<button type="button" class="drill-trig" data-drill="${esc(detail.id)}">${esc(name)}</button>`;
+    return esc(name);
+  }).join(' ／ ');
+  return `<div class="alt"><b>いずれか</b>　${items}</div>`;
+};
 
 /** 男女チップ。 */
 export const genderChip = (gender) =>
@@ -394,6 +454,38 @@ export function clientScript() {
     var el=document.querySelector('.day[data-day="'+(window.__curDay||'')+'"] .plain')||document.querySelector('.plain');
     navigator.clipboard.writeText(el?el.textContent:'').then(function(){c.textContent='コピーしました';setTimeout(function(){c.textContent='テキストでコピー';},1500);});
   });
+  // ── ハッシュ駆動ドリル詳細オーバーレイ（§2.2）──
+  var overlay=document.getElementById('drill-overlay');
+  function openDrill(id){
+    if(!overlay)return;
+    overlay.querySelectorAll('.drill-panel').forEach(function(p){p.hidden=p.getAttribute('data-id')!==id;});
+    overlay.hidden=false;
+    overlay.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+  }
+  function closeDrill(){
+    if(!overlay)return;
+    overlay.hidden=true;
+    overlay.setAttribute('aria-hidden','true');
+    document.body.style.overflow='';
+    if(location.hash)history.pushState('',document.title,location.pathname+location.search);
+  }
+  function syncHash(){
+    var h=location.hash.replace('#drill-','');
+    if(location.hash.indexOf('#drill-')===0&&h){openDrill(h);}
+    else if(overlay&&!overlay.hidden){closeDrill();}
+  }
+  window.addEventListener('hashchange',syncHash);
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('[data-drill]');
+    if(t){e.preventDefault();var id=t.getAttribute('data-drill');location.hash='drill-'+id;}
+  });
+  if(overlay){
+    overlay.querySelector('.drill-close')&&overlay.querySelector('.drill-close').addEventListener('click',function(){location.hash='';});
+    overlay.addEventListener('click',function(e){if(e.target===overlay||e.target.classList.contains('drill-scrim'))location.hash='';});
+  }
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&overlay&&!overlay.hidden)location.hash='';});
+  syncHash();
 })();`;
 }
 
