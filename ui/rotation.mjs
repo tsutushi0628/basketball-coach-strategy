@@ -139,49 +139,34 @@ export function buildRotation(pd, selfFillPool) {
       const coachSide = practiceRoundIdx % 2 === 0 ? '男子' : '女子';
       const otherSide = coachSide === '男子' ? '女子' : '男子';
 
-      // 前後半の分割は5分グリッドを維持（配布フォーマットの5分単位要件。例: 25分→10/15）。
-      // 5分グリッドに乗らない・半割できないブロックは沈黙で崩さず throw で検出する。
-      if (block.minutes % 5 !== 0 || block.minutes < 10) {
-        throw new Error(
-          `buildRotation: rotationブロックが5分グリッドで半割できません（${block.minutes}分）on day=${pd.day}`,
-        );
+      const practiceCell = { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives };
+      const fillCell = { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives };
+      // コーチ側=要監督ドリル、相方=自走の1行を組む。
+      const sideRow = (side, half, from, minutes) => ({
+        type: 'rotation',
+        round: practiceRoundIdx,
+        half,
+        from,
+        minutes,
+        coachSide: side,
+        boys: side === '男子' ? practiceCell : fillCell,
+        girls: side === '女子' ? practiceCell : fillCell,
+      });
+
+      // 5分グリッドで半割できるブロックだけ前後半に分けてコーチ側を入れ替える（配布フォーマットの
+      // 5分単位要件。例: 25分→10/15）。割れない・10分未満の小ブロック（端数の philosophy-floor 等）は
+      // 分割せずコーチ側のみの1行で実尺占有する（throw でプラン全体を落とさない）。
+      if (block.minutes >= 10 && block.minutes % 5 === 0) {
+        const half1 = Math.floor(block.minutes / 10) * 5;
+        const half2 = block.minutes - half1;
+        rows.push(sideRow(coachSide, '前半', minToTime(cur), half1));
+        cur += half1;
+        rows.push(sideRow(otherSide, '後半', minToTime(cur), half2));
+        cur += half2;
+      } else {
+        rows.push(sideRow(coachSide, '', minToTime(cur), block.minutes));
+        cur += block.minutes;
       }
-      const half1 = Math.floor(block.minutes / 10) * 5;
-      const half2 = block.minutes - half1;
-
-      // 前半行: coachSide=practice、相方=fill
-      rows.push({
-        type: 'rotation',
-        round: practiceRoundIdx,
-        half: '前半',
-        from: minToTime(cur),
-        minutes: half1,
-        coachSide,
-        boys: coachSide === '男子'
-          ? { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives }
-          : { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives },
-        girls: coachSide === '女子'
-          ? { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives }
-          : { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives },
-      });
-      cur += half1;
-
-      // 後半行: 左右入替
-      rows.push({
-        type: 'rotation',
-        round: practiceRoundIdx,
-        half: '後半',
-        from: minToTime(cur),
-        minutes: half2,
-        coachSide: otherSide,
-        boys: otherSide === '男子'
-          ? { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives }
-          : { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives },
-        girls: otherSide === '女子'
-          ? { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives }
-          : { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives },
-      });
-      cur += half2;
 
       practiceRoundIdx++;
     } else {
