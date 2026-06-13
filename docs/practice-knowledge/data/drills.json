@@ -6892,5 +6892,37 @@
     "notes": "練習の締めの筋膜リリース。動的ウォームアップではないのでクールダウン専用",
     "drop_reason": "",
     "source_kind": "team_original"
+  },
+  {
+    "id": "CND-029",
+    "name": "クールダウンジョグ（体育館2周）",
+    "name_en": "Cool-Down Jog (2 Gym Laps)",
+    "category": "コンディショニング/ウォームアップ",
+    "sub_skill": "軽有酸素・心拍鎮静・整理運動",
+    "metric_meaning": "翌日疲労の軽減・急停止による張りの予防（指標化候補）",
+    "court": "不問",
+    "balls": "ボール無",
+    "people": "全員",
+    "duration_min": 2,
+    "duration_max": 3,
+    "grades": "全",
+    "intensity_class": "低",
+    "load_notes": "会話できる強度の流し。全力走・跳躍なし。静的ストレッチの前に行い心拍を段階的に落とす",
+    "mastery_stage": "反復",
+    "philosophy_tags": [
+      "クールダウン",
+      "整理運動",
+      "リカバリ"
+    ],
+    "provenance": "手持ち",
+    "verified": true,
+    "needs_source": false,
+    "source_name": "",
+    "source_url": "",
+    "video_url": "",
+    "needs_helper": false,
+    "notes": "練習の締めに体育館を軽く2周ジョグして心拍をゆっくり落とす。そのまま静的ストレッチへつなぐ。クールダウン専用",
+    "drop_reason": "",
+    "source_kind": "team_original"
   }
 ]

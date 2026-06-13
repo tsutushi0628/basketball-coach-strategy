@@ -129,6 +129,22 @@ export function isCoolDownEligible(drill) {
 }
 
 /**
+ * Cool-down routine progression rank. A cooldown is not a shortest-first packing
+ * problem — it has a physiological order: light aerobic settle (jog/walk) first,
+ * static stretch second, breathing / recovery work last. Ranked by sub_skill /
+ * name markers; ties fall back to shorter-first inside the same stage.
+ *
+ * @param {Drill} drill
+ * @returns {number} 0=軽有酸素鎮静 / 1=静的ストレッチ / 2=呼吸・リカバリ等
+ */
+export function coolDownStage(drill) {
+  const text = `${drill.name} ${drill.sub_skill ?? ''}`;
+  if (/ジョグ|ウォーク|有酸素/.test(text)) return 0;
+  if (/静的|ストレッチ/.test(text)) return 1;
+  return 2;
+}
+
+/**
  * Does a drill belong to the FT-only subset? Per DESIGN.md §2, FT matching is
  * limited to `name` and `sub_skill` (NOT the broad searchText).
  * @param {Drill} drill
@@ -604,7 +620,7 @@ export function allocateDay({
   const cdPool = dayPool
     .filter((d) => d.category === WUCD_CATEGORY && isCoolDownEligible(d))
     .slice()
-    .sort((a, b) => a.duration_min - b.duration_min);
+    .sort((a, b) => coolDownStage(a) - coolDownStage(b) || a.duration_min - b.duration_min);
 
   const wuBlock = fillCondBlock({ block: 'WU', target: shape.wu, candidates: wuPool, budget, daySeenIds });
 
