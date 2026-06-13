@@ -139,8 +139,14 @@ export function buildRotation(pd, selfFillPool) {
       const coachSide = practiceRoundIdx % 2 === 0 ? '男子' : '女子';
       const otherSide = coachSide === '男子' ? '女子' : '男子';
 
-      // 前後半の分割（奇数分は前半 floor・後半 ceil）
-      const half1 = Math.floor(block.minutes / 2);
+      // 前後半の分割は5分グリッドを維持（配布フォーマットの5分単位要件。例: 25分→10/15）。
+      // 5分グリッドに乗らない・半割できないブロックは沈黙で崩さず throw で検出する。
+      if (block.minutes % 5 !== 0 || block.minutes < 10) {
+        throw new Error(
+          `buildRotation: rotationブロックが5分グリッドで半割できません（${block.minutes}分）on day=${pd.day}`,
+        );
+      }
+      const half1 = Math.floor(block.minutes / 10) * 5;
       const half2 = block.minutes - half1;
 
       // 前半行: coachSide=practice、相方=fill
@@ -217,7 +223,14 @@ export function buildRotation(pd, selfFillPool) {
 function _bundleMainItem(block) {
   // components フィールドを持つ item（WU集約済みの主見出し）を優先
   const withComponents = block.items.find((it) => it.components);
-  return withComponents || block.items[0];
+  if (withComponents) return withComponents;
+  // 集約なしの複数itemバンドル（CDのジョグ→静的ストレッチ等）: 先頭を主見出しにし、
+  // 残りを components に畳んで全itemを可視化する（代表1件だけ見せると残りが配布から消える）
+  const head = block.items[0];
+  if (block.items.length > 1) {
+    return { ...head, components: block.items.slice(1).map((it) => it.name) };
+  }
+  return head;
 }
 
 /**
