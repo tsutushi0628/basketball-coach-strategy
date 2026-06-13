@@ -73,7 +73,7 @@ function menuTimeline(pd, drillIndex) {
     .join('');
   const endRow = `<div class="tlrow tlrow-end">
       <div class="tlclock"><span class="tk">${esc(pd.end)}</span></div>
-      <div class="tlseg"><div class="tlend"><span class="tbl">ダウン／ミーティング</span><span class="tbn">今日の振り返りと、次に向けてのひとこと。</span></div></div>
+      <div class="tlseg"><div class="tlend"><span class="tbl">終了</span><span class="tbn">今日の振り返りひとことで解散。</span></div></div>
     </div>`;
   return `<div id="plan-top" class="timeline">${rows}${endRow}</div>`;
 }
@@ -115,7 +115,6 @@ function rotationTimeline(pd, drillIndex) {
           <span class="tbm">${row.minutes}分</span>
           ${compHtml}`;
       return `<div class="spine-row spine-together" style="--sh:${h}px;--t:${tint}">
-        <span class="bothmark">両チーム共通</span>
         <div class="spine-band left">
           ${bandInner}
         </div>
@@ -162,11 +161,10 @@ function rotationTimeline(pd, drillIndex) {
     return '';
   }).join('');
 
-  // 終了時刻行（pd.end を使う）
-  const endBandInner = `<span class="tbl">ダウン／ミーティング</span>
-      <span class="tbm">今日の振り返りと、次に向けてのひとこと。</span>`;
+  // 終了時刻行（pd.end を使う）。ダウン本体はエンジンのダウン枠が担うため、ここは終了マーカーのみ。
+  const endBandInner = `<span class="tbl">終了</span>
+      <span class="tbm">今日の振り返りひとことで解散。</span>`;
   const endRow = `<div class="spine-row spine-together spine-end">
-    <span class="bothmark">両チーム共通</span>
     <div class="spine-band left spine-band-end">
       ${endBandInner}
     </div>
@@ -548,20 +546,20 @@ const PATTERN_CSS = `
 .timeline::before{content:"";position:absolute;left:44px;top:6px;bottom:16px;width:1px;background:var(--hair)}
 .tlrow{position:relative;display:flex;min-height:var(--rh,auto);margin-bottom:9px}
 .tlclock{position:absolute;left:-54px;top:0;width:54px;display:flex;align-items:flex-start}
-/* T5: tk は 12px/border のみ */
-.tk{font-size:12px;font-weight:700;color:var(--ink);background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:3px 8px;font-variant-numeric:tabular-nums}
+/* T6: tk は素テキスト12px（枠線・ピル廃止。背景は中央線マスク用） */
+.tk{font-size:12px;font-weight:700;color:var(--ink);background:var(--bg);padding:3px 4px;font-variant-numeric:tabular-nums}
 .tlclock::after{content:"";position:absolute;left:41px;top:8px;width:9px;height:9px;border-radius:50%;background:var(--t,var(--orange))}
 .tlseg{flex:1;min-width:0;display:flex}
 /* T5: tlcard は surface+1px hair罫線（shadow廃止） */
 .tlcard{flex:1;background:var(--surface);border-radius:10px;border:1px solid var(--hair);padding:11px 15px;display:flex;flex-direction:column;justify-content:center}
 .tlh{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
-/* T5: tll は 10px/700/letter-spacing（ラベル段） */
-.tll{font-size:10px;font-weight:700;color:var(--t);letter-spacing:.06em}
+/* T6: tll は 12px/700（補助段・カード内アイブロウ） */
+.tll{font-size:12px;font-weight:700;color:var(--t);letter-spacing:.04em}
 /* T4/T5: tdrill は 1行基本（名前14px+分数12px右寄せ+ラベル10px）。gap で隙間 */
 .tlbody{display:flex;flex-direction:column;gap:7px}
 .tdrill{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-/* T5: tdn は 14px/600（本文段） */
-.tdn{font-size:14px;font-weight:600;line-height:1.45;min-width:0;flex:1}
+/* T6: tdn は 14px/700（カード見出し・本文と同サイズなら太さで差を付ける） */
+.tdn{font-size:14px;font-weight:700;line-height:1.45;min-width:0;flex:1}
 .tdrill .tlm{margin-left:auto;font-size:12px;color:var(--mute);flex:0 0 auto}
 .tdrill .alt{flex-basis:100%;margin-top:0}
 /* T5: tlband は bg+hair罫線（shadow廃止） */
@@ -589,10 +587,10 @@ const PATTERN_CSS = `
 }
 .wg-corner{grid-column:1;grid-row:1}
 .wg-dayhead{grid-row:1;text-align:center;padding:0 4px 10px;border-bottom:1px solid var(--hair)}
-/* T5: wd は 15px/700（H3段） */
-.wg-dayhead .wd{display:block;font-size:15px;font-weight:700;letter-spacing:-.01em}
-/* T5: wr は 10px/700（ラベル段） */
-.wg-dayhead .wr{display:block;font-size:10px;color:var(--orange-deep);font-weight:700;letter-spacing:.04em;margin-top:1px}
+/* T6: wd は 17px/700（H3段・列見出し） */
+.wg-dayhead .wd{display:block;font-size:17px;font-weight:700;letter-spacing:-.01em}
+/* T6: wr は 12px/700（補助段） */
+.wg-dayhead .wr{display:block;font-size:12px;color:var(--orange-deep);font-weight:700;letter-spacing:.04em;margin-top:1px}
 /* T5: wt は 12px（補助段） */
 .wg-dayhead .wt{display:block;font-size:12px;color:var(--mute);margin-top:3px;font-variant-numeric:tabular-nums}
 .wg-gutter{grid-column:1;grid-row:2;position:relative}
@@ -606,22 +604,22 @@ const PATTERN_CSS = `
 /* §5.1: ブレイク帯は「・・・」のみ */
 .wg-break{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:8px}
 .wg-break::before,.wg-break::after{content:"";flex:1;height:1px;background:var(--hair)}
-/* T5: wg-breakmark は 10px mute（ラベル段・ピル廃止） */
-.wg-breakmark{font-size:10px;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
+/* T6: wg-breakmark は 12px mute（補助段・ピル廃止） */
+.wg-breakmark{font-size:12px;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 /* T5: ev は bg+hair罫線（shadow廃止）。border帯禁止・背景tintのみ。 */
 .ev{position:absolute;left:4px;right:4px;background:var(--bg);border:1px solid var(--hair);border-radius:10px;padding:5px 9px;overflow:hidden;display:flex;flex-direction:column;gap:0}
 /* T5: coach は surface+line-2（区別維持） */
 .ev.coach{background:var(--surface);border:1px solid var(--line-2)}
-/* T5: evt は 10px（ラベル段・最小） */
-.ev .evt{font-size:10px;color:var(--mute);font-variant-numeric:tabular-nums;letter-spacing:.02em;line-height:1.25}
-/* T5: evl は 10px/700（ラベル段） */
-.ev .evl{font-size:10px;font-weight:700;color:var(--t);letter-spacing:.02em;line-height:1.3}
-/* T5: evn は 14px/600（本文段） */
-.ev .evn{font-size:14px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+/* T6: evt は 12px（補助段） */
+.ev .evt{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;letter-spacing:.02em;line-height:1.25}
+/* T6: evl は 12px/700（補助段・アイブロウ） */
+.ev .evl{font-size:12px;font-weight:700;color:var(--t);letter-spacing:.02em;line-height:1.3}
+/* T6: evn は 14px/700（カード見出し） */
+.ev .evn{font-size:14px;font-weight:700;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 /* T5: evm は 12px（補助段） */
 .ev .evm{font-size:12px;color:var(--mute);margin-top:auto;font-variant-numeric:tabular-nums}
 .ev.mini{flex-direction:row;align-items:center;padding:2px 9px}
-.ev.mini .evt{font-size:10px;white-space:nowrap}
+.ev.mini .evt{font-size:12px;white-space:nowrap}
 .wg-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:12px;color:var(--mute)}
 .wg-legend .lk{display:inline-flex;align-items:center;gap:6px}
 .wg-legend .sw{width:14px;height:14px;border-radius:5px;display:inline-block}
@@ -634,7 +632,7 @@ const PATTERN_CSS = `
 
 /* ── 中央スパイン3列タイムライン ── */
 .spine-header{display:grid;grid-template-columns:1fr 54px 1fr;gap:7px;margin-bottom:6px;align-items:center}
-.spine-col-label{font-size:14px}
+.spine-col-label{font-size:17px}
 .spine-clock-header{width:54px}
 .spine{position:relative;display:flex;flex-direction:column;gap:6px}
 .spine::before{content:"";position:absolute;left:calc(50% - .5px);top:6px;bottom:16px;width:1px;background:var(--hair);pointer-events:none}
@@ -645,22 +643,20 @@ const PATTERN_CSS = `
 .spine-band{display:flex;flex-direction:column;justify-content:center;gap:3px;background:var(--bg);border:1px solid var(--hair);padding:9px 14px;min-height:var(--sh,36px)}
 .spine-band.left{border-radius:10px 4px 4px 10px}
 .spine-band.right{border-radius:4px 10px 10px 4px}
-/* T5: tbl-block は 10px/ラベル段 */
-.spine-band .tbl-block{font-size:10px;color:var(--mute);letter-spacing:.04em}
+/* T6: tbl-block は 12px（補助段・アイブロウ） */
+.spine-band .tbl-block{font-size:12px;color:var(--mute);letter-spacing:.04em}
 /* T5: tbl は 14px/700（本文段） */
 .spine-band .tbl{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4}
 /* T5: tbm は 12px（補助段） */
 .spine-band .tbm{font-size:12px;color:var(--mute)}
 .tbl-comp{flex-basis:100%;font-size:12px;color:var(--mute);opacity:.8;line-height:1.5;margin-top:2px}
-/* bothmark は 10px/ラベル段・surface+hair（shadow廃止） */
-.bothmark{position:absolute;left:50%;top:-9px;transform:translateX(-50%);font-size:10px;letter-spacing:.06em;font-weight:700;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:999px;padding:2px 10px;white-space:nowrap;z-index:2}
 .spine-band-end .tbl{color:var(--mute)}
 .spine-band-end .tbn{font-size:12px;color:var(--mute)}
 .spine-end .spine-clk .tk{color:var(--mute)}
 .nowline{position:absolute;left:0;right:0;height:0;pointer-events:none;z-index:3}
 .nowline::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--orange);opacity:.85}
 /* T5: nowpill は surface+hair（shadow廃止） */
-.nowpill{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);font-size:10px;font-weight:700;color:var(--orange-ink);background:var(--orange);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.nowpill{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);font-size:12px;font-weight:700;color:var(--orange-ink);background:var(--orange);border-radius:999px;padding:2px 9px;white-space:nowrap}
 @media print{.nowline{display:none}}
 
 /* T4: spine-rotation は 1行目（名前+分数+ラベル）レイアウト */
@@ -671,8 +667,8 @@ const PATTERN_CSS = `
 .spine-side.spine-self{background:var(--bg);border:1px solid var(--hair)}
 /* T4: spine-row1 = 名前+分数+ラベル の1行 */
 .spine-row1{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
-/* T5: spine-name は 14px/600（本文段） */
-.spine-name{font-size:14px;font-weight:600;line-height:1.4;flex:1;min-width:0}
+/* T6: spine-name は 14px/700（カード見出し・太さで差を付ける） */
+.spine-name{font-size:14px;font-weight:700;line-height:1.4;flex:1;min-width:0}
 /* T5: spine-mins は 12px（補助段） */
 .spine-mins{font-size:12px;color:var(--mute);white-space:nowrap}
 /* drill-anchor スタイル */
@@ -681,15 +677,15 @@ const PATTERN_CSS = `
 
 /* クロック（中央列共通） */
 .spine-clk{width:54px;display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:3px;flex-shrink:0}
-/* T5: spine-clk .tk は border（shadow廃止） */
-.spine-clk .tk{font-size:12px;font-weight:700;color:var(--ink);background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:3px 8px;white-space:nowrap}
+/* T6: spine-clk .tk は素テキスト12px（枠線・ピル廃止。背景は中央線マスク用） */
+.spine-clk .tk{font-size:12px;font-weight:700;color:var(--ink);background:var(--bg);padding:3px 4px;white-space:nowrap}
 .spine-dot{width:9px;height:9px;border-radius:50%}
-.spine-half{font-size:10px;color:var(--mute);letter-spacing:.04em;text-align:center}
+.spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
 @media (max-width:580px){
   .spine-header,.spine-rotation,.spine-together{grid-template-columns:1fr 44px 1fr}
   .spine-clk{width:44px}
-  .spine-clk .tk{font-size:10px;padding:2px 6px}
+  .spine-clk .tk{font-size:12px;padding:2px 4px}
   .spine::before{left:calc(50% - 1px)}
 }
 
@@ -711,13 +707,14 @@ const PATTERN_CSS = `
 .drill-close:hover{text-decoration:underline}
 /* パネル本文 */
 .dp-body{padding:16px 20px 28px}
-/* ドリル名: 17px/700（H2段） */
-.dp-name{font-size:17px;font-weight:700;line-height:1.4;margin-bottom:4px}
+/* ドリル名: 22px/700（H2段・詳細画面の文書見出し） */
+.dp-name{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.35;margin-bottom:4px}
 /* サブスキル: 12px mute */
 .dp-sub{font-size:12px;color:var(--mute);line-height:1.5;margin-bottom:12px;min-height:0}
 /* セクション（ねらい・やり方・メタ） */
 .dp-section{margin-bottom:12px}
-.dp-label{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--orange-deep);margin-bottom:4px}
+/* T6: dp-label は 17px/700（H3段・見出しは本文より大きく） */
+.dp-label{display:block;font-size:17px;font-weight:700;color:var(--orange-deep);margin-bottom:5px}
 /* ねらい: 14px */
 .dp-aim{font-size:14px;line-height:1.6;color:var(--ink)}
 .dp-metric{font-size:12px;color:var(--mute)}
@@ -747,7 +744,7 @@ export function render(data) {
   return {
     css: PATTERN_CSS,
     body: `
-    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px">${esc(data.school)}　練習タイムライン</h1>
+    <h1 style="font-size:27px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px">${esc(data.school)}　練習タイムライン</h1>
     <p style="color:var(--mute);font-size:12px;margin-bottom:14px">${data.month}月　／　練習メニューは男女共通。組違い＝コーチ1人で男女を回す段取りを切り替えられます。</p>
     <div class="levels" role="tablist">
       <button class="lvtab on" data-go="day" type="button">日</button>
