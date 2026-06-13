@@ -6,7 +6,7 @@
   "_category_keys": "focus_weights のキーはエンジン正準カテゴリ（allocate/gap と一致）。和は各月1.0。",
 
   "peaks": [
-    { "key": "winter_shinjin", "label": "冬の新人大会（最初の目標）", "months": [11, 12, 1, 2] },
+    { "key": "winter_shinjin", "label": "冬の新人大会（通過点の山）", "months": [11, 12, 1, 2] },
     { "key": "summer_chutairen", "label": "翌夏の中体連（いちばんの目標）", "months": [6, 7] }
   ],
 
@@ -61,9 +61,9 @@
     },
     "11": {
       "phase": "試合期（中野区新人大会）",
-      "headline": "新人大会で2勝。アイソ主体の攻め＋DF徹底を実戦で出す",
+      "headline": "新人大会で勝つ（冬の力試し・集大成への通過点）。アイソ主体の攻め＋DF徹底を実戦で出す",
       "peak": "winter_shinjin",
-      "peak_level": 2,
+      "peak_level": 1,
       "focus_weights": {
         "意思決定/ゲーム形式": 0.3,
         "1on1": 0.2,
