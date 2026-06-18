@@ -24,7 +24,7 @@ import { dirname, resolve } from 'node:path';
 import { createLocalStorage } from '../engine/src/storage.js';
 import { normalizeDrills } from '../engine/src/normalize.js';
 import { planWeek } from '../engine/src/planWeek.js';
-import { loadAnnualPlan, resolveMonth, yearArc, peaks as annualPeaks } from '../engine/src/annualPlan.js';
+import { loadAnnualPlan, resolveMonth, resolveWeekFocus, yearArc, peaks as annualPeaks } from '../engine/src/annualPlan.js';
 import { coachingMode } from '../engine/src/filter.js';
 import { buildRotation } from './rotation.mjs';
 import { buildDrillRegistry } from './drill-detail.mjs';
@@ -58,7 +58,16 @@ export const SHORT_CAT = {
   'コンディショニング/ウォームアップ': 'コンディショニング',
   'フットワーク/アジリティ/ピボット': 'フットワーク',
 };
-const BLOCK_LABEL = { WU: 'ウォームアップ', 技術: '技術', 対人: '対人', ゲーム: 'ゲーム形式', CD: 'ダウン' };
+const BLOCK_LABEL = {
+  アップ: 'アップ',
+  ファンダ: 'ファンダメンタル',
+  シュート: 'シュート',
+  対人: '対人',
+  ラン: '走り込み',
+  静的: '静的ストレッチ',
+};
+/** 束ね（左右同一・実尺占有）表示にするブロック＝ルーティン本（アップ/走り込み/静的）。 */
+const BUNDLE_BLOCKS = new Set(['アップ', 'ラン', '静的']);
 /** その日の開始時刻（実スケジュール: 平日16:05開始、土は09:00開始）。 */
 const START_CLOCK = { 土: 9 * 60, 日: 9 * 60 };
 const DEFAULT_START_MIN = 16 * 60 + 5; // 16:05（準備時間5分込み・窓95分=16:05〜17:40）
@@ -111,8 +120,11 @@ function buildSelfFillPool(drills, dominantCat, usedNames) {
  */
 function buildSession({ annual, drills, config, teamInput }) {
   const currentMonth = config.current_month;
+  const weekOfMonth = config.week_of_month ?? 1;
   // 共有セッションの基準月（暦月そのまま）。男女共通の1メニュー。
   const resolved = resolveMonth(annual, '男子', currentMonth);
+  // 上から降ろした週の焦点（年→フェーズ→月の主眼→週）。後付け要約は廃止。
+  const weekFocus = resolveWeekFocus(annual, '男子', currentMonth, weekOfMonth);
   const cfg = {
     ...config,
     phase: resolved.phase,
@@ -121,7 +133,7 @@ function buildSession({ annual, drills, config, teamInput }) {
   };
   delete cfg.groups;
 
-  const plan = planWeek(drills, cfg, teamInput);
+  const plan = planWeek(drills, cfg, teamInput, weekFocus);
   const videoIndex = new Map(drills.map((d) => [d.id, d.video_url || null]));
   const lectureHostDay = plan.saturday_lecture?.day ?? '土';
 
@@ -132,25 +144,16 @@ function buildSession({ annual, drills, config, teamInput }) {
     return raw;
   };
 
-  // 今週の重点＝計画に実際に配分された主カテゴリ上位2つ（実分数から決定論的に導出）。
-  const mainMinutesByCat = {};
-  for (const day of plan.days) {
-    for (const b of day.blocks) {
-      if (b.block === 'WU' || b.block === 'CD') continue;
-      for (const it of b.items) mainMinutesByCat[it.category] = (mainMinutesByCat[it.category] || 0) + it.minutes;
-    }
-  }
-  const topCats = Object.entries(mainMinutesByCat)
+  // 今週の焦点＝上から降ろした週の焦点（weekFocus.headline）。実分数からの後付け要約は撤去。
+  // 「質」は今週の焦点に効くカテゴリ＝月の主眼focus_weights上位2カテゴリの狙い文を出す。
+  const topCats = Object.entries(resolved.focus_weights || {})
     .sort((a, b) => b[1] - a[1])
     .map(([c]) => c)
     .slice(0, 2);
-  const weekGoal = topCats.length
-    ? `「${topCats.map(shortCat).join('」と「')}」を重点的に磨く`
-    : '今週の重点スキルを反復で固める';
 
   const goals = {
     monthMain: resolved.headline,
-    week: weekGoal,
+    week: weekFocus.headline,
     qualitative: topCats.map((c) => AIM_MAP[c] || `${shortCat(c)}を磨く`),
     kpiHints: resolved.kpi_hints,
   };
@@ -167,7 +170,7 @@ function buildSession({ annual, drills, config, teamInput }) {
   const dominantCategory = (day) => {
     const acc = {};
     for (const b of day.blocks) {
-      if (b.block === 'WU' || b.block === 'CD') continue;
+      if (BUNDLE_BLOCKS.has(b.block)) continue; // ルーティン本（アップ/走り込み/静的）は主眼判定から除外
       for (const it of b.items) acc[it.category] = (acc[it.category] || 0) + it.minutes;
     }
     const top = Object.entries(acc).sort((a, b) => b[1] - a[1])[0];
@@ -204,16 +207,20 @@ function buildSession({ annual, drills, config, teamInput }) {
         from: hhmm(blockStart),
         to: hhmm(cur),
         minutes: cur - blockStart,
-        isBundle: b.block === 'WU' || b.block === 'CD',
+        isBundle: BUNDLE_BLOCKS.has(b.block),
+        // 2部構成の日（火）は区画（part）情報を引き継ぐ。単一セッション日は undefined。
+        part: Number.isInteger(b.part) ? b.part : undefined,
+        partLabel: b.part_label,
+        partKind: b.part_kind,
         items,
       });
     }
 
-    // WU集約: CND-001（ダイナミックストレッチ）が主見出し、
+    // アップ集約: CND-001（ダイナミックストレッチ）が主見出し、
     // 「可動域」タグの1分micro動作（CND-002〜006相当）をその components に畳む。
     // presentation のみ（engine データ・ブロック実尺は不変）。
     for (const bl of blocks) {
-      if (!bl.isBundle || bl.block !== 'WU') continue;
+      if (!bl.isBundle || bl.block !== 'アップ') continue;
       const dynIdx = bl.items.findIndex((it) => it.name === 'ダイナミックストレッチ');
       if (dynIdx === -1) continue;
       // 同WUブロック内の、主見出し以外の「可動域」micro動作を抽出
@@ -252,6 +259,27 @@ function buildSession({ annual, drills, config, teamInput }) {
     const usedNames = blocks.flatMap((b) => b.items.map((it) => it.name));
     const selfFillPool = buildSelfFillPool(drills, domCat, usedNames);
 
+    // 2部構成の日（火）は区画ごとにブロックをまとめ、ヘッダ・タイムラインを分けて描けるよう
+    // parts を作る。各区画は自分の開始時刻・終了時刻・ラベル・コートを持つ（engineの区画メタ由来）。
+    let parts;
+    if (Array.isArray(day.parts) && day.parts.length > 0) {
+      parts = day.parts.map((meta, idx) => {
+        const pblocks = blocks.filter((b) => b.part === idx);
+        const pStart = pblocks.length ? pblocks[0].from : hhmm(startMin);
+        const pEnd = pblocks.length ? pblocks[pblocks.length - 1].to : pStart;
+        return {
+          index: idx,
+          label: meta.label,
+          kind: meta.kind,
+          court: meta.court,
+          minutes: meta.minutes,
+          start: pStart,
+          end: pEnd,
+          blocks: pblocks,
+        };
+      });
+    }
+
     return {
       day: day.day,
       dayLabel: fullDayLabel(day.day),
@@ -262,6 +290,7 @@ function buildSession({ annual, drills, config, teamInput }) {
       totalMinutes: cur - startMin,
       aim: practiceAim(day),
       blocks,
+      parts, // 2部構成の日のみ（火）。単一セッション日は undefined。
       selfFillPool,
     };
   });
@@ -309,9 +338,49 @@ function buildDays(session) {
     else if (day.coachPresent) kind = 'rotation';
     else kind = 'independent';
 
-    // rotation 日に pd.rotation を付与（buildRotation は純関数）
+    // 2部構成の日（火）: 区画ごとに独立した表示単位（ヘッダ・タイムライン）を作る。
+    //  - 外トレ区画（kind=outdoor）= 走り込み・アジリティ。男女合同のコンディショニング（together扱い）。
+    //  - 全面区画（kind=court）= コーチ在席なら組違いローテ、不在なら自走。
+    let parts;
+    if (Array.isArray(day.parts) && day.parts.length > 0) {
+      parts = day.parts.map((p) => {
+        const sub = {
+          blocks: p.blocks,
+          start: p.start,
+          end: p.end,
+          totalMinutes: p.minutes,
+          day: day.day,
+        };
+        let partKind;
+        let rotation = null;
+        if (p.kind === 'outdoor') {
+          // 外トレは男女合同の走り込み・アジリティ（コーチが両方を同時に見る＝together）。
+          partKind = 'together';
+        } else if (day.coachPresent && !isSaturday) {
+          partKind = 'rotation';
+          rotation = buildRotation(sub, day.selfFillPool || []);
+        } else if (day.coachPresent) {
+          partKind = 'together';
+        } else {
+          partKind = 'independent';
+        }
+        return {
+          index: p.index,
+          label: p.label,
+          partCourt: p.court,
+          start: p.start,
+          end: p.end,
+          totalMinutes: p.minutes,
+          blocks: p.blocks,
+          sharedKind: partKind,
+          rotation,
+        };
+      });
+    }
+
+    // 単一セッション日の rotation（2部構成の日は parts 側に持つ）
     let rotation = null;
-    if (kind === 'rotation') {
+    if (kind === 'rotation' && !parts) {
       rotation = buildRotation(day, day.selfFillPool || []);
     }
 
@@ -326,8 +395,9 @@ function buildDays(session) {
       totalMinutes: day.totalMinutes,
       aim: day.aim,
       blocks: day.blocks, // 男女共通メニュー
+      parts, // 2部構成の日（火）のみ。各区画が独自のヘッダ・タイムライン・組違いを持つ。
       sharedKind: kind,
-      rotation, // kind='rotation' の日のみ非 null
+      rotation, // 単一セッションの rotation 日のみ非 null
     };
   });
 }

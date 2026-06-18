@@ -9,13 +9,14 @@
  * @typedef {import('./types.js').PlanDay} PlanDay
  */
 
-/** Display labels for block keys (kept in fixed presentation order). */
+/** Display labels for the fixed 6-block skeleton (kept in fixed presentation order). */
 const BLOCK_LABEL = {
-  WU: 'ウォームアップ',
-  技術: '技術',
+  アップ: 'アップ（動的）',
+  ファンダ: 'ファンダメンタル',
+  シュート: 'シュート',
   対人: '対人',
-  ゲーム: 'ゲーム形式',
-  CD: 'クールダウン',
+  ラン: '走り込み（コンディショニング）',
+  静的: '静的ストレッチ',
 };
 
 /**

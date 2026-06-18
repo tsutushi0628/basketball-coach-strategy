@@ -166,7 +166,7 @@ test('coachingModeReason: 理由は判定と常に一致する', () => {
 test('catalog全件: 全ドリルが3分類のいずれかに入り、3クラスとも非空', async () => {
   const byId = await loadCatalogById();
   const drills = [...byId.values()];
-  assert.equal(drills.length, 215, 'catalog は215件（クールダウンジョグ CND-029 を追加）');
+  assert.equal(drills.length, 216, 'catalog は216件（全面5on5 DEC-019 を追加）');
 
   const modes = drills.map((d) => coachingMode(d));
   assert.ok(modes.every((m) => m === 'self' || m === 'practice' || m === 'lecture'));

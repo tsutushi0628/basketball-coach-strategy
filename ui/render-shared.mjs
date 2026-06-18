@@ -81,6 +81,15 @@ a{color:var(--orange-deep)}
 .inote{font-size:14px;line-height:1.6}
 .inote b{color:var(--orange-deep);font-weight:700}
 
+/* 区画（2部構成の日＝火）の部ヘッダ。日ヘッダの下に各部の見出しとして並べる。 */
+.parthead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:18px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line-2)}
+/* T6: ph-no は 12px/700（補助段・アイブロウ） */
+.parthead .ph-no{font-size:12px;font-weight:700;color:var(--orange-ink);background:var(--orange);border-radius:999px;padding:2px 10px;letter-spacing:.04em}
+/* T6: ph-label は 17px/700（H3段・部見出し） */
+.parthead .ph-label{font-size:17px;font-weight:700;letter-spacing:-.01em}
+/* T6: ph-meta は 12px（補助段） */
+.parthead .ph-meta{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+
 /* 2列グリッド（board/handout用・timeline は中央スパイン版を使用） */
 .twocol{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
 .twocol-header{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
@@ -215,13 +224,22 @@ a{color:var(--orange-deep)}
 }
 `;
 
-/** ブロック種別の色（warm系で統一・虹色にしない）。 */
+/**
+ * ブロック種別の色（warm系で統一・虹色にしない）。固定6ブロック骨格に対応。
+ * キーはブロックキー（plan-data の block）と表示ラベル（together行の row.label）の両方を含める。
+ */
 export const BLOCK_TINT = {
-  WU: 'var(--sage)',
-  技術: 'var(--orange)',
+  // block キー
+  アップ: 'var(--sage)',
+  ファンダ: 'var(--orange)',
+  シュート: 'var(--gold)',
   対人: 'var(--terra)',
-  ゲーム: 'var(--gold)',
-  CD: 'var(--mute)',
+  ラン: 'var(--sage)',
+  静的: 'var(--mute)',
+  // 表示ラベル（together行 row.label 経由の参照用）
+  ファンダメンタル: 'var(--orange)',
+  走り込み: 'var(--sage)',
+  静的ストレッチ: 'var(--mute)',
 };
 
 /** HTMLエスケープ。 */
@@ -279,10 +297,32 @@ export function modeToggle() {
 
 /** 日ヘッダ（曜日・コート・時間・本日の狙い）。 */
 export function dayHeader(pd, month) {
-  const meta = `${esc(pd.court)}・${esc(pd.start)}〜${esc(pd.end)}・計${pd.totalMinutes}分${pd.coachPresent ? '' : '・コーチ不在'}`;
+  // 2部構成の日（火）は日全体の時間帯と「2部構成」である旨を示す（各部の詳細は部ヘッダで）。
+  const partsNote = Array.isArray(pd.parts) && pd.parts.length > 1
+    ? `・${pd.parts.length}部構成（${pd.parts.map((p) => `${esc(p.label)}${p.totalMinutes}分`).join(' ＋ ')}）`
+    : `・${esc(pd.court)}`;
+  const meta = `${partsNote}・${esc(pd.start)}〜${esc(pd.end)}・計${pd.totalMinutes}分${pd.coachPresent ? '' : '・コーチ不在'}`;
   return `<div class="dayhead">
     <div class="dh-t">${month}月 ${esc(pd.dayLabel)}<span class="dh-court">${meta}</span></div>
     <div class="dh-aim"><span class="dh-aiml">本日の狙い（男女共通）</span>${esc(pd.aim)}</div>
+  </div>`;
+}
+
+/**
+ * 区画（session part）ヘッダ（火の外トレ／全面など）。日ヘッダの下に各部の見出しとして置く。
+ * 区画ラベル・コート・時間帯・組違い種別を1行で示す。
+ * @param {object} part buildDays の day.parts の1要素
+ * @param {number} idx 0始まりの区画番号
+ */
+export function partHeader(part, idx) {
+  const SHARE = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）' };
+  const kindLabel = SHARE[part.sharedKind] || '';
+  const courtTxt = part.partCourt && part.partCourt !== '不問' ? esc(part.partCourt) : '屋外/コート外';
+  const meta = `${courtTxt}・${esc(part.start)}〜${esc(part.end)}・${part.totalMinutes}分${kindLabel ? `・${kindLabel}` : ''}`;
+  return `<div class="parthead">
+    <span class="ph-no">第${idx + 1}部</span>
+    <span class="ph-label">${esc(part.label)}</span>
+    <span class="ph-meta">${meta}</span>
   </div>`;
 }
 
@@ -495,12 +535,51 @@ export function clientScript() {
 })();`;
 }
 
+/**
+ * 1区画（または単一日）のブロック明細を配布テキスト行に変換する。
+ * @param {string[]} L 追記先の行配列
+ * @param {Array} blocks 区画/日のブロック配列
+ */
+function plainBlocks(L, blocks) {
+  for (const b of blocks) {
+    L.push(`${b.from}〜${b.to}　${b.label}（${b.minutes}分）`);
+    for (const it of b.items) {
+      const tag = it.mode === 'practice' ? '（コーチ付き）' : it.mode === 'lecture' ? '（レクチャ）' : '';
+      const mins = b.isBundle ? '' : `（${it.minutes}分）`;
+      L.push(`　・${it.name}${tag}${mins}${it.alternatives.length ? `／いずれか：${it.alternatives.join('・')}` : ''}`);
+    }
+    if (!b.isBundle) L.push('　・給水');
+  }
+}
+
 /** 貼り付け用プレーンテキスト（男女2列スワップの段取り＋共通メニュー）。 */
 export function plainText(data, pd) {
   const L = [];
-  L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・${pd.start}〜${pd.end}）練習メニュー（男女共通）`);
+  const headCourt = Array.isArray(pd.parts) && pd.parts.length > 1
+    ? pd.parts.map((p) => `${p.label}${p.totalMinutes}分`).join('＋')
+    : pd.court;
+  L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${headCourt}・${pd.start}〜${pd.end}）練習メニュー（男女共通）`);
   L.push('');
   L.push(`■ 本日の狙い：${pd.aim}`);
+
+  // 2部構成の日（火）: 区画ごとに見出し＋メニューを分けて出す。
+  if (Array.isArray(pd.parts) && pd.parts.length > 0) {
+    pd.parts.forEach((part, idx) => {
+      L.push('');
+      const courtTxt = part.partCourt && part.partCourt !== '不問' ? part.partCourt : '屋外/コート外';
+      L.push(`━━ 第${idx + 1}部 ${part.label}（${courtTxt}・${part.start}〜${part.end}・${part.totalMinutes}分）━━`);
+      if (part.sharedKind === 'together') {
+        L.push('■ 男女合同（コーチが両方を同時に）。');
+      } else if (part.sharedKind === 'rotation') {
+        L.push('■ 組違い（コーチ1人）：要監督ドリルを男女左右2列でずらす（前後半で入れ替え）。');
+      } else {
+        L.push('■ コーチ不在：男女とも各自で自走。');
+      }
+      plainBlocks(L, part.blocks);
+    });
+    L.push('　・終了（今日の振り返りひとことで解散）');
+    return L.join('\n');
+  }
 
   if (pd.sharedKind === 'rotation' && pd.rotation) {
     L.push('■ 組違い（コーチ1人）：要監督ドリルを男女左右2列でずらす。');

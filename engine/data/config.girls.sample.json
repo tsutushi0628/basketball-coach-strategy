@@ -9,32 +9,39 @@
     "sets_forbidden_in_year": true,
     "shot_clock_sec": 15
   },
-  "current_month": 8,
-  "phase": "準備（積み上げ）",
+  "current_month": 7,
+  "week_of_month": 1,
+  "phase": "準備（始動）＋初戦",
   "_gender": "女子",
-  "_phase_note": "phase / phase_category_weights は CLI 単独実行用の静的フォールバック。女子は約1ヶ月先行なので暦8月＝アーク9月（準備・積み上げ）の値を置く。UI は engine/data/annual-plan.json から性別＋暦月で解決して上書きする。",
+  "_phase_note": "新チームは男女とも7月始動扱い（女子の1ヶ月先行offsetは新チーム計画では使わない）。current_month=7・準備始動アーク。phase / phase_category_weights は CLI 単独実行用の静的フォールバック。UI は engine/data/annual-plan.json から性別＋暦月で解決して上書きする（resolveMonth が new_team_start_month=7 を準備始動アークに合わせ、男女とも7月→準備始動を引く）。",
   "_shared_gym_note": "男子と体育館を共有する別チーム。組違い（共有時のローテ/合同）は2チームの計画を生成した後にUIのプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false）。",
   "shared_gym": false,
+  "_schedule_note": "SCHEDULE（オーナー確定・男女共通の枠）。火=2部構成(外トレ60＝走り込み・アジリティ ＋ 全面60＝アップ→走ってフィニッシュ→3on3→5on5→静的)。水木=半面120分(走る系・5on5なし)、金=全面120分(走り込み15)、土=全面180分(走り込み25)。固定ブロック順=アップ→ファンダ→シュート→対人→ラン→静的。UIの共通メニューは男子configから生成し、女子configは指標(KPI)用。",
   "schedule": [
-    { "day": "火", "minutes": 100, "court": "全面", "coach_present": true },
-    { "day": "水", "minutes": 100, "court": "半面", "coach_present": false },
-    { "day": "木", "minutes": 100, "court": "半面", "coach_present": false },
-    { "day": "金", "minutes": 100, "court": "全面", "coach_present": true },
-    { "day": "土", "minutes": 165, "court": "全面", "coach_present": true }
+    { "day": "火", "minutes": 120, "court": "全面", "coach_present": true, "parts": [
+      { "label": "外トレ", "kind": "outdoor", "minutes": 60, "court": "不問", "run_minutes": 60 },
+      { "label": "全面", "kind": "court", "minutes": 60, "court": "全面", "run_minutes": 0, "no_funda": true }
+    ] },
+    { "day": "水", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
+    { "day": "木", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
+    { "day": "金", "minutes": 120, "court": "全面", "coach_present": true, "run_minutes": 15 },
+    { "day": "土", "minutes": 180, "court": "全面", "coach_present": true, "run_minutes": 25 }
   ],
   "coach_absent_allow": [
     "ファンダメンタル基礎",
     "シュート",
     "ハンドリング/ドリブル",
     "フィニッシュ(ゴール下/レイアップ)",
+    "パス&スペーシング",
+    "フットワーク/アジリティ/ピボット",
+    "1on1",
+    "リバウンド/ボックスアウト",
+    "チームディフェンス(オールコートマンツー/ヘルプ/帰陣)",
     "意思決定/ゲーム形式",
     "コンディショニング/ウォームアップ"
   ],
   "introduced": [],
-  "philosophy_floors": {
-    "チームディフェンス(オールコートマンツー/ヘルプ/帰陣)": { "min_minutes_per_week": 40, "place_on_coach_days": true },
-    "チームオフェンス(アーリー/トランジション)": { "min_minutes_per_week": 40, "place_on_coach_days": true }
-  },
+  "_weights_note": "phase_category_weights は毎週の強制フロアではなく各固定ブロックのカテゴリ選好として使う（撤去①フロア強制は廃止）。",
   "phase_category_weights": {
     "ハンドリング/ドリブル": 0.15,
     "フィニッシュ(ゴール下/レイアップ)": 0.15,

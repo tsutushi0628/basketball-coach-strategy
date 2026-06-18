@@ -130,8 +130,10 @@ export function assertLoadCap(plan, config) {
 }
 
 /**
- * Gate 5 — the macrocycle's main-focus category (highest finalWeight) must
- * appear at least once in the week.
+ * Gate 5 — the week's focus is honored: the macrocycle's main-focus category
+ * (highest finalWeight) appears at least once. When the week's focus prescribes a
+ * mastery bias, this still asserts the focus *category* shows up — the bias is a
+ * selection preference, not a hard presence requirement.
  *
  * @param {Plan} plan
  * @param {string} mainFocus  Highest-weight category from computeFinalWeights.
@@ -149,47 +151,78 @@ export function assertMainFocusPresent(plan, mainFocus) {
 }
 
 /**
- * Gate 6 — philosophy floors (spec #2). Each configured floor category must
- * accumulate at least its `min_minutes_per_week`, and (when
- * `place_on_coach_days` is true) those minutes must land on coach-present days.
- * This guarantees the team's identity (all-court man defense / early offense)
- * is reflected every week even though the attack-only gap signal never raises it.
- *
- * Spec #3: this floor is best-effort, NOT a hard throw. The drill pool may
- * physically lack enough floor-category minutes to satisfy the configured minimum
- * (e.g. few team-defense drills fit the available courts/grades). Failing the
- * whole week's plan in that case is worse than returning a plan that places as
- * much of the floor as it can — so a shortfall is recorded as a warning on the
- * plan (plan.warnings) instead of throwing. The intent (put the team's core —
- * defense / fast-break — in every week) is still honored as far as the pool allows.
+ * Gate — the fixed 6-block session form is honored (作り直し方針2/3):
+ *   ① every day ends with the static-stretch (静的) block — a session is never cut off
+ *      by a scrimmage / run (作り直し方針: 固定ブロック順の末尾＝静的ストレッチ).
+ *   ② the present blocks appear only in the fixed order アップ→ファンダ→シュート→対人→ラン→静的
+ *      (empty blocks may be skipped — half-court days carry no ラン — but order never inverts).
+ *   ③ no independent game block exists: 意思決定/ゲーム形式 (5on5/scrimmage) only ever appears
+ *      inside the 対人 block, and only on full-court days. Half-court days carry no scrimmage.
  *
  * @param {Plan} plan
- * @param {Config} config
  */
-export function assertPhilosophyFloor(plan, config) {
-  const floors = config.philosophy_floors ?? {};
-  for (const [cat, spec] of Object.entries(floors)) {
-    const min = Number(spec?.min_minutes_per_week ?? 0);
-    if (min <= 0) continue;
-    const coachOnly = spec?.place_on_coach_days === true;
+export function assertSessionForm(plan) {
+  const order = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的'];
+  const rank = new Map(order.map((b, i) => [b, i]));
+  const GAME = '意思決定/ゲーム形式';
 
-    let minutes = 0;
-    for (const day of plan.days) {
-      // Default to coach-present when the flag is absent (matches allocateDay).
-      const present = day.coach_present !== false;
-      if (coachOnly && !present) continue;
-      for (const it of dayItems(day)) {
-        if (it.category === cat) minutes += it.minutes;
+  for (const day of plan.days) {
+    // A multi-part day (火 = 外トレ60 ＋ 全面60) is several mini-sessions concatenated; the fixed
+    // order resets at each part boundary. Group blocks by their `part` index (single-session days
+    // are one group), assert fixed order WITHIN each part, and require the WHOLE day to close with
+    // the 静的 block (the last part is a court session that ends with the static stretch).
+    /** @type {Map<number, import('./types.js').PlanBlock[]>} */
+    const byPart = new Map();
+    for (const b of day.blocks) {
+      const p = Number.isInteger(b.part) ? b.part : 0;
+      if (!byPart.has(p)) byPart.set(p, []);
+      byPart.get(p).push(b);
+    }
+
+    for (const [partIdx, partBlocks] of byPart) {
+      const keys = partBlocks.map((b) => b.block);
+      const where = byPart.size > 1 ? `${day.day}[区画${partIdx}]` : day.day;
+
+      // ② fixed order within the part (present blocks strictly increasing in the fixed rank).
+      let prev = -1;
+      for (const k of keys) {
+        const r = rank.get(k);
+        if (r === undefined) {
+          throw new Error(`assertSessionForm: ${where} に未知のブロック「${k}」`);
+        }
+        if (r <= prev) {
+          throw new Error(`assertSessionForm: ${where} のブロック順が固定形に反する（${keys.join('→')}）`);
+        }
+        prev = r;
       }
     }
-    if (minutes < min) {
-      // Best-effort: warn, do not throw — the plan is still usable.
-      addPlanWarning(
-        plan,
-        `哲学フロア未達: 「${cat}」が週内${minutes}分で最低${min}分に届かず` +
-          (coachOnly ? '（在席日配置分のみ計上）' : '') +
-          'プール上限のため配置できる分だけ配置しました',
+
+    // ① the WHOLE day ends with the static stretch (the last part's closing block).
+    const dayKeys = day.blocks.map((b) => b.block);
+    if (dayKeys.length > 0 && dayKeys[dayKeys.length - 1] !== '静的') {
+      throw new Error(
+        `assertSessionForm: ${day.day} が静的ストレッチで終わっていない（末尾=${dayKeys[dayKeys.length - 1]}）`,
       );
+    }
+
+    // ③ scrimmage only inside 対人, and only on a full-court session. The day's court is 全面 on
+    // every day that carries a 全面 session (including the 火 全面60 part), so the day-court check is
+    // sufficient: half-court days (水木) have no 全面 part and must carry no scrimmage anywhere.
+    const dayFull = String(day.court ?? '').includes('全面');
+    for (const block of day.blocks) {
+      for (const it of block.items) {
+        if (it.category !== GAME) continue;
+        if (block.block !== '対人') {
+          throw new Error(
+            `assertSessionForm: ${day.day} の「${block.block}」ブロックに5on5/ゲーム形式「${it.name}」が独立配置（対人ブロック末尾のみ可）`,
+          );
+        }
+        if (!dayFull) {
+          throw new Error(
+            `assertSessionForm: 半面日 ${day.day} に5on5/ゲーム形式「${it.name}」が混入（5on5は全面の日だけ）`,
+          );
+        }
+      }
     }
   }
 }
@@ -208,10 +241,14 @@ export function assertPhilosophyFloor(plan, config) {
  * @param {Map<string, import('./types.js').Drill>} drillIndex
  */
 export function assertCoachContext(plan, config, drillIndex) {
+  // Bundle blocks (warm-up / conditioning run / static stretch) run every day regardless of
+  // coach presence — preparation, running, and warm-down are not coached skill installs — so
+  // they are exempt. Only the curriculum blocks (ファンダ/シュート/対人) are constrained.
+  const BUNDLE = new Set(['アップ', 'ラン', '静的', 'WU', 'CD']); // legacy WU/CD kept for old fixtures
   for (const day of plan.days) {
     if (day.coach_present !== false) continue; // only constrain coach-absent days
     for (const block of day.blocks) {
-      if (block.block === 'WU' || block.block === 'CD') continue; // WU/CD run daily, coach or not
+      if (BUNDLE.has(block.block)) continue; // bundle blocks run daily, coach or not
       for (const it of block.items) {
         const drill = drillIndex.get(it.drill_id);
         if (!drill) continue;
@@ -239,6 +276,11 @@ export function assertCoachContext(plan, config, drillIndex) {
  *                                       of its available minutes (default 0.8).
  */
 export function checkUnderfill(plan, { minFillRatio = 0.8 } = {}) {
+  // The fixed 6-block model only emits non-empty blocks (half-court days legitimately
+  // carry no ラン block; non-scrimmage days carry no game segment), so an "empty block"
+  // is now an intentional skip rather than a shortfall — the per-block empty warning is
+  // dropped. The day-level underfill check stays: if the placed minutes fall well under
+  // the available frame, the gym time wasn't fully programmed and a coach should know.
   for (const day of plan.days) {
     const filled = dayItems(day).reduce((s, it) => s + it.minutes, 0);
     if (day.minutes > 0 && filled < day.minutes * minFillRatio) {
@@ -246,11 +288,6 @@ export function checkUnderfill(plan, { minFillRatio = 0.8 } = {}) {
         plan,
         `${day.day}: 配置 ${filled}分 が枠 ${day.minutes}分 に対して著しく不足`,
       );
-    }
-    for (const block of day.blocks) {
-      if (block.items.length === 0) {
-        addPlanWarning(plan, `${day.day}: 「${block.block}」ブロックが空`);
-      }
     }
   }
 }
@@ -264,6 +301,7 @@ export function checkUnderfill(plan, { minFillRatio = 0.8 } = {}) {
  * @param {Config} args.config
  * @param {Map<string, import('./types.js').Drill>} args.drillIndex
  * @param {string} args.mainFocus
+ * @param {import('./types.js').WeekFocus} [args.weekFocus]
  */
 export function runAllGates({ plan, config, drillIndex, mainFocus }) {
   assertTimeFits(plan);
@@ -271,7 +309,7 @@ export function runAllGates({ plan, config, drillIndex, mainFocus }) {
   assertNoSetsInYear(plan, config, drillIndex);
   assertLoadCap(plan, config);
   assertMainFocusPresent(plan, mainFocus);
-  assertPhilosophyFloor(plan, config); // best-effort: warns, does not throw (spec #3)
+  assertSessionForm(plan); // 固定6ブロック順・末尾静的・5on5は対人末尾かつ全面のみ
   assertCoachContext(plan, config, drillIndex);
-  checkUnderfill(plan); // best-effort: warns on under-filled days / empty blocks (spec #4)
+  checkUnderfill(plan); // best-effort: warns on under-filled days
 }

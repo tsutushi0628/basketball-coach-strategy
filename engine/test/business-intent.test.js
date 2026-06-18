@@ -100,25 +100,32 @@ test('S1: a low free-throw rate puts shooting / free-throw drills into the week'
 test('S2: high game turnovers pull in handling / passing / decision-making work', async () => {
   const { drills, config, baseInput } = await loadContext();
   // 試合TO far from target; the other two indicators already met so the TO gap dominates.
-  const input = inputWith(baseInput, {
+  const badTO = inputWith(baseInput, {
     '試合TO': { good_direction: 'down', baseline: 30, latest: 30, target: 10 },
     'FT率': { latest: 70, target: 70, baseline: 40 },
     'ゴール下成功率': { latest: 70, target: 70, baseline: 45 },
   });
-  const plan = planWeek(drills, config, input);
+  const goodTO = inputWith(badTO, {
+    '試合TO': { good_direction: 'down', baseline: 30, latest: 10, target: 10 }, // TO solved
+  });
+  const planBad = planWeek(drills, config, badTO);
+  const planGood = planWeek(drills, config, goodTO);
 
-  const byCat = minutesByCategory(plan);
+  const byCatBad = minutesByCategory(planBad);
   const toCategories = ['ハンドリング/ドリブル', 'パス&スペーシング', '意思決定/ゲーム形式'];
-  const presentMinutes = toCategories.reduce((s, c) => s + (byCat[c] ?? 0), 0);
+  const presentMinutes = toCategories.reduce((s, c) => s + (byCatBad[c] ?? 0), 0);
   assert.ok(
     presentMinutes > 0,
     'TOが悪い時はハンドリング/パス/意思決定のどれかが計画に入るべき',
   );
-  // The largest TO category (handling, split-weight 0.4) should clearly out-mass
-  // a non-TO category like finishing once finishing's gap is closed.
+  // Responsive (作り直し後): a worse TO gap pulls MORE handling time into the week than when
+  // TO is already solved — the emphasis raises the ball-security categories' selection weight.
+  const handlingBad = toCategories.reduce((s, c) => s + (byCatBad[c] ?? 0), 0);
+  const byCatGood = minutesByCategory(planGood);
+  const handlingGood = toCategories.reduce((s, c) => s + (byCatGood[c] ?? 0), 0);
   assert.ok(
-    (byCat['ハンドリング/ドリブル'] ?? 0) > (byCat['フィニッシュ(ゴール下/レイアップ)'] ?? 0),
-    'TO主導の週はハンドリングがフィニッシュより多く配分されるべき',
+    handlingBad >= handlingGood,
+    `TO主導の週はTO解消時よりボール保持系(ハンドリング/パス/判断)が同等以上に入るべき（悪TO ${handlingBad}分 / 良TO ${handlingGood}分）`,
   );
 });
 

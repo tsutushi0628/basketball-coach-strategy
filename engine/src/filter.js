@@ -56,6 +56,22 @@ const DEFAULT_COACH_ABSENT_ALLOW = [
 const CONDITIONING_CATEGORY = 'コンディショニング/ウォームアップ';
 
 /**
+ * F6: does a drill fit on the given weekday? A drill may carry a structured `only_days`
+ * restriction (e.g. シャトルラン＝土曜限定 → ["土"]); when present, it is allowed only on those
+ * weekday labels. Absent ⇒ no restriction (fits any day). This replaces the old approach of
+ * encoding the limit in the name / notes free text, which let 土曜限定 drills leak onto 火・金.
+ *
+ * @param {Drill} drill
+ * @param {string} [dayLabel]  The weekday label of the day being filled (e.g. "火").
+ * @returns {boolean}
+ */
+export function dayFits(drill, dayLabel) {
+  if (!Array.isArray(drill.only_days) || drill.only_days.length === 0) return true;
+  if (!dayLabel) return true; // no day context (standalone pool build) ⇒ don't restrict
+  return drill.only_days.includes(dayLabel);
+}
+
+/**
  * F1: does a drill fit on a day with the given available court?
  * Only `requiresFull` (minimum footprint = full court) drills are excluded on
  * non-full days. ¼ / 半面 / 不問 always fit on any day. Conditioning / warm-up
@@ -416,16 +432,19 @@ export function isCoachAbsentEligible(drill, config) {
  * @param {boolean} [opts.excludeNewLecture]  Withhold not-yet-introduced lecture
  *   drills (weekday practice). Default false (no time-series gate).
  * @param {Set<string>|string[]} [opts.introduced]  Ids already taught (prior weeks).
+ * @param {string} [opts.day]  The weekday label being filled (e.g. "火"); enforces the
+ *   structured `only_days` restriction (F6) so 曜日限定 drills never leak onto other days.
  * @returns {Drill[]}
  */
 export function filterPoolForDay(drills, config, dayCourt, opts = {}) {
   const grades = config.grades ?? [];
-  const { excludeNewLecture = false, introduced } = opts;
+  const { excludeNewLecture = false, introduced, day } = opts;
   const known = introduced instanceof Set ? introduced : new Set(introduced ?? []);
   return drills.filter(
     (d) =>
       courtFits(d, dayCourt) &&
       gradesFit(d, grades) &&
+      dayFits(d, day) &&
       !isGloballyForbidden(d, config) &&
       !(excludeNewLecture && isNewLecture(d, known)),
   );

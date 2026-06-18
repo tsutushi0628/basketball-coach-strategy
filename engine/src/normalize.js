@@ -218,6 +218,13 @@ export function normalizeDrill(raw) {
     // Whether the drill needs a helper (pad partner / feeder / coach). Used in the
     // alternative-affinity score so swap-ins keep similar staffing logistics.
     needs_helper: !!raw.needs_helper,
+    // Weekday restriction (構造化曜日限定). When present, the drill may only be placed
+    // on those weekday labels (e.g. シャトルラン＝土曜限定 → ["土"]). Absent ⇒ no day
+    // restriction. Carried as a structured field so the constraint no longer lives only
+    // in the name / notes free text.
+    ...(Array.isArray(raw.only_days) && raw.only_days.length > 0
+      ? { only_days: raw.only_days.map(String) }
+      : {}),
     notes: String(raw.notes ?? ''),
     // Optional manual override for the needsCoach derivation. Preserved as a
     // boolean only when the record explicitly sets one (borderline hand-fix);

@@ -8,7 +8,7 @@
 
 import {
   esc, modeTag, modeMark, altLine, videoLink, plainText, BLOCK_TINT,
-  modeToggle, dayHeader,
+  modeToggle, dayHeader, partHeader,
   goalsSection, monthSection, yearSection, assumptionsNote,
   genderChip, VIDEO_SVG,
 } from './render-shared.mjs';
@@ -529,18 +529,39 @@ function weekLevel(data) {
     <p class="note"><b>共通の縦時刻軸1本</b>を全曜日で共有し、同じ「1分＝px」尺で揃えています。土の午前帯と平日の夕帯の間にある長い空き時間は、1本の「空き」ブレイクに畳んでいます。組違い日（火・金）の男女の左右内訳は「日」タブで見られます。</p>`;
 }
 
+/** 1つのセッション（単一日 or 区画）のタイムライン本体（rotation か共通メニュー）を描く。 */
+function sessionTimeline(session, drillIndex) {
+  const isRotation = session.sharedKind === 'rotation' && session.rotation;
+  return isRotation ? rotationTimeline(session, drillIndex) : menuTimeline(session, drillIndex);
+}
+
 function dayTimeline(data, pd, idx) {
-  const isRotation = pd.sharedKind === 'rotation' && pd.rotation;
+  // 2部構成の日（火）: 区画ごとに部ヘッダ＋タイムラインを分けて描く（ヘッダ・タイムラインを分離）。
+  let body;
+  if (Array.isArray(pd.parts) && pd.parts.length > 0) {
+    body = pd.parts
+      .map((part, pi) => `<section class="daypart">
+        ${partHeader(part, pi)}
+        ${sessionTimeline(part, data.drillIndex)}
+      </section>`)
+      .join('');
+  } else {
+    body = sessionTimeline(pd, data.drillIndex);
+  }
   // rotation 日は中央スパインのみ表示（折りたたみ「共通メニュー」廃止・T3）。
   // 詳細はハッシュ駆動オーバーレイ（#drill-overlay）で表示。日タイムラインに詳細セクションは付与しない。
   return `<article class="day pageb" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
     ${dayHeader(pd, data.month)}
-    ${isRotation ? rotationTimeline(pd, data.drillIndex) : menuTimeline(pd, data.drillIndex)}
+    ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
   </article>`;
 }
 
 const PATTERN_CSS = `
+/* ── 2部構成の日（火）の区画セクション ── */
+.daypart{margin-bottom:20px}
+.daypart:last-child{margin-bottom:0}
+
 /* ── タイムライン（日レベル・非rotation） ── */
 .timeline{position:relative;padding-left:54px}
 .timeline::before{content:"";position:absolute;left:44px;top:6px;bottom:16px;width:1px;background:var(--hair)}

@@ -56,9 +56,11 @@ function hasPractice(block) {
  *   2. WU/CD（isBundle）→ together 行（左右同一・実尺占有）。
  *   3. 主自走ブロック（isAllSelf）→ together 行（左右同一・実尺占有）。
  *      ※主自走（ツーメン等）は裏埋めに溶かさない（wall-clock 崩壊の根源を断つ）。
- *   4. コーチ段（hasPractice）→ rotation 行を前後半2行に展開（coachSide 交互）。
+ *   4. コーチ段（hasPractice）→ ブロック内の practice item を順に走査し、各 practice item ごとに
+ *      rotation 行を前後半2行に展開（coachSide 交互）。中間 practice（3on3）も末尾 practice（5on5）も
+ *      それぞれ自分の実尺で可視タイムラインに出る（先頭1本だけ膨らませない）。
  *      前半: coachSide=practice、相方=selfFillPool から短い自走。
- *      後半: 左右入替（coachSide 反転）。
+ *      後半: 左右入替（coachSide 反転）。途中の self item は together 行で実尺占有。
  *   5. 末尾アサート: 全 rows.minutes 合計 === pd.totalMinutes（時計不変・throw で即検出）。
  *
  * @param {PresentationDay} pd
@@ -115,60 +117,85 @@ export function buildRotation(pd, selfFillPool) {
       });
       cur += block.minutes;
     } else if (hasPractice(block)) {
-      // コーチ段: practice item を代表に前後半 swap
-      const practiceItem = block.items.find((it) => weekdayMode(it.mode) === 'practice');
-
-      // selfFillPool から裏埋め1本を選択（重複しないよう practice.name と別の name を使う）
-      let fillItem = null;
-      const startPool = poolIdx;
-      while (poolIdx < (selfFillPool || []).length) {
-        const candidate = selfFillPool[poolIdx];
-        poolIdx++;
-        if (candidate.name !== practiceItem.name) {
-          fillItem = candidate;
-          break;
+      // コーチ段: ブロック内の practice item を「先頭1本だけ膨らませる」のではなく、
+      // ブロックの items を順に走査して、各 practice item ごとに rotation 行を1ラウンド展開する。
+      // これにより対人ブロックの中間 practice（3on3=チームディフェンス）も末尾 practice（5on5）も
+      // それぞれ自分の実尺で見える行(spine-rotation)に出る（先頭1本だけ膨らませると2本目以降が
+      // hidden plain-text にしか残らず可視タイムラインから黙って脱落する不具合の根治）。
+      // 途中に挟まる self item は together 行として実尺占有する（左右同一・男女共通）。
+      for (const item of block.items) {
+        if (weekdayMode(item.mode) !== 'practice') {
+          // ブロック内の自走 item は together 行で実尺占有（男女共通メニュー）。
+          rows.push({
+            type: 'together',
+            from: minToTime(cur),
+            label: block.label || block.block,
+            minutes: item.minutes,
+            drill: {
+              name: item.name,
+              mode: item.mode,
+              video: item.video,
+              alternatives: item.alternatives,
+            },
+          });
+          cur += item.minutes;
+          continue;
         }
+
+        const practiceItem = item;
+        // selfFillPool から裏埋め1本を選択（重複しないよう practice.name と別の name を使う）
+        let fillItem = null;
+        const startPool = poolIdx;
+        while (poolIdx < (selfFillPool || []).length) {
+          const candidate = selfFillPool[poolIdx];
+          poolIdx++;
+          if (candidate.name !== practiceItem.name) {
+            fillItem = candidate;
+            break;
+          }
+        }
+        if (!fillItem) {
+          // プールを全走査しても見つからない場合はフォールバック
+          poolIdx = startPool;
+          fillItem = { name: '自走ドリル', mode: 'self', video: null, alternatives: [] };
+        }
+
+        // coachSide は round ごと交互（偶数=男子先攻、奇数=女子先攻）
+        const coachSide = practiceRoundIdx % 2 === 0 ? '男子' : '女子';
+        const otherSide = coachSide === '男子' ? '女子' : '男子';
+
+        const practiceCell = { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives };
+        const fillCell = { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives };
+        // コーチ側=要監督ドリル、相方=自走の1行を組む。
+        const sideRow = (side, half, from, minutes) => ({
+          type: 'rotation',
+          round: practiceRoundIdx,
+          half,
+          from,
+          minutes,
+          coachSide: side,
+          boys: side === '男子' ? practiceCell : fillCell,
+          girls: side === '女子' ? practiceCell : fillCell,
+        });
+
+        // 5分グリッドで半割できる practice item だけ前後半に分けてコーチ側を入れ替える（配布フォーマットの
+        // 5分単位要件。例: 15分→5/10）。割れない・10分未満の小尺（端数の philosophy-floor 等）は
+        // 分割せずコーチ側のみの1行で実尺占有する（throw でプラン全体を落とさない）。
+        const m = practiceItem.minutes;
+        if (m >= 10 && m % 5 === 0) {
+          const half1 = Math.floor(m / 10) * 5;
+          const half2 = m - half1;
+          rows.push(sideRow(coachSide, '前半', minToTime(cur), half1));
+          cur += half1;
+          rows.push(sideRow(otherSide, '後半', minToTime(cur), half2));
+          cur += half2;
+        } else {
+          rows.push(sideRow(coachSide, '', minToTime(cur), m));
+          cur += m;
+        }
+
+        practiceRoundIdx++;
       }
-      if (!fillItem) {
-        // プールを全走査しても見つからない場合はフォールバック
-        poolIdx = startPool;
-        fillItem = { name: '自走ドリル', mode: 'self', video: null, alternatives: [] };
-      }
-
-      // coachSide は round ごと交互（偶数=男子先攻、奇数=女子先攻）
-      const coachSide = practiceRoundIdx % 2 === 0 ? '男子' : '女子';
-      const otherSide = coachSide === '男子' ? '女子' : '男子';
-
-      const practiceCell = { name: practiceItem.name, mode: 'practice', video: practiceItem.video, alternatives: practiceItem.alternatives };
-      const fillCell = { name: fillItem.name, mode: 'self', video: fillItem.video, alternatives: fillItem.alternatives };
-      // コーチ側=要監督ドリル、相方=自走の1行を組む。
-      const sideRow = (side, half, from, minutes) => ({
-        type: 'rotation',
-        round: practiceRoundIdx,
-        half,
-        from,
-        minutes,
-        coachSide: side,
-        boys: side === '男子' ? practiceCell : fillCell,
-        girls: side === '女子' ? practiceCell : fillCell,
-      });
-
-      // 5分グリッドで半割できるブロックだけ前後半に分けてコーチ側を入れ替える（配布フォーマットの
-      // 5分単位要件。例: 25分→10/15）。割れない・10分未満の小ブロック（端数の philosophy-floor 等）は
-      // 分割せずコーチ側のみの1行で実尺占有する（throw でプラン全体を落とさない）。
-      if (block.minutes >= 10 && block.minutes % 5 === 0) {
-        const half1 = Math.floor(block.minutes / 10) * 5;
-        const half2 = block.minutes - half1;
-        rows.push(sideRow(coachSide, '前半', minToTime(cur), half1));
-        cur += half1;
-        rows.push(sideRow(otherSide, '後半', minToTime(cur), half2));
-        cur += half2;
-      } else {
-        rows.push(sideRow(coachSide, '', minToTime(cur), block.minutes));
-        cur += block.minutes;
-      }
-
-      practiceRoundIdx++;
     } else {
       // その他（both_self 的なブロック）: together 行で実尺占有
       const repItem = block.items[0];

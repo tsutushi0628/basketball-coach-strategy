@@ -1,13 +1,10 @@
 /**
  * @file Review-driven business-intent tests.
  *
- * These cover the five gaps a code review raised about the engine's *intent*
- * (not its mechanics). Each test pins a business guarantee and is written so it
- * fails if the corresponding gate / filter is gutted:
+ * These cover the gaps a code review raised about the engine's *intent* (not its
+ * mechanics). Each test pins a business guarantee and is written so it fails if the
+ * corresponding gate / filter is gutted:
  *
- *   R1  assertPhilosophyFloor is best-effort: an under-floor plan warns (does NOT
- *       throw), and the warning actually names the shortfall — so the gate isn't a
- *       silent no-op. (Deleting the floor accounting makes this fail.)
  *   R2  assertCoachContext throws when a coach-absent day carries an acquisition
  *       (習得) / team-install drill — the player-self-run guarantee is enforced.
  *   R3  a team-input with missing/NaN indicator numbers yields finite finalWeights
@@ -15,6 +12,9 @@
  *   R4  a "高校用・中学は試合不可" drill is dropped for a middle-school team (F2).
  *   R5  a drill whose only "セット" marker lives in philosophy_tags / sub_skill is
  *       excluded in-year (F4 now scans tags + sub_skill, not just name/notes).
+ *
+ * (R1 covered the philosophy-floor accounting, which the rebuild removed — 撤去①
+ * フロア強制廃止 — so those cases are gone.)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +27,7 @@ import {
   gradesFit,
   filterPoolForDay,
 } from '../src/filter.js';
-import { assertPhilosophyFloor, assertCoachContext } from '../src/gates.js';
+import { assertCoachContext } from '../src/gates.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Small builders mirroring the engine's plan/day/item shapes.
@@ -63,89 +63,6 @@ function day({ label = '火', minutes = 100, coach_present = true, items = [], b
 }
 
 const DEFENSE_CAT = 'チームディフェンス(オールコートマンツー/ヘルプ/帰陣)';
-
-// ───────────────────────────────────────────────────────────────────────────
-// R1. assertPhilosophyFloor is best-effort (spec #3): a plan that falls short of
-//     a configured floor must WARN, not throw, and the warning must be recorded.
-//     This proves the gate still does its accounting (it isn't a dead no-op) while
-//     honoring the "don't fail the whole week when the pool can't supply it" rule.
-// ───────────────────────────────────────────────────────────────────────────
-test('R1: assertPhilosophyFloor warns (does not throw) on an under-floor plan, and names the shortfall', () => {
-  // Floor demands 40 coach-day minutes of defense; the plan places only 10.
-  const config = {
-    philosophy_floors: {
-      [DEFENSE_CAT]: { min_minutes_per_week: 40, place_on_coach_days: true },
-    },
-  };
-  const plan = {
-    days: [
-      day({
-        label: '火',
-        coach_present: true,
-        items: [item({ category: DEFENSE_CAT, minutes: 10 })],
-      }),
-    ],
-  };
-
-  // Best-effort: under-floor must NOT throw.
-  assert.doesNotThrow(() => assertPhilosophyFloor(plan, config));
-
-  // But the shortfall must be surfaced — the gate did its accounting.
-  assert.ok(Array.isArray(plan.warnings), 'plan.warnings が生成されるべき');
-  assert.ok(
-    plan.warnings.some((w) => w.includes('哲学フロア未達') && w.includes(DEFENSE_CAT)),
-    `フロア未達の警告が記録されるべき（実際: ${JSON.stringify(plan.warnings)}）`,
-  );
-});
-
-test('R1b: assertPhilosophyFloor records NO warning when the floor is met (gate is data-driven, not constant)', () => {
-  // Same floor, but now 40 defense minutes land on a coach-present day → satisfied.
-  const config = {
-    philosophy_floors: {
-      [DEFENSE_CAT]: { min_minutes_per_week: 40, place_on_coach_days: true },
-    },
-  };
-  const plan = {
-    days: [
-      day({
-        label: '火',
-        coach_present: true,
-        items: [item({ category: DEFENSE_CAT, minutes: 40 })],
-      }),
-    ],
-  };
-  assertPhilosophyFloor(plan, config);
-  const floorWarns = (plan.warnings ?? []).filter((w) => w.includes('哲学フロア未達'));
-  assert.equal(
-    floorWarns.length,
-    0,
-    `フロア充足時は未達警告を出さないべき（実際: ${JSON.stringify(floorWarns)}）`,
-  );
-});
-
-test('R1c: coach-day floor ignores minutes placed on coach-absent days (place_on_coach_days intent)', () => {
-  // 40 defense minutes exist, but all on an ABSENT day → must still warn shortfall,
-  // because place_on_coach_days=true requires them on coach-present days.
-  const config = {
-    philosophy_floors: {
-      [DEFENSE_CAT]: { min_minutes_per_week: 40, place_on_coach_days: true },
-    },
-  };
-  const plan = {
-    days: [
-      day({
-        label: '水',
-        coach_present: false,
-        items: [item({ category: DEFENSE_CAT, minutes: 40 })],
-      }),
-    ],
-  };
-  assertPhilosophyFloor(plan, config);
-  assert.ok(
-    (plan.warnings ?? []).some((w) => w.includes('哲学フロア未達') && w.includes('在席日配置分のみ計上')),
-    '不在日配置は在席日フロアに計上されず未達警告が出るべき',
-  );
-});
 
 // ───────────────────────────────────────────────────────────────────────────
 // R2. assertCoachContext throws when a coach-absent day carries a drill players

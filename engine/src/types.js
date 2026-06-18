@@ -69,6 +69,9 @@
  * @property {string} peopleRaw     Original free-text people value (audit trail).
  * @property {boolean} needs_helper  Whether the drill needs a helper (pad/feeder/coach);
  *                                  used in alternative-affinity to keep staffing similar.
+ * @property {string[]} [only_days]  Weekday labels this drill may appear on (e.g. ["土"] for
+ *                                  シャトルラン＝土曜限定). Absent ⇒ no weekday restriction. The
+ *                                  per-day filter drops the drill on any other weekday.
  * @property {string} notes         Free-text notes (used in zone/sets keyword filters).
  * @property {string} [source_name] Attribution.
  * @property {string} [source_url]  Attribution URL.
@@ -109,15 +112,43 @@
  * @property {boolean} [coach_present]  Whether a coach is present that day. When
  *   false, only player-self-runnable content is placed. Defaults to true (present)
  *   when omitted.
+ * @property {number} [run_minutes]  Explicit minutes for the conditioning (ラン/走り込み)
+ *   block this day (e.g. an outdoor-training day = large run). When omitted the day's
+ *   run share is derived from court + minutes (full-court days get a run block; half-court
+ *   days get none). 0 forces no run block.
+ * @property {SessionPart[]} [parts]  When present, the day is split into multiple SEPARATE
+ *   sessions (区画) — e.g. 火 = 外トレ60(走り込み・アジリティ) ＋ 全面60(コート). Each part is
+ *   built as its own fixed-block mini-session against its own court / run / kind, and the
+ *   parts are concatenated (the day still ends with the last part's 静的). The UI renders one
+ *   header + timeline per part. When omitted the day is a single session (the default).
  */
 
 /**
- * A weekly philosophy floor: a category that must receive at least
- * `min_minutes_per_week`, optionally restricted to coach-present days.
- * @typedef {Object} PhilosophyFloor
- * @property {number} min_minutes_per_week  Minimum weekly minutes for the category.
- * @property {boolean} [place_on_coach_days]  When true, the floor must be met on
- *   coach-present days only.
+ * One区画 (session part) of a multi-part day. Lets the owner program a day as two distinct
+ * sessions (火 = 外トレ60 ＋ 全面60) with their own court, minutes, and emphasis (outdoor run/
+ * agility vs. court). `kind:"outdoor"` builds a 走り込み・アジリティ-only session (no curriculum
+ * blocks); `kind:"court"` (default) builds the normal fixed-block court session.
+ * @typedef {Object} SessionPart
+ * @property {string} label      Display label for this part (e.g. "外トレ" / "全面").
+ * @property {number} minutes    Minutes available for this part.
+ * @property {CourtEnum|string} court  Court available for this part.
+ * @property {'outdoor'|'court'} [kind]  Session shape. "outdoor" = run/agility-only (走り込み・
+ *   アジリティ); "court" = normal fixed-block court session. Defaults to "court".
+ * @property {number} [run_minutes]  Explicit run minutes for this part (as on ScheduleDay).
+ * @property {boolean} [no_funda]  Drop the ファンダ block for this part (火 全面60 = 走ってフィニッシュ
+ *   →3on3→5on5, no fundamentals). Defaults to false.
+ */
+
+/**
+ * The week's focus, resolved top-down (year → phase → month headline → week).
+ * Drives drill selection (mastery_bias) and whether the contested block ends with
+ * a 5-on-5 scrimmage (allow_scrimmage). Produced by annualPlan.resolveWeekFocus.
+ * @typedef {Object} WeekFocus
+ * @property {string} headline        This week's focus statement (goals.week / focus_summary SoT).
+ * @property {string[]} mastery_bias  Mastery stages to prefer this week (educational-fit ordering).
+ * @property {boolean} allow_scrimmage  Whether the 対人 block may end with a 5-on-5 scrimmage.
+ * @property {number} [week]          The week-of-month this focus was resolved for.
+ * @property {number} [arcMonth]      The arc month it was resolved from.
  */
 
 /**
@@ -152,8 +183,10 @@
  *                                           delivered (mixed-gender Saturday lecture). A lecture-mode
  *                                           drill already in this list is NOT re-introduced on Saturday
  *                                           (it is now repetition / self-run). Defaults to [] (all new).
- * @property {Object<string, PhilosophyFloor>} [philosophy_floors]  Weekly per-category minutes floors.
- * @property {Object<string, number>} phase_category_weights  Base category weights for the phase.
+ * @property {number} [week_of_month]        Week-of-month (1始まり) used to resolve the week's focus.
+ *                                           Defaults to 1 when omitted.
+ * @property {Object<string, number>} phase_category_weights  Base category weights for the phase
+ *                                           (used now as a per-block category preference, not a hard floor).
  * @property {LoadCaps} load_caps
  */
 
@@ -204,8 +237,18 @@
 
 /**
  * @typedef {Object} PlanBlock
- * @property {"WU"|"技術"|"対人"|"ゲーム"|"CD"} block  Block label.
+ * @property {"アップ"|"ファンダ"|"シュート"|"対人"|"ラン"|"静的"} block  Fixed-skeleton block key.
+ *   Sessions are built as the fixed 6-block order アップ→ファンダ→シュート→対人→ラン→静的
+ *   (warm-up → fundamentals → shooting → contested → conditioning run → static stretch).
  * @property {PlanItem[]} items
+ * @property {number} [part]        On a multi-part day, the 0-based index of the session部 (区画)
+ *                                  this block belongs to. Absent on single-session days. Blocks
+ *                                  carrying the same part index form one mini-session (the fixed
+ *                                  6-block order is asserted WITHIN each part).
+ * @property {string} [part_label]  Display label of the part (e.g. "外トレ" / "全面"), set when
+ *                                  `part` is present so the UI can split headers / timelines.
+ * @property {'outdoor'|'court'} [part_kind]  The part's session shape (outdoor run/agility vs.
+ *                                  court), set when `part` is present.
  */
 
 /**
@@ -217,6 +260,10 @@
  * @property {PlanBlock[]} blocks
  * @property {number} total_minutes        Σ of item minutes across all blocks.
  * @property {number} high_intensity_count Count of 高-intensity items that day.
+ * @property {Array<{label:string, kind:string, minutes:number, court:string}>} [parts]
+ *                                          On a multi-part day (火 = 外トレ60 ＋ 全面60), the
+ *                                          ordered session部 metadata so the UI can render one
+ *                                          header + timeline per part. Absent on single-session days.
  */
 
 /**
@@ -236,7 +283,10 @@
  * @property {number} month
  * @property {string} phase
  * @property {PlanDay[]} days
- * @property {string} focus_summary        Human-readable focus statement.
+ * @property {string} focus_summary        Human-readable focus statement = the week's focus
+ *                                         (resolved top-down via resolveWeekFocus, not a
+ *                                         post-hoc summary of what was allocated).
+ * @property {WeekFocus} [week_focus]      The resolved week focus this plan was built from.
  * @property {string} notes                Free-text planning notes.
  * @property {SaturdayLecture|null} saturday_lecture  The mixed-gender Saturday
  *                                         new-drill lecture for this week (null when
