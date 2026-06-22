@@ -43,9 +43,9 @@ a{color:var(--orange-deep)}
 .btn:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
 .btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .btn-primary:hover{color:var(--orange-ink)}
-.levels{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
-/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。 */
-.lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 16px;font:inherit;font-size:17px;font-weight:600;transition:transform .16s ease}
+.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-width:320px;margin-bottom:16px}
+/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。タブは4等分の等幅。 */
+.lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 0;font:inherit;font-size:17px;font-weight:600;text-align:center;transition:transform .16s ease}
 .lvtab:hover{transform:translateY(-2px)}
 .lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
@@ -211,6 +211,10 @@ a{color:var(--orange-deep)}
 .gb-cell{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:11px 14px}
 .gb-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:3px}
 .gb-val{font-size:14px;font-weight:600;line-height:1.5}
+/* 配布物（印刷）専用の細い目標帯。画面では非表示・印刷でのみ全文を小フォントで1枚に収める */
+.goalbar-pr{display:none}
+.gpr{margin:1px 0;font-size:10px;line-height:1.32;color:var(--ink)}
+.gpr b{color:var(--orange-deep);font-weight:700;margin-right:5px}
 @media (max-width:580px){.goalbar{grid-template-columns:1fr}}
 
 @media (max-width:680px){
@@ -225,9 +229,10 @@ a{color:var(--orange-deep)}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
-  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。月/週の目標バーは画面専用（配布物は日プランのみ） */
+  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。画面用の2分割カードは隠し、配布物には細い目標帯（全文）を出す */
   .wrap{max-width:none;padding:0;zoom:.92}
   .goalbar{display:none}
+  .goalbar-pr{display:block;margin:0 0 7px}
   .drill-overlay{display:none!important}
 }
 `;
@@ -409,7 +414,8 @@ export function goalsBar(data) {
   return `<div class="goalbar">
     <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
     <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
-  </div>`;
+  </div>
+  <div class="goalbar-pr"><p class="gpr"><b>月</b>${esc(g.monthMain || '—')}</p><p class="gpr"><b>週</b>${esc(g.week || '—')}</p></div>`;
 }
 
 /** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
