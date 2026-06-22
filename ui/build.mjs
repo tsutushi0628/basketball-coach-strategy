@@ -41,7 +41,6 @@ export function renderPage({ title, css, body, script }) {
 <body>
 <main class="wrap">
 ${body}
-<p class="foot">エンジン生成（自動）。コーチが微修正して配布する想定。<br>コート図はドリルの動画リンクで代替中（手描き図の差し込み枠は次版で対応）。</p>
 </main>
 <script>${script || clientScript()}</script>
 </body>
@@ -111,7 +110,7 @@ async function main() {
   const phase = data.session.month.phase;
   const indexBody = `
     <h1 style="font-size:clamp(22px,4vw,30px);font-weight:700;letter-spacing:-.01em;margin:2px 0 6px">${esc(data.school)}　練習計画</h1>
-    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.month}月・${esc(phase)}　／　練習メニューは男女共通（コーチ1人が両方を見る）。組違い＝コーチ付き段を男女でずらして回す。</p>
+    <p style="color:var(--mute);font-size:14px;margin-bottom:8px">${data.month}月・${esc(phase)}</p>
     <div class="pgrid">${cards}</div>`;
   // T5: pcard は surface+line-2（shadow廃止）・17px（H2段）
   const indexCss = `

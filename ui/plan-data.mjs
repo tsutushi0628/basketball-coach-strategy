@@ -83,11 +83,11 @@ const dayDateISO = (weekStartDate, dayName) => {
   if (!weekStartDate || !(dayName in WEEKDAY_OFFSET)) return null;
   return addDaysISO(weekStartDate, WEEKDAY_OFFSET[dayName]);
 };
-/** "2026-06-23" を "6/23" に（先頭ゼロ落とし）。 */
-const dateLabelMD = (iso) => {
+/** "2026-06-23" を "2026/06/23" に。 */
+const dateLabelYMD = (iso) => {
   if (!iso) return '';
-  const [, m, d] = iso.split('-');
-  return `${Number(m)}/${Number(d)}`;
+  const [y, m, d] = iso.split('-');
+  return `${y}/${m}/${d}`;
 };
 
 /**
@@ -299,7 +299,7 @@ function buildSession({ annual, drills, config, teamInput }) {
       day: day.day,
       dayLabel: fullDayLabel(day.day),
       date: dateISO, // この曜日の実日付ISO（週起点未設定時は null）
-      dateLabel: dateLabelMD(dateISO), // "6/23"（未設定時は ''）
+      dateLabel: dateLabelYMD(dateISO), // "6/23"（未設定時は ''）
       court: day.court,
       coachPresent: day.coach_present !== false,
       start: hhmm(startMin),
@@ -462,7 +462,7 @@ function toTwoColDay(day, ov, dISO) {
   return {
     ...day, // day/dayLabel/court 等は元日を土台に
     date: dISO,
-    dateLabel: dateLabelMD(dISO), // "6/23"
+    dateLabel: dateLabelYMD(dISO), // "6/23"
     court: ov.court || day.court,
     start: firstFrom || day.start, // 最初のrow.from
     end: lastTo || day.end, // 最後のrow.to
@@ -521,7 +521,7 @@ function toAuthoredDay(day, ov, dISO) {
   return {
     ...day, // day/dayLabel/court 等は元日を土台に
     date: dISO, // 実日付ISO（ヘッダ日付表示に使う）
-    dateLabel: dateLabelMD(dISO), // "6/23"
+    dateLabel: dateLabelYMD(dISO), // "6/23"
     court: ov.court || day.court,
     start: firstFrom || day.start, // 先頭ブロックの開始時刻
     end: lastTo || day.end, // 末尾ブロックの終了時刻（タイムライン終了行に出る）

@@ -20,6 +20,7 @@ export const TOKENS = `
   --boys:#ef7a32; --girls:#b8623b;
   --line:rgba(168,110,64,.13); --line-2:rgba(168,110,64,.22); --hair:rgba(42,32,26,.09);
   --scrim:rgba(42,32,26,.32);
+  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
 `;
 
 /** 共通ベースCSS。T5: shadow廃止→border+面の濃淡2値で区切りを表現。
@@ -203,23 +204,30 @@ a{color:var(--orange-deep)}
 .note{font-size:12px;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 15px;margin:14px 0;line-height:1.6}
 .assume{font-size:12px;color:var(--mute);line-height:1.7;margin-top:6px}
 .assume li{margin-left:18px}
-/* T6: foot は 12px（補助段） */
-.foot{margin-top:34px;color:var(--mute);font-size:12px;text-align:center;letter-spacing:.03em;line-height:1.7}
+/* フッター: タイトルを小さく置くだけ（主役は計画本体） */
+.foot{margin-top:26px;color:var(--mute);font-size:11px;text-align:center;letter-spacing:.04em}
+/* 月/週の目標バー（この日の狙いの上・横2分割） */
+.goalbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.gb-cell{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:11px 14px}
+.gb-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:3px}
+.gb-val{font-size:14px;font-weight:600;line-height:1.5}
+@media (max-width:580px){.goalbar{grid-template-columns:1fr}}
 
 @media (max-width:680px){
   .kgrid{grid-template-columns:1fr}
   .arccell{flex-basis:30%}
 }
-/* T5: print規則 — 画面と印刷が同一構造（罫線ベース）なので border 差し替えは不要。
- * 操作系非表示・タブ全展開・page-break の既存3点のみ維持。背景色は #fff に。 */
+/* T5: print規則 — 画面と印刷が同一構造（罫線ベース）。いま選んでいるタブ（日/週/月/年）と
+ * その中で表示中の日だけを印刷する（hidden は印刷でも非表示のまま）。操作系は非表示・背景は #fff に。 */
 @media print{
+  @page{margin:8mm}
   body{background:#fff}
-  .toolbar,.levels,.daytabs,.modetoggle,.foot{display:none}
+  .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
-  .day[hidden],.level[hidden]{display:block!important}
   .interact[hidden]{display:none!important}
-  .wrap{max-width:none;padding:0}
-  .pageb{page-break-after:always}
+  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。月/週の目標バーは画面専用（配布物は日プランのみ） */
+  .wrap{max-width:none;padding:0;zoom:.92}
+  .goalbar{display:none}
   .drill-overlay{display:none!important}
 }
 `;
@@ -300,17 +308,15 @@ export function modeToggle() {
 export function dayHeader(pd, month) {
   // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
   const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${month}月 ${esc(pd.dayLabel)}`;
-  // コーチ指定の上書き日: 「コーチ指定」バッジ＋対象性別を出し、狙いは手書き note。
-  // 既存トークンのみ（tag-coach=文字ラベル・gchip=既存ドット）。新規色/emoji/色帯なし。
+  // コーチ指定の上書き日: 対象性別チップと手書きの狙いだけ出す。
+  // 「コーチ指定」等の内部ラベルは配布物に出さない（コーチが見て無意味なため）。
   // 男女2列日（twoCol）は男女両方が対象なので男子・女子チップを並べ、単一性別表記はしない。
   if (pd.source === 'coach') {
-    const teamChip = pd.twoCol
-      ? ` ${genderChip('男子')} ${genderChip('女子')}`
-      : (pd.team ? ` ${genderChip(pd.team)}` : '');
+    // twoCol 日は男女2列が下に並ぶのでヘッダの男女チップは常に両方＝選択肢ゼロ（出さない）。単一性別日だけ対象を出す。
+    const teamChip = pd.twoCol ? '' : (pd.team ? ` ${genderChip(pd.team)}` : '');
     const aimScope = pd.twoCol ? '' : (pd.team ? `（${esc(pd.team)}）` : '');
     return `<div class="dayhead">
-      <div class="dh-t">${dateHead}
-        <span class="tag tag-coach" style="margin-left:10px">コーチ指定</span>${teamChip}
+      <div class="dh-t">${dateHead}${teamChip}
         <span class="dh-court">${esc(pd.court)}</span>
       </div>
       <div class="dh-aim"><span class="dh-aiml">この日のねらい${aimScope}</span>${esc(pd.aim)}</div>
@@ -323,7 +329,7 @@ export function dayHeader(pd, month) {
   const meta = `${partsNote}・${esc(pd.start)}〜${esc(pd.end)}・計${pd.totalMinutes}分${pd.coachPresent ? '' : '・コーチ不在'}`;
   return `<div class="dayhead">
     <div class="dh-t">${dateHead}<span class="dh-court">${meta}</span></div>
-    <div class="dh-aim"><span class="dh-aiml">本日の狙い（男女共通）</span>${esc(pd.aim)}</div>
+    <div class="dh-aim"><span class="dh-aiml">本日の狙い</span>${esc(pd.aim)}</div>
   </div>`;
 }
 
@@ -397,12 +403,21 @@ function kpiCard(label, gender, g) {
   return `<div class="kteam"><div class="kth">${genderChip(gender)}の指標</div><div class="kpis">${meters}</div></div>`;
 }
 
+/** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。 */
+export function goalsBar(data) {
+  const g = data.session.goals;
+  return `<div class="goalbar">
+    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
+  </div>`;
+}
+
 /** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
 export function goalsSection(data) {
   const g = data.session.goals;
   const qual = g.qualitative.map((q) => `・${esc(q)}`).join('<br>');
   return `<section class="goals">
-    <h3>目標（練習は男女共通／チェックする数字は各チーム別）</h3>
+    <h3>目標（チェックする数字は各チーム別）</h3>
     <div class="gline"><span class="lab">今月</span><span class="txt">${esc(g.monthMain)}</span></div>
     <div class="gline"><span class="lab">今週</span><span class="txt">${esc(g.week)}</span></div>
     <div class="gline"><span class="lab">質</span><span class="txt">${qual || '—'}</span></div>
@@ -467,14 +482,14 @@ export function monthSection(data) {
     m.kpiHints && m.kpiHints.length
       ? `<div class="mc-kpi"><div class="kk">チェックする数字</div><div class="kv">${m.kpiHints.map(esc).join('・')}</div></div>`
       : '';
-  return `<h3 class="lvh">${data.month}月にやること（年間予定より・男女共通）</h3>
+  return `<h3 class="lvh">${data.month}月にやること（年間予定より）</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${data.month}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
       <div class="mc-aim">${esc(m.headline)}</div>
       ${peak}
       ${kpi}
     </div>
-    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定どおり。練習メニューは男女共通です。</p>`;
+    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定どおり。</p>`;
 }
 
 /** ピークkeyから表示名を引く。 */
@@ -500,7 +515,7 @@ export function clientScript() {
     document.querySelectorAll('.lvtab').forEach(function(x){x.classList.toggle('on',x===b);});
     tabs('level',b.getAttribute('data-go'));
   });});
-  var dts=document.querySelectorAll('.daytab');
+  var dts=document.querySelectorAll('.cal-go');
   function showDay(t){document.querySelectorAll('[data-day]').forEach(function(p){if(p.classList.contains('day'))p.hidden=p.getAttribute('data-day')!==t;});
     dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curDay=t;}
   dts.forEach(function(b){b.addEventListener('click',function(){showDay(b.getAttribute('data-go'));});});
@@ -579,7 +594,7 @@ export function plainText(data, pd) {
   if (pd.source === 'coach') {
     // 男女2列日（twoCol）: 時間スロットごとに男女2列で出す。both は男女共通の1本。
     if (pd.twoCol) {
-      L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・男女2列）${pd.title || '練習メニュー'}（コーチ指定）`);
+      L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・男女2列）${pd.title || '練習メニュー'}`);
       L.push('');
       L.push(`■ この日のねらい：${pd.aim}`);
       const cellText = (cell) =>
@@ -598,7 +613,7 @@ export function plainText(data, pd) {
       return L.join('\n');
     }
     const teamTxt = pd.team ? `・対象：${pd.team}` : '・男女共通';
-    L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}${teamTxt}）${pd.title || '練習メニュー'}（コーチ指定）`);
+    L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}${teamTxt}）${pd.title || '練習メニュー'}`);
     L.push('');
     L.push(`■ この日のねらい：${pd.aim}`);
     for (const b of pd.blocks) {
@@ -617,7 +632,7 @@ export function plainText(data, pd) {
   const headCourt = Array.isArray(pd.parts) && pd.parts.length > 1
     ? pd.parts.map((p) => `${p.label}${p.totalMinutes}分`).join('＋')
     : pd.court;
-  L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${headCourt}・${pd.start}〜${pd.end}）練習メニュー（男女共通）`);
+  L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${headCourt}・${pd.start}〜${pd.end}）練習メニュー`);
   L.push('');
   L.push(`■ 本日の狙い：${pd.aim}`);
 

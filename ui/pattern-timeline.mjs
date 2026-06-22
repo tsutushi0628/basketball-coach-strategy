@@ -9,7 +9,7 @@
 import {
   esc, modeTag, modeMark, altLine, videoLink, plainText, BLOCK_TINT,
   modeToggle, dayHeader, partHeader,
-  goalsSection, monthSection, yearSection, assumptionsNote,
+  goalsSection, monthSection, yearSection, assumptionsNote, goalsBar,
   genderChip, VIDEO_SVG,
 } from './render-shared.mjs';
 
@@ -248,7 +248,6 @@ function twoColTimeline(pd) {
       <div class="spine-clk">
         <span class="tk">${esc(row.from)}</span>
         <span class="spine-dot" style="background:var(--orange)"></span>
-        <span class="spine-half">${esc(row.from)}–${esc(row.to)}</span>
       </div>
       <div class="spine-side spine-self tc2-cell">${cellInner(row.girls)}</div>
     </div>`;
@@ -516,7 +515,7 @@ function weekLevel(data) {
   const totalH = axisY(axis.axisEnd, axis) + 8;
 
   // 曜日ヘッダ
-  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: 'コーチ指定' };
+  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: '' };
   const SHARE_NOTE  = { rotation: '（左右の段取りは日タブ）', together: '', independent: '', authored: '' };
 
   const dayHeads = data.days.map((d, i) => {
@@ -799,7 +798,7 @@ const PATTERN_CSS = `
 .spine-dot{width:9px;height:9px;border-radius:50%}
 .spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
-/* ── コーチ指定の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */
+/* ── 上書き日の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */
 /* 各セルは見出し(tll-lg=16px)を上、itemリスト(tdn=14px)を下に積む縦構成 */
 .tc2-cell{align-items:stretch}
 .tc2-head{margin-bottom:6px}
@@ -860,23 +859,77 @@ const PATTERN_CSS = `
 .dp-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
 .dp-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--orange-deep);text-decoration:none}
 .dp-link:hover{text-decoration:underline}
+
+/* 期間ピッカー（レベルごと: 日=曜日 / 週=週頭 / 月=月。データのある期間のみ実選択・他はグレー） */
+.picker{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+.pk{appearance:none;border:1px solid var(--hair);background:var(--surface);color:var(--mute);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:46px;text-align:center;cursor:pointer;transition:transform .14s ease}
+.pk small{font-weight:400;font-size:11px;opacity:.85}
+.pk:hover{transform:translateY(-2px)}
+.pk.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
+.pk.sun{color:var(--sun)}
+.pk.sat{color:var(--sat)}
+.pk.on.sun,.pk.on.sat{color:var(--orange-ink)}
+.pk-off{opacity:.4;cursor:default;border-style:dashed}
+.pk-off:hover{transform:none}
 `;
 
 export const meta = { id: 'timeline', name: 'タイムライン', tagline: '練習の流れを縦の比例タイムラインで・男女共通メニュー' };
 
+/** 日ピッカー: 日〜土の曜日ボタン。練習日のみ選択可（cal-go）、無い曜日はグレーアウト。日曜始まり。 */
+function dayPicker(data) {
+  const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  const pr = new Map();
+  data.days.forEach((d, i) => { if (d.day) pr.set(d.day, { dateLabel: d.dateLabel, first: i === 0 }); });
+  const btns = WD.map((w, i) => {
+    const wk = i === 0 ? ' sun' : i === 6 ? ' sat' : '';
+    const p = pr.get(w);
+    if (!p) return `<span class="pk pk-off${wk}">${w}</span>`;
+    const md = p.dateLabel ? p.dateLabel.slice(5) : '';
+    return `<button class="pk cal-go${p.first ? ' on' : ''}${wk}" data-go="${esc(w)}" type="button">${w}${md ? `<small>${esc(md)}</small>` : ''}</button>`;
+  });
+  return `<div class="picker" data-print-hide>${btns.join('')}</div>`;
+}
+
+/** 週ピッカー: 表示月に重なる週（日曜始まり）を「yyyy/mm/dd〜」で並べる。データのある週のみ実選択・他はグレー。 */
+function weekPicker(data) {
+  const withDate = data.days.find((d) => d.dateLabel);
+  if (!withDate) return '';
+  const [y, m, d] = withDate.dateLabel.split('/').map(Number);
+  const base = new Date(y, m - 1, d);
+  const activeSun = new Date(y, m - 1, d - base.getDay());
+  const monthFirst = new Date(y, m - 1, 1);
+  const monthEnd = new Date(y, m, 0);
+  const fmt = (dt) => `${dt.getFullYear()}/${String(dt.getMonth() + 1).padStart(2, '0')}/${String(dt.getDate()).padStart(2, '0')}`;
+  const items = [];
+  for (const s = new Date(y, m - 1, 1 - monthFirst.getDay()); s <= monthEnd; s.setDate(s.getDate() + 7)) {
+    const on = s.getTime() === activeSun.getTime();
+    items.push(`<span class="pk ${on ? 'on' : 'pk-off'}">${fmt(s)}〜</span>`);
+  }
+  return `<div class="picker" data-print-hide>${items.join('')}</div>`;
+}
+
+/** 月ピッカー: 表示月から半年ぶんを「yyyy/mm」で並べる。今月のみ実選択・他はグレー（詳細は今月のみ生成）。 */
+function monthPicker(data) {
+  const withDate = data.days.find((d) => d.dateLabel);
+  const y = withDate ? Number(withDate.dateLabel.split('/')[0]) : null;
+  const m = withDate ? Number(withDate.dateLabel.split('/')[1]) : data.month;
+  if (!y) return '';
+  const items = [];
+  for (let k = 0; k < 6; k++) {
+    let mm = m + k, yy = y;
+    while (mm > 12) { mm -= 12; yy += 1; }
+    const lab = `${yy}/${String(mm).padStart(2, '0')}`;
+    items.push(`<span class="pk ${k === 0 ? 'on' : 'pk-off'}">${lab}</span>`);
+  }
+  return `<div class="picker" data-print-hide>${items.join('')}</div>`;
+}
+
 export function render(data) {
-  const dayTabs = data.days
-    .map(
-      (d, i) => `<button class="daytab${i === 0 ? ' on' : ''}" data-go="${esc(d.day)}" type="button">${esc(d.day)}<small>${d.dateLabel ? esc(d.dateLabel) : ''}</small></button>`,
-    )
-    .join('');
   const dayTimelines = data.days.map((d, i) => dayTimeline(data, d, i)).join('\n');
 
   return {
     css: PATTERN_CSS,
     body: `
-    <h1 style="font-size:27px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px">${esc(data.school)}　練習タイムライン</h1>
-    <p style="color:var(--mute);font-size:12px;margin-bottom:14px">${data.month}月　／　練習メニューは男女共通。組違い＝コーチ1人で男女を回す段取りを切り替えられます。</p>
     <div class="levels" role="tablist">
       <button class="lvtab on" data-go="day" type="button">日</button>
       <button class="lvtab" data-go="week" type="button">週</button>
@@ -890,14 +943,16 @@ export function render(data) {
         <button class="btn btn-primary" id="printBtn" type="button">印刷 / PDFで保存</button>
         <button class="btn" id="copyBtn" type="button">テキストでコピー</button>
       </div>
-      <div class="daytabs" data-print-hide>${dayTabs}</div>
+      ${dayPicker(data)}
+      ${goalsBar(data)}
       ${dayTimelines}
     </div>
 
-    <div class="level" data-level="week" hidden>${weekLevel(data)}</div>
-    <div class="level" data-level="month" hidden>${monthSection(data)}${goalsSection(data)}</div>
+    <div class="level" data-level="week" hidden>${weekPicker(data)}${weekLevel(data)}</div>
+    <div class="level" data-level="month" hidden>${monthPicker(data)}${monthSection(data)}${goalsSection(data)}</div>
     <div class="level" data-level="year" hidden>${yearSection(data)}${assumptionsNote(data)}</div>
     ${drillDetailPanels(data)}
+    <p class="foot">${esc(data.school)}　練習タイムライン</p>
     `,
   };
 }
