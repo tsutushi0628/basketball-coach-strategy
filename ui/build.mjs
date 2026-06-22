@@ -10,16 +10,26 @@
  * 出力: ui/pattern-<id>.html（各パターン・自己完結）＋ ui/index.html（パターン選択）
  */
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { writeFileSync, readdirSync } from 'node:fs';
 
+import { createLocalStorage } from '../engine/src/storage.js';
 import { buildPlanData } from './plan-data.mjs';
 import { BASE_CSS, clientScript, esc } from './render-shared.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const engineRoot = resolve(__dirname, '../engine');
+const repoRoot = resolve(__dirname, '..');
 
-function page({ title, css, body, script }) {
+/**
+ * 1パターン分の HTML 文書を組み立てる純関数（外殻＋CSS＋body＋client script）。
+ * 静的ビルド(build.mjs)・Cloud Function 双方から再利用する（描画ロジックは触らない）。
+ *
+ * @param {{title:string, css?:string, body:string, script?:string}} arg
+ * @returns {string} 完全な HTML 文書
+ */
+export function renderPage({ title, css, body, script }) {
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -38,8 +48,31 @@ ${body}
 </html>`;
 }
 
+/**
+ * 静的ビルド用のローカル storage を組む（ドリル台帳は docs 配下・config は男女別）。
+ * Cloud Function は同じ buildPlanData を Firestore storage で呼ぶ（build.mjs はローカルJSON固定）。
+ * @returns {{storage: import('../engine/src/storage.js').Storage, girlsStorage: import('../engine/src/storage.js').Storage}}
+ */
+export function localStorages() {
+  const drillsPath = resolve(repoRoot, 'docs/practice-knowledge/data/drills.json');
+  const storage = createLocalStorage({
+    drillsPath,
+    configPath: resolve(engineRoot, 'data/config.sample.json'),
+    inputPath: resolve(engineRoot, 'data/team-input.sample.json'),
+    overridesPath: resolve(engineRoot, 'data/overrides.json'),
+    annualPath: resolve(engineRoot, 'data/annual-plan.json'),
+  });
+  const girlsStorage = createLocalStorage({
+    drillsPath,
+    configPath: resolve(engineRoot, 'data/config.girls.sample.json'),
+    inputPath: resolve(engineRoot, 'data/team-input.girls.sample.json'),
+    annualPath: resolve(engineRoot, 'data/annual-plan.json'),
+  });
+  return { storage, girlsStorage };
+}
+
 async function main() {
-  const data = await buildPlanData();
+  const data = await buildPlanData(localStorages());
 
   // pattern-*.mjs を発見して読み込む。
   const files = readdirSync(__dirname)
@@ -55,7 +88,7 @@ async function main() {
   const built = [];
   for (const p of patterns) {
     const { css, body } = p.render(data);
-    const html = page({
+    const html = renderPage({
       title: `${data.school} ${data.month}月 練習メニュー（男子・女子） — ${p.meta.name}`,
       css,
       body,
@@ -90,7 +123,7 @@ async function main() {
     .pgo{font-size:12px;color:var(--orange-deep);font-weight:700;margin-top:10px}`;
   writeFileSync(
     resolve(__dirname, 'index.html'),
-    page({ title: `${data.school} 練習計画（男子・女子）`, css: indexCss, body: indexBody, script: '' }),
+    renderPage({ title: `${data.school} 練習計画（男子・女子）`, css: indexCss, body: indexBody, script: '' }),
     'utf8',
   );
 
@@ -98,7 +131,11 @@ async function main() {
   if (data.warnings.length) process.stdout.write(`エンジン注記: ${data.warnings.length}件（空ブロック等・計画は生成済み）\n`);
 }
 
-main().catch((e) => {
-  process.stderr.write(`UIビルド失敗: ${e.stack || e.message}\n`);
-  process.exitCode = 1;
-});
+// 直接実行時（node ui/build.mjs）のみ静的ビルドを走らせる。
+// Cloud Function が renderPage / localStorages を import するときは main() を起動しない。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    process.stderr.write(`UIビルド失敗: ${e.stack || e.message}\n`);
+    process.exitCode = 1;
+  });
+}

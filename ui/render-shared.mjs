@@ -236,6 +236,7 @@ export const BLOCK_TINT = {
   対人: 'var(--terra)',
   ラン: 'var(--sage)',
   静的: 'var(--mute)',
+  ゲーム: 'var(--orange)',
   // 表示ラベル（together行 row.label 経由の参照用）
   ファンダメンタル: 'var(--orange)',
   走り込み: 'var(--sage)',
@@ -297,13 +298,31 @@ export function modeToggle() {
 
 /** 日ヘッダ（曜日・コート・時間・本日の狙い）。 */
 export function dayHeader(pd, month) {
+  // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
+  const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${month}月 ${esc(pd.dayLabel)}`;
+  // コーチ指定の上書き日: 「コーチ指定」バッジ＋対象性別を出し、狙いは手書き note。
+  // 既存トークンのみ（tag-coach=文字ラベル・gchip=既存ドット）。新規色/emoji/色帯なし。
+  // 男女2列日（twoCol）は男女両方が対象なので男子・女子チップを並べ、単一性別表記はしない。
+  if (pd.source === 'coach') {
+    const teamChip = pd.twoCol
+      ? ` ${genderChip('男子')} ${genderChip('女子')}`
+      : (pd.team ? ` ${genderChip(pd.team)}` : '');
+    const aimScope = pd.twoCol ? '' : (pd.team ? `（${esc(pd.team)}）` : '');
+    return `<div class="dayhead">
+      <div class="dh-t">${dateHead}
+        <span class="tag tag-coach" style="margin-left:10px">コーチ指定</span>${teamChip}
+        <span class="dh-court">${esc(pd.court)}</span>
+      </div>
+      <div class="dh-aim"><span class="dh-aiml">この日のねらい${aimScope}</span>${esc(pd.aim)}</div>
+    </div>`;
+  }
   // 2部構成の日（火）は日全体の時間帯と「2部構成」である旨を示す（各部の詳細は部ヘッダで）。
   const partsNote = Array.isArray(pd.parts) && pd.parts.length > 1
     ? `・${pd.parts.length}部構成（${pd.parts.map((p) => `${esc(p.label)}${p.totalMinutes}分`).join(' ＋ ')}）`
     : `・${esc(pd.court)}`;
   const meta = `${partsNote}・${esc(pd.start)}〜${esc(pd.end)}・計${pd.totalMinutes}分${pd.coachPresent ? '' : '・コーチ不在'}`;
   return `<div class="dayhead">
-    <div class="dh-t">${month}月 ${esc(pd.dayLabel)}<span class="dh-court">${meta}</span></div>
+    <div class="dh-t">${dateHead}<span class="dh-court">${meta}</span></div>
     <div class="dh-aim"><span class="dh-aiml">本日の狙い（男女共通）</span>${esc(pd.aim)}</div>
   </div>`;
 }
@@ -555,6 +574,46 @@ function plainBlocks(L, blocks) {
 /** 貼り付け用プレーンテキスト（男女2列スワップの段取り＋共通メニュー）。 */
 export function plainText(data, pd) {
   const L = [];
+
+  // コーチ指定の上書き日: 手書き内容をそのまま箇条書きにする（rotation/共通メニュー段取りは出さない）。
+  if (pd.source === 'coach') {
+    // 男女2列日（twoCol）: 時間スロットごとに男女2列で出す。both は男女共通の1本。
+    if (pd.twoCol) {
+      L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・男女2列）${pd.title || '練習メニュー'}（コーチ指定）`);
+      L.push('');
+      L.push(`■ この日のねらい：${pd.aim}`);
+      const cellText = (cell) =>
+        (cell.items || []).map((it) => `${it.name}${it.note ? `（${it.note}）` : ''}`).join('／');
+      for (const r of pd.rows) {
+        L.push('');
+        L.push(`■ ${r.from}〜${r.to}`);
+        if (r.both) {
+          L.push(`　[男女共通] ${r.both.label}：${cellText(r.both)}`);
+        } else {
+          L.push(`　男子｜${r.boys ? `${r.boys.label}：${cellText(r.boys)}` : '—'}`);
+          L.push(`　女子｜${r.girls ? `${r.girls.label}：${cellText(r.girls)}` : '—'}`);
+        }
+      }
+      L.push('　・終了（今日の振り返りひとことで解散）');
+      return L.join('\n');
+    }
+    const teamTxt = pd.team ? `・対象：${pd.team}` : '・男女共通';
+    L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}${teamTxt}）${pd.title || '練習メニュー'}（コーチ指定）`);
+    L.push('');
+    L.push(`■ この日のねらい：${pd.aim}`);
+    for (const b of pd.blocks) {
+      L.push('');
+      L.push(`■ ${b.label}`);
+      for (const it of b.items) {
+        const mins = it.minutes != null && it.minutes > 0 ? `（${it.minutes}分）` : '';
+        const note = it.note ? `　${it.note}` : '';
+        L.push(`　・${it.name}${mins}${note}`);
+      }
+    }
+    L.push('　・終了（今日の振り返りひとことで解散）');
+    return L.join('\n');
+  }
+
   const headCourt = Array.isArray(pd.parts) && pd.parts.length > 1
     ? pd.parts.map((p) => `${p.label}${p.totalMinutes}分`).join('＋')
     : pd.court;

@@ -1,0 +1,58 @@
+{
+  "firestore": {
+    "database": "basketball-strategy-db",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "render",
+        "region": "asia-northeast1"
+      }
+    ]
+  },
+  "emulators": {
+    "functions": {
+      "port": 5021
+    },
+    "firestore": {
+      "port": 8281
+    },
+    "hosting": {
+      "port": 8088
+    },
+    "hub": {
+      "port": 4420,
+      "host": "127.0.0.1"
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4020
+    },
+    "singleProjectMode": true
+  }
+}

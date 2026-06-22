@@ -10,12 +10,7 @@
  *   - クレンジング後に空になるドリルは §2.4 のフォールバック文字列で表示。
  */
 
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
 import { AIM_MAP, SHORT_CAT } from './plan-data.mjs';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** §1.4 notesクレンジング対象の固定語リスト。 */
 const MEMO_WORDS = [
@@ -78,14 +73,16 @@ export function cleanDrillNotes(notes) {
 
 /**
  * ドリル詳細レジストリを構築する。
- * 素の drills.json（normalize 前）を読み、名前→詳細オブジェクトの Map を返す。
+ * 素レコード（normalize 前・balls/people 等を温存）から名前→詳細オブジェクトの Map を返す。
+ * データ源（ローカルJSON or Firestore）は呼び出し側 storage.getDrills() が決める。
  *
+ * @param {Array<object>} rawDrills 素のドリルレコード配列（storage.getDrills() の戻り値）
  * @returns {Map<string, object>}
  */
-export function buildDrillRegistry() {
-  const drillsPath = resolve(__dirname, '../docs/practice-knowledge/data/drills.json');
-  const rawDrills = JSON.parse(readFileSync(drillsPath, 'utf8'));
-
+export function buildDrillRegistry(rawDrills) {
+  if (!Array.isArray(rawDrills)) {
+    throw new Error('buildDrillRegistry: rawDrills 配列の注入が必須です');
+  }
   return new Map(
     rawDrills.map((d) => {
       const notesClean = cleanDrillNotes(d.notes);

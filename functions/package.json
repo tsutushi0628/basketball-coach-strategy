@@ -1,0 +1,18 @@
+{
+  "name": "basketball-coach-strategy-functions",
+  "version": "1.0.0",
+  "description": "練習メニュー配信 Cloud Function（Firestore → 既存エンジン/描画 → HTML）",
+  "type": "module",
+  "main": "index.mjs",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "node -e \"process.stdout.write('functions: ESM JS — no build step\\n')\""
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "firebase-admin": "^13.7.0",
+    "firebase-functions": "7.2.5"
+  }
+}

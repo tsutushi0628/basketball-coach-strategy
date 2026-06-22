@@ -11,6 +11,8 @@
   },
   "current_month": 7,
   "week_of_month": 1,
+  "_week_start_date_note": "表示週の実日付起点（この週の月曜）。フェーズ・週焦点は current_month（=7・準備始動の型づくり）で解決し、暦日だけこの起点から算出する（火=+1日…土=+5日）。上書きはこの暦日一致で当てる。",
+  "week_start_date": "2026-06-22",
   "phase": "準備（始動）＋初戦",
   "_team_model_note": "男子は単独チーム。男女は別チーム別計画で、体育館共有時の組違い（ローテ/合同）は2チームを生成した後にUIのプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false）。",
   "_phase_note": "新チームは男女とも7月始動扱い（current_month=7・準備始動アーク）。phase / phase_category_weights は CLI 単独実行用の静的フォールバック。UI は engine/data/annual-plan.json から性別＋暦月で解決して上書きする（resolveMonth が new_team_start_month=7 を準備始動アークに合わせる）。week_of_month は週の焦点（型づくり/反復）を割る週番号。",

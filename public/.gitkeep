@@ -1,0 +1,3 @@
+# Hosting の public ルート。実画面は Cloud Function render が生成して返すため、
+# ここに index.html を置かない（静的ファイルが rewrite より優先されてしまうため）。
+# 全リクエストは firebase.json hosting.rewrites の "**" -> function render に流れる。

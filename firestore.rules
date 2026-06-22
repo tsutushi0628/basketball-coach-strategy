@@ -1,0 +1,18 @@
+rules_version = '2';
+
+/**
+ * basketball-coach-strategy Firestore セキュリティルール
+ *
+ * 設計原則（firebase-kit 基盤）: クライアントから Firestore への直アクセスを全面禁止。
+ * 全データ操作は Cloud Functions（Admin SDK）経由でのみ行う。
+ * Admin SDK はセキュリティルールをバイパスするため、Functions からのアクセスは許可される。
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // デフォルト: 全ドキュメントへのクライアント直アクセスを禁止。
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
