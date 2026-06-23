@@ -203,7 +203,12 @@ export function editorScript() {
     if(!raw)return {};
     try{var o=JSON.parse(raw);return (o&&typeof o==='object')?o:{};}catch(e){return {};}
   }
-  function saveStore(obj){localStorage.setItem(STORE,JSON.stringify(obj));}
+  // localStorage 書き込み。QuotaExceeded/プライベートモードで例外が出ても doSave を止めないよう
+  // 成否を boolean で返す（例外は握って継続・呼び出し側がメッセージ表示）。
+  function saveStore(obj){
+    try{localStorage.setItem(STORE,JSON.stringify(obj));return true;}
+    catch(e){return false;}
+  }
   function curDay(){
     var nodes=document.querySelectorAll('.day[data-date]');
     for(var i=0;i<nodes.length;i++){if(!nodes[i].hidden)return nodes[i];}
@@ -289,21 +294,54 @@ export function editorScript() {
         '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
       '<div class="spine-band right spine-band-end"><span class="tbl">終了</span><span class="tbm">今日の振り返りひとことで解散。</span></div>'+
     '</div>';
-    return genderHeader+'<div class="spine">'+rowsHtml+endRow+'</div>';
+    return genderHeader+'<div id="plan-top" class="spine">'+rowsHtml+endRow+'</div>';
   }
-  // article 本体の中身（dayHeader + timeline）を ov から作る。plain プレーンは保持しない。
+  // 既存「テキストでコピー」用のプレーンテキスト（編集中 override から組む）。
+  // 既存 plainText(twoCol分岐) と同趣旨: 日付（曜日）／狙い／各行 from-to ＋ 男女別 or 男女共通。
+  function cellPlain(cell){
+    if(!cell)return '';
+    var head=cell.label||cell.block||'';
+    var names=(cell.items||[]).map(function(it){return it.name+(it.note?'（'+it.note+'）':'');}).join('／');
+    return head+(names?'：'+names:'');
+  }
+  function plainTextOf(ov){
+    var L=[];
+    L.push(dateLabelISO(ov.date,ov.weekday)+(ov.court?'（'+ov.court+'）':'')+(ov.title?' '+ov.title:''));
+    L.push('');
+    L.push('■ この日のねらい：'+(ov.aim||''));
+    (ov.rows||[]).forEach(function(r){
+      L.push('');
+      L.push('■ '+(r.from||'')+'〜'+(r.to||''));
+      if(r.both){
+        L.push('　[男女共通] '+cellPlain(r.both));
+      }else{
+        L.push('　男子｜'+(r['男子']?cellPlain(r['男子']):'—'));
+        L.push('　女子｜'+(r['女子']?cellPlain(r['女子']):'—'));
+      }
+    });
+    L.push('　・終了（今日の振り返りひとことで解散）');
+    return L.join('\\n');
+  }
+  // article 本体の中身（dayHeader + timeline + plain）を ov から作る。
+  // plain は既存「テキストでコピー」が .day ... .plain を読むため必ず含める（無いと別日にフォールバック）。
   function renderDay(article,ov){
-    article.innerHTML=dayHeaderHtml(ov)+timelineHtml(ov);
+    article.innerHTML=dayHeaderHtml(ov)+timelineHtml(ov)+
+      '<pre class="plain" hidden>'+esc(plainTextOf(ov))+'</pre>';
   }
 
   // ── 起動時スナップショット（自動に戻す用）と localStorage 適用 ──
   var SNAP={}; // date -> 元 innerHTML
-  function eachDay(fn){document.querySelectorAll('.day[data-date]').forEach(fn);}
+  // data-date が非空（実ISO）の日のみ対象（空文字日は "" キー衝突を避けるため除外）。
+  function eachDay(fn){
+    document.querySelectorAll('.day[data-date]').forEach(function(a){
+      var date=(a.getAttribute('data-date')||'').trim();
+      if(date)fn(a,date);
+    });
+  }
   function bootstrap(){
-    eachDay(function(a){SNAP[a.getAttribute('data-date')]=a.innerHTML;});
+    eachDay(function(a,date){SNAP[date]=a.innerHTML;});
     var store=loadStore();
-    eachDay(function(a){
-      var date=a.getAttribute('data-date');
+    eachDay(function(a,date){
       if(store[date])renderDay(a,store[date]);
     });
   }
@@ -413,6 +451,14 @@ export function editorScript() {
       '</div>';
   }
   function renderPanel(){panel.innerHTML=panelHtml();}
+  // 属性値内のダブルクォートだけ無害化（data-side は日本語可・"both"等）。
+  function cssAttr(s){return String(s).replace(/"/g,'\\\\"');}
+  // 再構築後に指定セレクタの入力へフォーカス（無ければ無視）。
+  function focusIn(sel){
+    if(!panel)return;
+    var el=panel.querySelector(sel);
+    if(el&&typeof el.focus==='function')el.focus();
+  }
 
   // フォーム入力値を model に取り込む（保存・both切替の前に呼ぶ）。
   function collectInputs(){
@@ -450,13 +496,26 @@ export function editorScript() {
     if(act==='save'){doSave();return;}
     if(act==='cancel'){closePanel();return;}
     collectInputs(); // 構造変更の前に現在値を取り込む
-    if(act==='add-row'){model.rows.push(blankRow());renderPanel();return;}
+    if(act==='add-row'){
+      var newRi=model.rows.length;
+      model.rows.push(blankRow());renderPanel();
+      // 再構築でフォーカスが外れるので、新規行の最初の時刻 input へ戻す。
+      focusIn('.ed-row[data-ri="'+newRi+'"] [data-k="from"]');
+      return;
+    }
     var rowEl=btn.closest('.ed-row');
     var ri=rowEl?Number(rowEl.getAttribute('data-ri')):-1;
     if(act==='del-row'){if(ri>=0)model.rows.splice(ri,1);if(model.rows.length===0)model.rows.push(blankRow());renderPanel();return;}
     if(act==='add-item'){
       var cellEl=btn.closest('.ed-cell');var side=cellEl.getAttribute('data-side');
-      var cell=cellOf(model.rows[ri],side);if(cell)cell.items.push({name:'',note:''});renderPanel();return;
+      var cell=cellOf(model.rows[ri],side);
+      if(cell){
+        var newIi=cell.items.length;
+        cell.items.push({name:'',note:''});renderPanel();
+        // 追加した項目の名前 input へフォーカス。
+        focusIn('.ed-item[data-ri="'+ri+'"][data-side="'+cssAttr(side)+'"][data-ii="'+newIi+'"] [data-k="name"]');
+      }
+      return;
     }
     if(act==='del-item'){
       var itEl=btn.closest('.ed-item');var sideD=itEl.getAttribute('data-side');var ii=Number(itEl.getAttribute('data-ii'));
@@ -468,13 +527,25 @@ export function editorScript() {
     collectInputs();
     var rowEl=box.closest('.ed-row');var ri=Number(rowEl.getAttribute('data-ri'));
     var row=model.rows[ri];if(!row)return;
+    // セルが「中身あり」か（見出し or 名前のある項目）。
+    function hasContent(cell){
+      if(!cell)return false;
+      if(cell.label&&cell.label.trim())return true;
+      return (cell.items||[]).some(function(it){return it.name&&it.name.trim();});
+    }
     if(box.checked){
-      // 共通ON: both を1セルに（既存の男子セルを土台に）
-      row.both=row.both||deepClone(row['男子'])||blankCell();
+      // 共通ON: both = 男子の複製（男子が空なら女子）。男子/女子 オブジェクトは保持（往復で失わない）。
+      var seed=hasContent(row['男子'])?row['男子']:(hasContent(row['女子'])?row['女子']:row['男子']);
+      row.both=deepClone(seed)||blankCell();
     }else{
-      row.both=null;
+      // 共通OFF: both の内容を 男子・女子 両方へ復元してから both=null。
+      if(row.both){
+        row['男子']=deepClone(row.both);
+        row['女子']=deepClone(row.both);
+      }
       if(!row['男子'])row['男子']=blankCell();
       if(!row['女子'])row['女子']=blankCell();
+      row.both=null;
     }
     renderPanel();
   }
@@ -492,7 +563,8 @@ export function editorScript() {
     model.rows.forEach(function(r){
       var from=r.from||'';var to=r.to||'';
       var fm=toMin(from),tm=toMin(to);
-      var minutes=(fm!=null&&tm!=null)?(tm-fm):null;
+      // to<from や不正時に負値を出さない。空時刻は null のまま。
+      var minutes=(fm!=null&&tm!=null)?Math.max(0,tm-fm):null;
       var out={from:from,to:to,minutes:minutes};
       if(r.both){
         var both=cleanCell(r.both);
@@ -524,7 +596,12 @@ export function editorScript() {
     var ov=buildOverride();
     var store=loadStore();
     store[ov.date]=ov;
-    saveStore(store);
+    var ok=saveStore(store);
+    if(!ok){
+      // 保存失敗（容量超過/プライベートモード）。パネルは閉じず、メッセージで知らせる。
+      flash('保存できませんでした（ブラウザの保存容量/設定をご確認ください）');
+      return;
+    }
     renderDay(editingArticle,ov); // その日を再描画
     closePanel();
     flash('保存しました（ブラウザに記憶）');
@@ -534,9 +611,10 @@ export function editorScript() {
   function openPanel(){
     var article=curDay();
     if(!article){flash('編集できる日が表示されていません');return;}
-    if(!article.getAttribute('data-date')){flash('この日は上書き編集の対象外です');return;}
+    var date=(article.getAttribute('data-date')||'').trim();
+    // data-date が非空（実ISO）の日のみ編集可。空文字日は SNAP/store の "" キー衝突を避けるため対象外。
+    if(!date){flash('この日は上書き編集の対象外です');return;}
     editingArticle=article;
-    var date=article.getAttribute('data-date');
     var weekday=article.getAttribute('data-day')||'';
     model=initModel(date,weekday);
     panel=document.createElement('section');
@@ -559,7 +637,8 @@ export function editorScript() {
   function revertAuto(){
     var article=curDay();
     if(!article){flash('対象の日が表示されていません');return;}
-    var date=article.getAttribute('data-date');
+    var date=(article.getAttribute('data-date')||'').trim();
+    if(!date){flash('この日は上書き編集の対象外です');return;}
     var store=loadStore();
     if(store[date]){delete store[date];saveStore(store);}
     if(SNAP[date]!=null)article.innerHTML=SNAP[date];
