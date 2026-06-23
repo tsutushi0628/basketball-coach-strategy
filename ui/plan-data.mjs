@@ -90,6 +90,67 @@ const dateLabelYMD = (iso) => {
   return `${y}/${m}/${d}`;
 };
 
+// ── 期間モデル（週/月ピッカーの実切替＝複数期間生成）─────────────────────────────
+// 設計: 1回の generation は「1期間（1週＋その月のフェーズ）」を作る純粋な単位のまま。
+// 複数期間は buildPlanData が period を変えて反復する（案B＝呼び出し側ループ）。
+// アンカー（config.current_month / week_of_month / week_start_date）を起点に:
+//   - 週: 現アーク月の週1..N（暦日は週起点+7日ずつ、焦点は週番号で変わる＝型→反復）。
+//   - 月: アンカー月から半年。暦月ラベルと「フェーズ駆動月(current_month)」の定数オフセットを
+//         保ったまま1ヶ月＝1アーク段ぶん進める（暦月とアーク月の二軸＝原典どおり維持）。
+/** 1アーク月に生成する週数（型→反復で焦点が変わる現方針。weekly_focus 最大週=4 と一致）。 */
+const WEEKS_PER_ARC_MONTH = 4;
+/** 月ピッカーに並べる月数（現月＋先5ヶ月＝半年）。 */
+const MONTHS_AHEAD = 6;
+/** 1始まりの月を 1..12 に正規化（13→1 等）。 */
+const wrapMonth1to12 = (m) => ((((m - 1) % 12) + 12) % 12) + 1;
+
+/**
+ * 週ピッカー用の期間リスト。アンカー週から現アーク月の週1..N を並べる。
+ * 各週: 暦日は週起点+7日ずつ進め、current_month は固定（同一アーク月内）、week_of_month は+1ずつ。
+ * resolveWeekFocus(current_month, week_of_month) が週ごとに異なる焦点を返す＝中身が実際に変わる。
+ * @param {{currentMonth:number, weekOfMonth:number, weekStartDate:?string}} anchor
+ * @returns {Array<{key:string,label:string,currentMonth:number,weekOfMonth:number,weekStartDate:?string}>}
+ */
+export function computeWeekPeriods(anchor) {
+  const out = [];
+  for (let i = 0; i < WEEKS_PER_ARC_MONTH; i++) {
+    const weekStartDate = anchor.weekStartDate ? addDaysISO(anchor.weekStartDate, 7 * i) : null;
+    out.push({
+      key: weekStartDate ? dateLabelYMD(weekStartDate) : `w${i}`,
+      label: weekStartDate ? `${dateLabelYMD(weekStartDate)}〜` : `第${(anchor.weekOfMonth ?? 1) + i}週`,
+      currentMonth: anchor.currentMonth,
+      weekOfMonth: (anchor.weekOfMonth ?? 1) + i,
+      weekStartDate,
+    });
+  }
+  return out;
+}
+
+/**
+ * 月ピッカー用の期間リスト。アンカー月から半年（暦月ラベル＋アーク駆動月）。
+ * 暦月とアーク駆動月(current_month)の定数オフセットを保ち、1ヶ月＝1アーク段ぶん進める。
+ * 各月の中身は resolveMonth(current_month) のフェーズ内容（週生成は不要＝軽量）。
+ * @param {{currentMonth:number, displayMonth:number, year:number}} anchor
+ * @returns {Array<{key:string,label:string,currentMonth:number,displayMonth:number,year:number}>}
+ */
+export function computeMonthPeriods(anchor) {
+  const out = [];
+  for (let i = 0; i < MONTHS_AHEAD; i++) {
+    let mm = anchor.displayMonth + i;
+    let yy = anchor.year;
+    while (mm > 12) { mm -= 12; yy += 1; }
+    const label = `${yy}/${String(mm).padStart(2, '0')}`;
+    out.push({
+      key: label,
+      label,
+      currentMonth: anchor.currentMonth + i,
+      displayMonth: mm,
+      year: yy,
+    });
+  }
+  return out;
+}
+
 /**
  * 組違い用 self-fill プールを作る。
  * その日の主眼カテゴリに同主眼で自走可能なドリルを catalog から affinity 順で返す。
@@ -131,9 +192,11 @@ function buildSelfFillPool(drills, dominantCat, usedNames) {
  * @param {object} args.teamInput team input（基準）
  * @returns {object} 共通セッションの表示データ（days / goals / month）
  */
-function buildSession({ annual, drills, config, teamInput }) {
-  const currentMonth = config.current_month;
-  const weekOfMonth = config.week_of_month ?? 1;
+function buildSession({ annual, drills, config, teamInput, period }) {
+  // period（複数期間生成で注入）が無ければ config の単一期間にフォールバック（後方互換）。
+  const currentMonth = period?.currentMonth ?? config.current_month;
+  const weekOfMonth = period?.weekOfMonth ?? config.week_of_month ?? 1;
+  const weekStartDate = period?.weekStartDate ?? config.week_start_date;
   // 共有セッションの基準月（暦月そのまま）。男女共通の1メニュー。
   const resolved = resolveMonth(annual, '男子', currentMonth);
   // 上から降ろした週の焦点（年→フェーズ→月の主眼→週）。後付け要約は廃止。
@@ -145,6 +208,9 @@ function buildSession({ annual, drills, config, teamInput }) {
     shared_gym: false,
   };
   delete cfg.groups;
+  // 複数週生成では既習レクチャ・ロスター（introduced）を週送りで連鎖させる（週Nの既習を週N+1の入力へ）。
+  // これで2週目以降の土曜レクチャから既習分が消える＝週ごとに中身が進む。
+  if (Array.isArray(period?.introduced)) cfg.introduced = period.introduced;
 
   const plan = planWeek(drills, cfg, teamInput, weekFocus);
   const videoIndex = new Map(drills.map((d) => [d.id, d.video_url || null]));
@@ -293,8 +359,8 @@ function buildSession({ annual, drills, config, teamInput }) {
       });
     }
 
-    // 表示週の実日付（週起点＝config.week_start_date の月曜から曜日オフセットで算出）。
-    const dateISO = dayDateISO(config.week_start_date, day.day);
+    // 表示週の実日付（週起点＝period.weekStartDate の月曜から曜日オフセットで算出）。
+    const dateISO = dayDateISO(weekStartDate, day.day);
     return {
       day: day.day,
       dayLabel: fullDayLabel(day.day),
@@ -312,7 +378,8 @@ function buildSession({ annual, drills, config, teamInput }) {
     };
   });
 
-  return { days, goals, month, warnings: plan.warnings || [] };
+  // introduced は週送り用の更新後ロスター（次週の入力に連鎖させる）。
+  return { days, goals, month, warnings: plan.warnings || [], introduced: plan.introduced || [] };
 }
 
 /**
@@ -586,16 +653,74 @@ export async function buildPlanData({ storage, girlsStorage }) {
   ]);
   const drills = normalizeDrills(rawDrills);
 
-  // 男女共通の練習メニュー（1本）。
-  const session = buildSession({ annual, drills, config, teamInput });
   const currentMonth = config.current_month;
-  // コーチ指定の上書き日を合流（実日付一致・単一性別1列化）。上書きが無い日は従来どおり。
-  const days = applyOverrides(buildDays(session), overrides, config.week_start_date);
+  const anchor = {
+    currentMonth,
+    weekOfMonth: config.week_of_month ?? 1,
+    weekStartDate: config.week_start_date || null,
+  };
+
+  // 1期間（1週）を生成する単位。period を変えて反復することで複数週を作る（案B）。
+  const buildOneWeek = (period) => {
+    const s = buildSession({ annual, drills, config, teamInput, period });
+    // コーチ指定の上書きは各週の週起点で実日付一致＝別週へ漏れない（applyOverrides 既存設計）。
+    const weekDays = applyOverrides(buildDays(s), overrides, period.weekStartDate);
+    return { session: s, days: weekDays };
+  };
+
+  // ── 週ピッカー用の複数週（現アーク月の週1..N。焦点が型→反復で変わる）──────────────
+  const weekDefs = anchor.weekStartDate
+    ? computeWeekPeriods(anchor)
+    : [{ key: 'w0', label: '今週', currentMonth: anchor.currentMonth, weekOfMonth: anchor.weekOfMonth, weekStartDate: null }];
+  // 既習レクチャ・ロスターを週送りで連鎖（週Nの更新後を週N+1の入力へ）。土曜レクチャが週ごとに進む。
+  let introducedSoFar = Array.isArray(config.introduced) ? config.introduced : [];
+  const weeks = weekDefs.map((wp) => {
+    const built = buildOneWeek({ ...wp, introduced: introducedSoFar });
+    introducedSoFar = built.session.introduced || introducedSoFar;
+    return {
+      key: wp.key,
+      label: wp.label,
+      weekStartDate: wp.weekStartDate,
+      focus: built.session.goals.week, // 今週の焦点（週ごとに変わる＝実切替の中身差）
+      days: built.days,
+      goals: built.session.goals,
+      month: built.session.month,
+      warnings: built.session.warnings || [],
+    };
+  });
+
+  // アンカー＝先頭週を top-level に展開（後方互換: 既存 days/session/month の参照を壊さない）。
+  const anchorWeek = weeks[0];
+  const session = { goals: anchorWeek.goals, month: anchorWeek.month };
+  const days = anchorWeek.days;
+
   // 表示する暦月: 週起点の暦月（例 2026-06-22 → 6月）。フェーズ位置（current_month=7）とは別軸で、
   // ヘッダ・index・配布テキストの「N月」表示に使う。週起点未設定時は従来どおり current_month。
-  const displayCalendarMonth = config.week_start_date
-    ? Number(config.week_start_date.split('-')[1])
-    : currentMonth;
+  const displayCalendarMonth = anchor.weekStartDate
+    ? Number(anchor.weekStartDate.split('-')[1])
+    : wrapMonth1to12(currentMonth);
+
+  // ── 月ピッカー用の複数月（現月から半年。各月は年間計画のアーク内容＝週生成不要で軽量）──
+  const anchorYear = anchor.weekStartDate ? Number(anchor.weekStartDate.split('-')[0]) : null;
+  const monthDefs = anchorYear
+    ? computeMonthPeriods({ currentMonth: anchor.currentMonth, displayMonth: displayCalendarMonth, year: anchorYear })
+    : [];
+  const months = monthDefs.map((mp) => {
+    const r = resolveMonth(annual, '男子', mp.currentMonth);
+    return {
+      key: mp.key,
+      label: mp.label,
+      displayMonth: mp.displayMonth,
+      month: {
+        displayMonth: mp.displayMonth,
+        phase: r.phase,
+        headline: r.headline,
+        kpiHints: r.kpi_hints,
+        peak: r.peak,
+        peakLevel: r.peak_level,
+      },
+    };
+  });
 
   // 年リボン: 新チーム12ヶ月アーク（8→7月）。フェーズは共通（男子基準の1本arc）。
   // 男女の「いま」は両方とも暦月に固定する（男女は同じ時間に生きているので現在位置はずれない）。
@@ -628,7 +753,9 @@ export async function buildPlanData({ storage, girlsStorage }) {
     session: { goals: session.goals, month: session.month },
     boysGoals: teamGoals(teamInput),
     girlsGoals: teamGoals(girlsInput),
-    days,
+    days, // アンカー週（先頭期間）の days。日レベルはこれを使う（後方互換）。
+    weeks, // 週ピッカー実切替用の複数週（先頭=アンカー）。
+    months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,
     drillIndex,
     assumptions: [
@@ -637,6 +764,6 @@ export async function buildPlanData({ storage, girlsStorage }) {
       '今は男女とも同じ年間の流れにいる。大会の時期に男女差があるかは未確定（コーチ確認）。確認が取れるまで男女差は表示に出さない。',
       '選手の指標は合成値（実選手データは個人情報のため未接続）。',
     ],
-    warnings: session.warnings,
+    warnings: anchorWeek.warnings,
   };
 }

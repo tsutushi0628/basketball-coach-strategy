@@ -478,9 +478,8 @@ export function yearSection(data) {
     </div>`;
 }
 
-/** 月セクション（今月やること・フェーズ・チェックする数字・共通）。 */
-export function monthSection(data) {
-  const m = data.session.month;
+/** 月セクション（今月やること・フェーズ・チェックする数字・共通）。m/displayMonth を渡せば任意の月を描ける（複数月の実切替用）。 */
+export function monthSection(data, m = data.session.month, displayMonth = data.month) {
   const peak = m.peak
     ? `<div class="mc-peak">大会に向けて仕上げる時期（${esc(peakName(data, m.peak))}）</div>`
     : '';
@@ -488,9 +487,9 @@ export function monthSection(data) {
     m.kpiHints && m.kpiHints.length
       ? `<div class="mc-kpi"><div class="kk">チェックする数字</div><div class="kv">${m.kpiHints.map(esc).join('・')}</div></div>`
       : '';
-  return `<h3 class="lvh">${data.month}月にやること（年間予定より）</h3>
+  return `<h3 class="lvh">${displayMonth}月にやること（年間予定より）</h3>
     <div class="monthcard">
-      <div class="mc-h"><span class="mc-mon">${data.month}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
+      <div class="mc-h"><span class="mc-mon">${displayMonth}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
       <div class="mc-aim">${esc(m.headline)}</div>
       ${peak}
       ${kpi}
@@ -525,6 +524,16 @@ export function clientScript() {
   function showDay(t){document.querySelectorAll('[data-day]').forEach(function(p){if(p.classList.contains('day'))p.hidden=p.getAttribute('data-day')!==t;});
     dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curDay=t;}
   dts.forEach(function(b){b.addEventListener('click',function(){showDay(b.getAttribute('data-go'));});});
+  // 週ピッカー実切替: 押下した週の wkpanel だけ出す（日切替と同型）。
+  var wts=document.querySelectorAll('.cal-go-week');
+  function showWeek(t){document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==t;});
+    wts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curWeek=t;}
+  wts.forEach(function(b){b.addEventListener('click',function(){showWeek(b.getAttribute('data-go'));});});
+  // 月ピッカー実切替: 押下した月の mopanel だけ出す。
+  var mts=document.querySelectorAll('.cal-go-month');
+  function showMonth(t){document.querySelectorAll('.mopanel[data-month]').forEach(function(p){p.hidden=p.getAttribute('data-month')!==t;});
+    mts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curMonth=t;}
+  mts.forEach(function(b){b.addEventListener('click',function(){showMonth(b.getAttribute('data-go'));});});
   function setMode(m){
     document.querySelectorAll('[data-interact]').forEach(function(el){el.hidden=el.getAttribute('data-interact')!==m;});
     document.querySelectorAll('.modetoggle .mt').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-mode-go')===m);});

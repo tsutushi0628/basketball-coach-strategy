@@ -504,11 +504,12 @@ function gutterTicks(axis) {
 /** hhmm ヘルパー（plan-data にも同定義がある・ここはグリッドローカル） */
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
-/** 週レベル: Googleカレンダー型の時間グリッド。 */
-function weekLevel(data) {
-  const axis = buildWeekAxis(data.days);
+/** 週レベル: Googleカレンダー型の時間グリッド。days と focus を渡せば任意の週を描ける（複数週の実切替用）。 */
+function weekLevel(data, days = data.days, focus = '') {
+  const axis = buildWeekAxis(days);
+  const focusNote = focus ? `<p class="note"><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>` : '';
   if (!axis) {
-    return `<h3 class="lvh">今週の練習</h3><p class="note">今週は予定が入っていません。</p>`;
+    return `<h3 class="lvh">この週の練習</h3>${focusNote}<p class="note">この週は予定が入っていません。</p>`;
   }
 
   // グリッド全体の高さ
@@ -518,7 +519,7 @@ function weekLevel(data) {
   const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: '' };
   const SHARE_NOTE  = { rotation: '（左右の段取りは日タブ）', together: '', independent: '', authored: '' };
 
-  const dayHeads = data.days.map((d, i) => {
+  const dayHeads = days.map((d, i) => {
     const colIdx = i + 2;
     const blocks = dayBlocks(d);
     const fromLabel = blocks ? blocks[0].from : '';
@@ -557,7 +558,7 @@ function weekLevel(data) {
   }
 
   // 各曜日列のイベントブロック
-  const colsHtml = data.days.map((d, i) => {
+  const colsHtml = days.map((d, i) => {
     const colIdx = i + 2;
     const blocks = dayBlocks(d);
     if (!blocks) {
@@ -591,7 +592,8 @@ function weekLevel(data) {
     </div>`;
   }).join('');
 
-  return `<h3 class="lvh">今週の練習（火・水・木・金・土）</h3>
+  return `<h3 class="lvh">この週の練習（火・水・木・金・土）</h3>
+    ${focusNote}
     <div class="weekgrid">
       <div class="wg-corner"></div>
       ${dayHeads}
@@ -890,38 +892,24 @@ function dayPicker(data) {
   return `<div class="picker" data-print-hide>${btns.join('')}</div>`;
 }
 
-/** 週ピッカー: 表示月に重なる週（日曜始まり）を「yyyy/mm/dd〜」で並べる。データのある週のみ実選択・他はグレー。 */
+/** 週ピッカー: 生成済みの各週（data.weeks）を「yyyy/mm/dd〜」で実選択できるボタンで並べる。先頭=表示中。 */
 function weekPicker(data) {
-  const withDate = data.days.find((d) => d.dateLabel);
-  if (!withDate) return '';
-  const [y, m, d] = withDate.dateLabel.split('/').map(Number);
-  const base = new Date(y, m - 1, d);
-  const activeSun = new Date(y, m - 1, d - base.getDay());
-  const monthFirst = new Date(y, m - 1, 1);
-  const monthEnd = new Date(y, m, 0);
-  const fmt = (dt) => `${dt.getFullYear()}/${String(dt.getMonth() + 1).padStart(2, '0')}/${String(dt.getDate()).padStart(2, '0')}`;
-  const items = [];
-  for (const s = new Date(y, m - 1, 1 - monthFirst.getDay()); s <= monthEnd; s.setDate(s.getDate() + 7)) {
-    const on = s.getTime() === activeSun.getTime();
-    items.push(`<span class="pk ${on ? 'on' : 'pk-off'}">${fmt(s)}〜</span>`);
-  }
-  return `<div class="picker" data-print-hide>${items.join('')}</div>`;
+  const weeks = data.weeks || [];
+  if (weeks.length <= 1) return ''; // 単一週なら切替不要＝ピッカー非表示
+  const items = weeks.map((w, i) =>
+    `<button class="pk cal-go-week${i === 0 ? ' on' : ''}" data-go="${esc(w.key)}" type="button">${esc(w.label)}</button>`
+  ).join('');
+  return `<div class="picker" data-print-hide>${items}</div>`;
 }
 
-/** 月ピッカー: 表示月から半年ぶんを「yyyy/mm」で並べる。今月のみ実選択・他はグレー（詳細は今月のみ生成）。 */
+/** 月ピッカー: 生成済みの各月（data.months）を「yyyy/mm」で実選択できるボタンで並べる。先頭=今月。 */
 function monthPicker(data) {
-  const withDate = data.days.find((d) => d.dateLabel);
-  const y = withDate ? Number(withDate.dateLabel.split('/')[0]) : null;
-  const m = withDate ? Number(withDate.dateLabel.split('/')[1]) : data.month;
-  if (!y) return '';
-  const items = [];
-  for (let k = 0; k < 6; k++) {
-    let mm = m + k, yy = y;
-    while (mm > 12) { mm -= 12; yy += 1; }
-    const lab = `${yy}/${String(mm).padStart(2, '0')}`;
-    items.push(`<span class="pk ${k === 0 ? 'on' : 'pk-off'}">${lab}</span>`);
-  }
-  return `<div class="picker" data-print-hide>${items.join('')}</div>`;
+  const months = data.months || [];
+  if (months.length <= 1) return ''; // 単一月なら切替不要＝ピッカー非表示
+  const items = months.map((m, i) =>
+    `<button class="pk cal-go-month${i === 0 ? ' on' : ''}" data-go="${esc(m.key)}" type="button">${esc(m.label)}</button>`
+  ).join('');
+  return `<div class="picker" data-print-hide>${items}</div>`;
 }
 
 export function render(data) {
@@ -948,8 +936,8 @@ export function render(data) {
       ${dayTimelines}
     </div>
 
-    <div class="level" data-level="week" hidden>${weekPicker(data)}${weekLevel(data)}</div>
-    <div class="level" data-level="month" hidden>${monthPicker(data)}${monthSection(data)}${goalsSection(data)}</div>
+    <div class="level" data-level="week" hidden>${weekPicker(data)}${(data.weeks && data.weeks.length ? data.weeks : [{ key: '', days: data.days, focus: '' }]).map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus)}</div>`).join('')}</div>
+    <div class="level" data-level="month" hidden>${monthPicker(data)}${(data.months && data.months.length ? data.months : [{ key: '', month: data.session.month, displayMonth: data.month }]).map((m, i) => `<div class="mopanel" data-month="${esc(m.key)}"${i === 0 ? '' : ' hidden'}>${monthSection(data, m.month, m.displayMonth)}${i === 0 ? goalsSection(data) : ''}</div>`).join('')}</div>
     <div class="level" data-level="year" hidden>${yearSection(data)}${assumptionsNote(data)}</div>
     ${drillDetailPanels(data)}
     <p class="foot">${esc(data.school)}　練習タイムライン</p>
