@@ -12,6 +12,7 @@ import {
   goalsSection, monthSection, yearSection, assumptionsNote, goalsBar,
   genderChip, VIDEO_SVG,
 } from './render-shared.mjs';
+import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
 
 /** 分→比例高さ(px)。 */
 const segH = (minutes) => Math.max(34, Math.round(minutes * 3.6));
@@ -626,7 +627,7 @@ function dayTimeline(data, pd, idx) {
   let body;
   if (pd.source === 'coach' && pd.twoCol) {
     body = twoColTimeline(pd);
-    return `<article class="day pageb" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
+    return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
     ${dayHeader(pd, data.month)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
@@ -645,7 +646,7 @@ function dayTimeline(data, pd, idx) {
   }
   // rotation 日は中央スパインのみ表示（折りたたみ「共通メニュー」廃止・T3）。
   // 詳細はハッシュ駆動オーバーレイ（#drill-overlay）で表示。日タイムラインに詳細セクションは付与しない。
-  return `<article class="day pageb" data-day="${esc(pd.day)}"${idx === 0 ? '' : ' hidden'}>
+  return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
     ${dayHeader(pd, data.month)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
@@ -916,7 +917,7 @@ export function render(data) {
   const dayTimelines = data.days.map((d, i) => dayTimeline(data, d, i)).join('\n');
 
   return {
-    css: PATTERN_CSS,
+    css: PATTERN_CSS + EDITOR_CSS,
     body: `
     <div class="levels" role="tablist">
       <button class="lvtab on" data-go="day" type="button">日</button>
@@ -930,6 +931,7 @@ export function render(data) {
         ${modeToggle()}
         <button class="btn btn-primary" id="printBtn" type="button">印刷 / PDFで保存</button>
         <button class="btn" id="copyBtn" type="button">テキストでコピー</button>
+        ${editorToolbar()}
       </div>
       ${dayPicker(data)}
       ${goalsBar(data)}
@@ -941,6 +943,8 @@ export function render(data) {
     <div class="level" data-level="year" hidden>${yearSection(data)}${assumptionsNote(data)}</div>
     ${drillDetailPanels(data)}
     <p class="foot">${esc(data.school)}　練習タイムライン</p>
+    ${editorDataIsland(data)}
+    <script>${editorScript()}</script>
     `,
   };
 }
