@@ -30,7 +30,7 @@ export async function loadAnnualPlan(path) {
 }
 
 /** 1始まりの月を 1..12 に正規化（13→1 等）。 */
-function wrapMonth(m) {
+export function wrapMonth(m) {
   return ((((m - 1) % 12) + 12) % 12) + 1;
 }
 

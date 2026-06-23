@@ -20,7 +20,7 @@
 
 import { normalizeDrills } from '../engine/src/normalize.js';
 import { planWeek } from '../engine/src/planWeek.js';
-import { resolveMonth, resolveWeekFocus, yearArc, peaks as annualPeaks } from '../engine/src/annualPlan.js';
+import { resolveMonth, resolveWeekFocus, yearArc, peaks as annualPeaks, wrapMonth } from '../engine/src/annualPlan.js';
 import { coachingMode } from '../engine/src/filter.js';
 import { buildRotation } from './rotation.mjs';
 import { buildDrillRegistry } from './drill-detail.mjs';
@@ -101,8 +101,6 @@ const dateLabelYMD = (iso) => {
 const WEEKS_PER_ARC_MONTH = 4;
 /** 月ピッカーに並べる月数（現月＋先5ヶ月＝半年）。 */
 const MONTHS_AHEAD = 6;
-/** 1始まりの月を 1..12 に正規化（13→1 等）。 */
-const wrapMonth1to12 = (m) => ((((m - 1) % 12) + 12) % 12) + 1;
 
 /**
  * 週ピッカー用の期間リスト。アンカー週から現アーク月の週1..N を並べる。
@@ -143,7 +141,7 @@ export function computeMonthPeriods(anchor) {
     out.push({
       key: label,
       label,
-      currentMonth: anchor.currentMonth + i,
+      currentMonth: wrapMonth(anchor.currentMonth + i), // 1..12 に正規化（resolveMonth が内部 wrap するので値も揃える）
       displayMonth: mm,
       year: yy,
     });
@@ -698,7 +696,7 @@ export async function buildPlanData({ storage, girlsStorage }) {
   // ヘッダ・index・配布テキストの「N月」表示に使う。週起点未設定時は従来どおり current_month。
   const displayCalendarMonth = anchor.weekStartDate
     ? Number(anchor.weekStartDate.split('-')[1])
-    : wrapMonth1to12(currentMonth);
+    : wrapMonth(currentMonth);
 
   // ── 月ピッカー用の複数月（現月から半年。各月は年間計画のアーク内容＝週生成不要で軽量）──
   const anchorYear = anchor.weekStartDate ? Number(anchor.weekStartDate.split('-')[0]) : null;
