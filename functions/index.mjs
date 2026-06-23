@@ -62,11 +62,12 @@ function sanitizeOverride(body) {
     return { block: str(c.block, 40), label: str(c.label, 200), items };
   };
   const rows = body.rows.map((r) => {
-    const row = { from: str(r && r.from, 5), to: str(r && r.to, 5) };
-    if (typeof r.minutes === 'number' && r.minutes >= 0) row.minutes = Math.floor(r.minutes);
-    const both = cell(r && r.both);
+    const rr = (r && typeof r === 'object') ? r : {}; // null/非オブジェクト行でも落ちない
+    const row = { from: str(rr.from, 5), to: str(rr.to, 5) };
+    if (typeof rr.minutes === 'number' && rr.minutes >= 0) row.minutes = Math.floor(rr.minutes);
+    const both = cell(rr.both);
     if (both) { row.both = both; } else {
-      const boys = cell(r && r['男子']); const girls = cell(r && r['女子']);
+      const boys = cell(rr['男子']); const girls = cell(rr['女子']);
       if (boys) row['男子'] = boys;
       if (girls) row['女子'] = girls;
     }
@@ -89,27 +90,38 @@ function sanitizeOverride(body) {
  * @param {{collection:Function}} dbInstance  Firestore 互換（collection().doc().set()/delete()）
  */
 export function mountWriteApi(appServer, dbInstance) {
-  appServer.use(express.json({ limit: '256kb' }));
+  // JSON ボディ解析は /api 配下だけに効かせる（HTML を返す GET '*' を巻き込まない）。
+  const json = express.json({ limit: '256kb' });
   appServer.get('/healthz', (_req, res) => {
     res.json({ status: 'ok', database: DATABASE_NAME });
   });
-  appServer.post('/api/override', async (req, res) => {
+  appServer.post('/api/override', json, async (req, res) => {
+    // 入力検証の失敗（クライアント起因）は 400、Firestore 書き込みの失敗（サーバ起因）は 500 に分ける。
+    let ov;
     try {
-      const ov = sanitizeOverride(req.body);
-      await dbInstance.collection('overrides').doc(ov.date).set(ov);
-      res.json({ ok: true, date: ov.date });
+      ov = sanitizeOverride(req.body);
     } catch (e) {
       res.status(400).json({ ok: false, error: e && e.message ? e.message : String(e) });
+      return;
+    }
+    try {
+      await dbInstance.collection('overrides').doc(ov.date).set(ov);
+      res.json({ ok: true, date: ov.date, override: ov }); // 正規化後を返す（クライアントの表示・書き出しと一致させる）
+    } catch (e) {
+      res.status(500).json({ ok: false, error: 'save failed' });
     }
   });
-  appServer.post('/api/override/delete', async (req, res) => {
+  appServer.post('/api/override/delete', json, async (req, res) => {
+    const date = String((req.body && req.body.date) || '');
+    if (!DATE_DOC_ID.test(date)) {
+      res.status(400).json({ ok: false, error: 'date must be YYYY-MM-DD' });
+      return;
+    }
     try {
-      const date = String((req.body && req.body.date) || '');
-      if (!DATE_DOC_ID.test(date)) throw new Error('date must be YYYY-MM-DD');
       await dbInstance.collection('overrides').doc(date).delete();
       res.json({ ok: true, date });
     } catch (e) {
-      res.status(400).json({ ok: false, error: e && e.message ? e.message : String(e) });
+      res.status(500).json({ ok: false, error: 'delete failed' });
     }
   });
 }

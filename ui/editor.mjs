@@ -565,15 +565,17 @@ export function editorScript() {
     collectInputs();
     var ov=buildOverride();
     var art=editingArticle;
+    var myPanel=panel; // 並行操作（別日編集/キャンセル）でグローバルが差し替わっても誤操作しないため捕捉
     flash('保存中…');
     // バックエンド（Cloud Function）へ保存。Firestore への書き込みは Admin SDK 経由のみ。
     fetch('/api/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ov)})
       .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
       .then(function(res){
         if(res&&res.ok){
-          PREFILL[ov.date]=ov;        // サーバ状態を手元のprefillにも反映（書き出し・再編集用）
-          renderDay(art,ov);          // その日を即時再描画（サーバは次回読込で同じ内容を出す）
-          closePanel();
+          var saved=(res.override&&res.override.date)?res.override:ov; // サーバ正規化後（無ければ送信値）
+          PREFILL[saved.date]=saved;   // 表示・書き出し・再編集をサーバ保存内容に一致させる
+          renderDay(art,saved);        // 捕捉済みのその日を即時再描画（次回読込はサーバが同内容を出す）
+          if(panel===myPanel)closePanel(); // 同じ編集セッションのときだけ閉じる
           flash('保存しました（サーバに保存）');
         }else{
           flash('保存に失敗しました（'+((res&&res.error)||'サーバ応答エラー')+'）');
