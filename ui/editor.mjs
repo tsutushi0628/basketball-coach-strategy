@@ -1,10 +1,10 @@
 /**
  * @file コーチ編集UI（クライアント側のみ・LLM不使用・決定論）。
  *
- * タイムライン画面の「今表示している上書き日」をブラウザ上で編集し、ブラウザ内
- * (localStorage) に保存して即時に再描画する。保存は overrides.json と同じスキーマで
- * 書き出せるので、コーチは手書きせずに上書き日を入力→コピー→overrides.json へ貼る、で
- * 完結する。バックエンド未デプロイのためサーバ書き込みはせず、書き出しはクリップボード。
+ * タイムライン画面の「今表示している上書き日」をブラウザ上で編集し、Cloud Function の
+ * 保存API（/api/override）へ送ってバックエンド（Firestore・Admin SDK経由）に保存する。
+ * クライアントからの Firestore 直書きは rules で全 deny のまま。保存後はその日を即時再描画し、
+ * 次回読込ではサーバが Firestore から読んで同じ内容を描画する（サーバが単一の真実源）。
  *
  * Hallmark NG（border帯のカード強調・emoji・汎用書体・紫ピンクgradient・gradient見出し）は
  * 持ち込まない。色は既存デザイントークン（var(--orange) 等）だけで当てる。
@@ -17,9 +17,6 @@ import { BLOCK_TINT } from './render-shared.mjs';
 
 /** 編集に出すブロック種別（BLOCK_TINT のブロックキー側）。 */
 const BLOCK_KEYS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
-
-/** localStorage キー。{ "YYYY-MM-DD": override } の辞書を1キーに格納する。 */
-const STORE_KEY = 'bcs-overrides-v1';
 
 /** データアイランドの id（editorDataIsland と editorScript で共有）。 */
 const ISLAND_ID = 'bcs-ed';
@@ -178,9 +175,9 @@ export function editorDataIsland(data) {
 
 /**
  * 編集UIのクライアントJS（IIFE文字列）。build 側で <script> に差し込む。
- * - データアイランドを読み、localStorage の上書きを起動時に各 .day[data-date] へ適用
- * - 「この日を編集」でフォームを開き、保存で override を構築→保存→再描画
- * - 「自動に戻す」でスナップショット復元、「入力を書き出し」で overrides.json 配列形をコピー
+ * - 上書き日は起動時にサーバが Firestore から読んで描画済み（クライアントは起動時適用しない）
+ * - 「この日を編集」でフォームを開き、保存で override を構築→保存API（POST /api/override）→即時再描画
+ * - 「自動に戻す」で削除API（POST /api/override/delete）→再読込、「入力を書き出し」で overrides.json 配列形をコピー
  * 再描画は twoColTimeline / dayHeader(コーチ分岐) を同一クラス・同一構造で移植する。
  * @returns {string} IIFE
  */
@@ -193,22 +190,10 @@ export function editorScript() {
   var TINTS=ED.tints||{};
   var BLOCKS=ED.blocks||[];
   var PREFILL=ED.prefill||{};
-  var STORE='${STORE_KEY}';
 
   // ── 共通ユーティリティ ──
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function tintOf(block){return TINTS[block]||'var(--mute)';}
-  function loadStore(){
-    var raw=localStorage.getItem(STORE);
-    if(!raw)return {};
-    try{var o=JSON.parse(raw);return (o&&typeof o==='object')?o:{};}catch(e){return {};}
-  }
-  // localStorage 書き込み。QuotaExceeded/プライベートモードで例外が出ても doSave を止めないよう
-  // 成否を boolean で返す（例外は握って継続・呼び出し側がメッセージ表示）。
-  function saveStore(obj){
-    try{localStorage.setItem(STORE,JSON.stringify(obj));return true;}
-    catch(e){return false;}
-  }
   function curDay(){
     var nodes=document.querySelectorAll('.day[data-date]');
     for(var i=0;i<nodes.length;i++){if(!nodes[i].hidden)return nodes[i];}
@@ -329,30 +314,15 @@ export function editorScript() {
       '<pre class="plain" hidden>'+esc(plainTextOf(ov))+'</pre>';
   }
 
-  // ── 起動時スナップショット（自動に戻す用）と localStorage 適用 ──
-  var SNAP={}; // date -> 元 innerHTML
-  // data-date が非空（実ISO）の日のみ対象（空文字日は "" キー衝突を避けるため除外）。
-  function eachDay(fn){
-    document.querySelectorAll('.day[data-date]').forEach(function(a){
-      var date=(a.getAttribute('data-date')||'').trim();
-      if(date)fn(a,date);
-    });
-  }
-  function bootstrap(){
-    eachDay(function(a,date){SNAP[date]=a.innerHTML;});
-    var store=loadStore();
-    eachDay(function(a,date){
-      if(store[date])renderDay(a,store[date]);
-    });
-  }
+  // 上書き日は起動時にサーバ（Cloud Function）が Firestore から読んで HTML に描画済み。
+  // クライアントは起動時に何も適用しない（サーバが単一の真実源）。
 
-  // ── 編集対象の初期値解決: localStorage > prefill > 空テンプレ ──
+  // ── 編集対象の初期値解決: サーバ由来 prefill > 空テンプレ ──
   function blankCell(){return {block:BLOCKS[0]||'',label:'',items:[]};}
   function blankRow(){return {from:'',to:'',both:null,'男子':blankCell(),'女子':blankCell()};}
   function deepClone(o){return JSON.parse(JSON.stringify(o));}
   function initModel(date,weekday){
-    var store=loadStore();
-    if(store[date])return normalizeModel(deepClone(store[date]),date,weekday);
+    // サーバ由来の現状態（prefill）を初期値に。無ければ空テンプレ。
     if(PREFILL[date])return normalizeModel(deepClone(PREFILL[date]),date,weekday);
     return {date:date,weekday:weekday,court:'',aim:'',title:'',rows:[blankRow()]};
   }
@@ -594,17 +564,24 @@ export function editorScript() {
   function doSave(){
     collectInputs();
     var ov=buildOverride();
-    var store=loadStore();
-    store[ov.date]=ov;
-    var ok=saveStore(store);
-    if(!ok){
-      // 保存失敗（容量超過/プライベートモード）。パネルは閉じず、メッセージで知らせる。
-      flash('保存できませんでした（ブラウザの保存容量/設定をご確認ください）');
-      return;
-    }
-    renderDay(editingArticle,ov); // その日を再描画
-    closePanel();
-    flash('保存しました（ブラウザに記憶）');
+    var art=editingArticle;
+    flash('保存中…');
+    // バックエンド（Cloud Function）へ保存。Firestore への書き込みは Admin SDK 経由のみ。
+    fetch('/api/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ov)})
+      .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
+      .then(function(res){
+        if(res&&res.ok){
+          PREFILL[ov.date]=ov;        // サーバ状態を手元のprefillにも反映（書き出し・再編集用）
+          renderDay(art,ov);          // その日を即時再描画（サーバは次回読込で同じ内容を出す）
+          closePanel();
+          flash('保存しました（サーバに保存）');
+        }else{
+          flash('保存に失敗しました（'+((res&&res.error)||'サーバ応答エラー')+'）');
+        }
+      })
+      .catch(function(){
+        flash('保存できませんでした（バックエンド未接続。エミュレータ/本番URLで開いてください）');
+      });
   }
 
   // ── パネル開閉（記事本体をフォームに差し替え・キャンセルで復帰）──
@@ -612,7 +589,7 @@ export function editorScript() {
     var article=curDay();
     if(!article){flash('編集できる日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
-    // data-date が非空（実ISO）の日のみ編集可。空文字日は SNAP/store の "" キー衝突を避けるため対象外。
+    // data-date が非空（実ISO）の日のみ編集可（保存APIの doc ID＝日付に使うため）。
     if(!date){flash('この日は上書き編集の対象外です');return;}
     editingArticle=article;
     var weekday=article.getAttribute('data-day')||'';
@@ -633,22 +610,39 @@ export function editorScript() {
     panel=null;model=null;editingArticle=null;
   }
 
-  // ── 自動に戻す: 今表示中の日の localStorage 上書きを削除→スナップショット復元 ──
+  // ── 自動に戻す: サーバの上書きを削除→再読込（サーバが自動生成を再描画）──
   function revertAuto(){
     var article=curDay();
     if(!article){flash('対象の日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
     if(!date){flash('この日は上書き編集の対象外です');return;}
-    var store=loadStore();
-    if(store[date]){delete store[date];saveStore(store);}
-    if(SNAP[date]!=null)article.innerHTML=SNAP[date];
-    flash('自動の内容に戻しました');
+    flash('自動に戻しています…');
+    fetch('/api/override/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:date})})
+      .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
+      .then(function(res){
+        if(res&&res.ok){ delete PREFILL[date]; location.reload(); }
+        else{ flash('戻せませんでした（'+((res&&res.error)||'サーバ応答エラー')+'）'); }
+      })
+      .catch(function(){ flash('バックエンド未接続のため戻せません（エミュレータ/本番URLで開いてください）'); });
   }
 
-  // ── 書き出し: localStorage の全上書きを overrides.json 配列形でコピー ──
+  // 'YYYY-MM-DD'→曜日。書き出しの weekday 補完用。
+  function weekdayOf(iso){
+    var p=String(iso).split('-');
+    var dt=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+    return ['日','月','火','水','木','金','土'][dt.getDay()];
+  }
+  // ── 書き出し: サーバ状態（prefill）の全上書きを overrides.json 配列形でコピー（リポジトリの種データに反映できる）──
   function exportJson(){
-    var store=loadStore();
-    var arr=Object.keys(store).sort().map(function(k){return store[k];});
+    var arr=Object.keys(PREFILL).sort().map(function(k){
+      var p=PREFILL[k]||{};
+      var o={date:k,weekday:p.weekday||weekdayOf(k),source:'coach',layout:'two-col'};
+      if(p.court)o.court=p.court;
+      if(p.title)o.title=p.title;
+      if(p.aim)o.aim=p.aim;
+      o.rows=p.rows||[];
+      return o;
+    });
     var text=JSON.stringify(arr,null,2);
     copyText(text);
   }
@@ -691,7 +685,6 @@ export function editorScript() {
   var autoBtn=document.getElementById('ed-auto');if(autoBtn)autoBtn.addEventListener('click',revertAuto);
   var exportBtn=document.getElementById('ed-export');if(exportBtn)exportBtn.addEventListener('click',exportJson);
 
-  bootstrap();
-  window.__bcsEditor={loadStore:loadStore,saveStore:saveStore,renderDay:renderDay,exportJson:exportJson,openPanel:openPanel,model:function(){return model;}};
+  window.__bcsEditor={renderDay:renderDay,exportJson:exportJson,openPanel:openPanel,model:function(){return model;}};
 })();`;
 }

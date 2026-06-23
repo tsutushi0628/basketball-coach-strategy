@@ -38,11 +38,84 @@ const GIRLS_TEAM = 'minami-nakano-girls';
 const app = getApps().length ? getApps()[0] : initializeApp({ projectId: PROJECT_ID });
 const db = getFirestore(app, DATABASE_NAME);
 
-const server = express();
+const DATE_DOC_ID = /^\d{4}-\d{2}-\d{2}$/;
 
-server.get('/healthz', (_req, res) => {
-  res.json({ status: 'ok', database: DATABASE_NAME });
-});
+/**
+ * コーチ上書き1件を検証・サニタイズして overrides/{date} に書ける形へ正規化する。
+ * 余計なキーは落とし、保存スキーマ（date/weekday/source/layout/court/title/aim/rows）だけ通す。
+ * 不正なら throw（呼び出し側が 400 にする）。
+ */
+function sanitizeOverride(body) {
+  if (!body || typeof body !== 'object') throw new Error('body required');
+  const date = String(body.date || '');
+  if (!DATE_DOC_ID.test(date)) throw new Error('date must be YYYY-MM-DD');
+  if (!Array.isArray(body.rows)) throw new Error('rows must be an array');
+  if (body.rows.length > 50) throw new Error('too many rows');
+  const str = (v, max) => (v == null ? '' : String(v).slice(0, max));
+  const cell = (c) => {
+    if (!c || typeof c !== 'object') return undefined;
+    const items = Array.isArray(c.items) ? c.items.slice(0, 50).map((it) => {
+      const o = { name: str(it && it.name, 200) };
+      if (it && it.note) o.note = str(it.note, 500);
+      return o;
+    }).filter((it) => it.name) : [];
+    return { block: str(c.block, 40), label: str(c.label, 200), items };
+  };
+  const rows = body.rows.map((r) => {
+    const row = { from: str(r && r.from, 5), to: str(r && r.to, 5) };
+    if (typeof r.minutes === 'number' && r.minutes >= 0) row.minutes = Math.floor(r.minutes);
+    const both = cell(r && r.both);
+    if (both) { row.both = both; } else {
+      const boys = cell(r && r['男子']); const girls = cell(r && r['女子']);
+      if (boys) row['男子'] = boys;
+      if (girls) row['女子'] = girls;
+    }
+    return row;
+  });
+  const out = { date, source: 'coach', layout: 'two-col', rows };
+  if (body.weekday) out.weekday = str(body.weekday, 2);
+  if (body.court) out.court = str(body.court, 60);
+  if (body.title) out.title = str(body.title, 120);
+  if (body.aim) out.aim = str(body.aim, 400);
+  return out;
+}
+
+/**
+ * 書き込みAPI（コーチ上書きの保存/削除）を express サーバへマウントする。
+ * db は依存注入（本番は Admin SDK の Firestore、テストはモック db）。書き込みは
+ * Function/Admin SDK 経由のみ＝クライアント直書きは rules で全 deny。
+ * 注: 認証なし＝本番公開前にコーチ認証 or 共有シークレットの付与が必須（abuse 防止）。
+ * @param {import('express').Express} appServer
+ * @param {{collection:Function}} dbInstance  Firestore 互換（collection().doc().set()/delete()）
+ */
+export function mountWriteApi(appServer, dbInstance) {
+  appServer.use(express.json({ limit: '256kb' }));
+  appServer.get('/healthz', (_req, res) => {
+    res.json({ status: 'ok', database: DATABASE_NAME });
+  });
+  appServer.post('/api/override', async (req, res) => {
+    try {
+      const ov = sanitizeOverride(req.body);
+      await dbInstance.collection('overrides').doc(ov.date).set(ov);
+      res.json({ ok: true, date: ov.date });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e && e.message ? e.message : String(e) });
+    }
+  });
+  appServer.post('/api/override/delete', async (req, res) => {
+    try {
+      const date = String((req.body && req.body.date) || '');
+      if (!DATE_DOC_ID.test(date)) throw new Error('date must be YYYY-MM-DD');
+      await dbInstance.collection('overrides').doc(date).delete();
+      res.json({ ok: true, date });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e && e.message ? e.message : String(e) });
+    }
+  });
+}
+
+const server = express();
+mountWriteApi(server, db);
 
 // 全リクエストで HTML を返す。?p=<patternId> で描画パターンを選ぶ（既定 timeline）。
 server.get('*', async (req, res) => {
