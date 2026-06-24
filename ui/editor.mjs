@@ -56,13 +56,32 @@ export const EDITOR_CSS = `
 .ed-cell{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px}
 .ed-cell-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ed-cell-team{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--mute);white-space:nowrap}
-.ed-item{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px}
-.ed-item .ed-name{flex:1 1 140px;min-width:0}
-.ed-item .ed-note{flex:1 1 140px;min-width:0}
+/* 1ドリル=1行（グリップ｜ドリル名｜メモ｜ゴミ箱）。改行させず横一列に収める */
+.ed-item{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-bottom:6px}
+.ed-item .ed-name{flex:2 1 0;min-width:0}
+.ed-item .ed-note{flex:1 1 0;min-width:0}
 /* 小ボタン群（追加・削除）: btn と同じ surface+hair トーン（pill）。色帯にしない */
 .ed-mini{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:5px 11px;white-space:nowrap;transition:transform .14s ease,color .14s ease}
 .ed-mini:hover{transform:translateY(-1px);color:var(--orange)}
 .ed-mini:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* アイコンのみボタン（行右端のゴミ箱）。背景なし・色帯にしない */
+.ed-iconbtn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;margin-left:auto;flex:0 0 auto;background:transparent;border:1px solid transparent;border-radius:8px;color:var(--mute);transition:color .14s ease,background .14s ease}
+.ed-iconbtn:hover{background:var(--bg);color:var(--orange)}
+.ed-iconbtn:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+.ed-iconbtn svg{display:block;width:16px;height:16px}
+/* 並べ替えグリップ（掴む所）。行に入力欄があるので行全体ではなくハンドルで掴む */
+.ed-grip{appearance:none;cursor:grab;display:inline-flex;align-items:center;justify-content:center;padding:2px;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--mute);flex:0 0 auto;touch-action:none}
+.ed-grip:hover{color:var(--ink);background:var(--bg)}
+.ed-grip:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+.ed-grip:active{cursor:grabbing}
+.ed-grip svg{display:block;width:16px;height:16px}
+.ed-grip-row{margin-right:2px}
+.ed-grip-item{width:24px;height:28px}
+.ed-grip-item svg{width:14px;height:14px}
+/* ドラッグ中のプレースホルダ（着地位置）= SortableJS の ghost。点線で落ちる場所を示す */
+.ed-row.sortable-ghost,.ed-item.sortable-ghost{opacity:.45;background:var(--bg);outline:2px dashed var(--orange);outline-offset:-2px}
+.ed-row.sortable-chosen,.ed-item.sortable-chosen{background:var(--surface)}
+.ed-row.sortable-drag,.ed-item.sortable-drag{opacity:.9}
 .ed-del{color:var(--terra)}
 .ed-del:hover{color:var(--orange-deep)}
 .ed-cell-actions{margin-top:4px}
@@ -363,11 +382,23 @@ export function editorScript() {
   function catalogDatalist(){
     return '<datalist id="ed-catalog">'+CATALOG.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('')+'</datalist>';
   }
+  // 並べ替えグリップ（6点ハンドル）。掴む所を限定し、入力欄の操作と衝突させない。
+  function gripSvg(){
+    return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+
+      '<circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>'+
+      '<circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>'+
+      '<circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+  }
+  // ゴミ箱アイコン（線画SVG・emoji不使用）。項目削除・時間削除で共用。
+  function trashSvg(){
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+  }
   function itemHtml(ri,side,ii,it){
     return '<div class="ed-item" data-ri="'+ri+'" data-side="'+esc(side)+'" data-ii="'+ii+'">'+
+      '<button type="button" class="ed-grip ed-grip-item" aria-label="ドリルを並べ替え" title="ドラッグで並べ替え">'+gripSvg()+'</button>'+
       '<input class="ed-in ed-name" list="ed-catalog" placeholder="ドリル名（選択 or 自由入力）" value="'+esc(it.name)+'" data-k="name">'+
       '<input class="ed-in ed-note" placeholder="メモ（任意）" value="'+esc(it.note)+'" data-k="note">'+
-      '<button type="button" class="ed-mini ed-del" data-act="del-item">項目を削除</button>'+
+      '<button type="button" class="ed-iconbtn ed-del" data-act="del-item" aria-label="項目を削除" title="項目を削除">'+trashSvg()+'</button>'+
     '</div>';
   }
   function cellHtml(ri,side,teamLabel,cell){
@@ -393,6 +424,7 @@ export function editorScript() {
     }
     return '<div class="ed-row" data-ri="'+ri+'">'+
       '<div class="ed-row-top">'+
+        '<button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え" title="ドラッグで並べ替え">'+gripSvg()+'</button>'+
         '<span class="ed-rownum">時間'+(ri+1)+'</span>'+
         '<span class="ed-times">'+
           '<input type="time" class="ed-time" data-k="from" value="'+esc(row.from)+'">'+
@@ -400,7 +432,7 @@ export function editorScript() {
           '<input type="time" class="ed-time" data-k="to" value="'+esc(row.to)+'">'+
         '</span>'+
         '<label class="ed-check"><input type="checkbox" data-act="toggle-both"'+(isBoth?' checked':'')+'>男女共通</label>'+
-        '<button type="button" class="ed-mini ed-del" data-act="del-row" style="margin-left:auto">この時間を削除</button>'+
+        '<button type="button" class="ed-iconbtn ed-del" data-act="del-row" aria-label="この時間を削除" title="この時間を削除">'+trashSvg()+'</button>'+
       '</div>'+
       cells+
     '</div>';
@@ -420,7 +452,43 @@ export function editorScript() {
         '<button type="button" class="btn" data-act="cancel">キャンセル</button>'+
       '</div>';
   }
-  function renderPanel(){panel.innerHTML=panelHtml();}
+  // ── 並べ替え（SortableJS・ハンドルで掴む／着地位置を点線で表示）──
+  var sortables=[]; // パネルに張ってある Sortable。再描画・閉じる前に破棄してリークを防ぐ。
+  function destroySortables(){sortables.forEach(function(s){try{s.destroy();}catch(e){}});sortables=[];}
+  function initSortables(){
+    if(typeof Sortable==='undefined'||!panel)return; // ライブラリ未注入でも編集自体は動く（並べ替えのみ無効）
+    // forceFallback: ネイティブHTML5 DnDでなくポインタ駆動にする。入力欄が並ぶ行でも掴みが安定し、
+    // 着地点プレースホルダ表示・挙動がブラウザ間で一貫する（ネイティブDnDの不安定さを回避）。
+    var common={animation:150,forceFallback:true,fallbackTolerance:4,ghostClass:'sortable-ghost',chosenClass:'sortable-chosen',dragClass:'sortable-drag'};
+    var rowsEl=panel.querySelector('.ed-rows');
+    if(rowsEl){
+      sortables.push(Sortable.create(rowsEl,Object.assign({handle:'.ed-grip-row',draggable:'.ed-row',onEnd:function(evt){moveRow(evt.oldIndex,evt.newIndex);}},common)));
+    }
+    // セル内ドリルは各 .ed-items 単位。group を共有しないのでセルをまたぐ移動は起きない。
+    panel.querySelectorAll('.ed-items').forEach(function(itemsEl){
+      sortables.push(Sortable.create(itemsEl,Object.assign({handle:'.ed-grip-item',draggable:'.ed-item',onEnd:function(evt){moveItem(evt.from,evt.oldIndex,evt.newIndex);}},common)));
+    });
+  }
+  // 行（時間ブロック）の並べ替えを model に反映してから再描画。
+  function moveRow(oldI,newI){
+    if(oldI==null||newI==null||oldI===newI)return;
+    collectInputs(); // 入力値は data-ri 基準で取り込むので、視覚順が変わっても正しく拾える
+    var moved=model.rows.splice(oldI,1)[0];
+    model.rows.splice(newI,0,moved);
+    renderPanel();
+  }
+  // セル内ドリルの並べ替えを model に反映してから再描画。
+  function moveItem(fromEl,oldI,newI){
+    if(oldI==null||newI==null||oldI===newI)return;
+    collectInputs();
+    var cellEl=fromEl.closest('.ed-cell');if(!cellEl)return;
+    var ri=Number(cellEl.getAttribute('data-ri'));var side=cellEl.getAttribute('data-side');
+    var cell=cellOf(model.rows[ri],side);if(!cell)return;
+    var moved=cell.items.splice(oldI,1)[0];
+    cell.items.splice(newI,0,moved);
+    renderPanel();
+  }
+  function renderPanel(){destroySortables();panel.innerHTML=panelHtml();initSortables();}
   // 属性値内のダブルクォートだけ無害化（data-side は日本語可・"both"等）。
   function cssAttr(s){return String(s).replace(/"/g,'\\\\"');}
   // 再構築後に指定セレクタの入力へフォーカス（無ければ無視）。
@@ -610,6 +678,7 @@ export function editorScript() {
     panel.scrollIntoView({behavior:'smooth',block:'start'});
   }
   function closePanel(){
+    destroySortables();
     if(panel&&panel.parentNode)panel.parentNode.removeChild(panel);
     if(editingArticle)editingArticle.hidden=false;
     panel=null;model=null;editingArticle=null;

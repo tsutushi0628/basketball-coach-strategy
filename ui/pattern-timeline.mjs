@@ -13,6 +13,9 @@ import {
   genderChip, VIDEO_SVG,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
+// 並べ替え（D&D）ライブラリは firebase-kit 共有vendorが正本。ページにインライン注入して window.Sortable を生やす。
+// 注: 配信時はデプロイのvendoringで本モジュールも functions 配下へ同梱する（現状はローカル相対解決）。
+import { SORTABLE_MIN_JS } from '../../firebase-kit/ui/vendor/sortable.min.mjs';
 
 /** 分→比例高さ(px)。 */
 const segH = (minutes) => Math.max(34, Math.round(minutes * 3.6));
@@ -944,6 +947,7 @@ export function render(data) {
     ${drillDetailPanels(data)}
     <p class="foot">${esc(data.school)}　練習タイムライン</p>
     ${editorDataIsland(data)}
+    <script>${SORTABLE_MIN_JS}</script>
     <script>${editorScript()}</script>
     `,
   };
