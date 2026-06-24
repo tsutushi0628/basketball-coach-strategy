@@ -525,8 +525,11 @@ export function editorScript() {
     if(!cell)return null;
     var items=(cell.items||[]).filter(function(it){return it.name&&it.name.trim();})
       .map(function(it){var o={name:it.name.trim()};if(it.note&&it.note.trim())o.note=it.note.trim();return o;});
-    if(items.length===0)return null;
-    return {block:cell.block||'',label:(cell.label||'').trim()||cell.block||'',items:items};
+    var label=(cell.label||'').trim();
+    // 見出しだけ（例「男子に従う」「ゲーム」「アップ＆ラン」）でも有効な指定。
+    // 見出し・ドリル項目がともに空のときだけ捨てる（見出しを書いただけの行が消える事故を防ぐ）。
+    if(items.length===0&&!label)return null;
+    return {block:cell.block||'',label:label||cell.block||'',items:items};
   }
   function buildOverride(){
     var rows=[];
