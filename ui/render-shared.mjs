@@ -524,6 +524,13 @@ export function clientScript() {
   function showDay(t){document.querySelectorAll('[data-day]').forEach(function(p){if(p.classList.contains('day'))p.hidden=p.getAttribute('data-day')!==t;});
     dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curDay=t;}
   dts.forEach(function(b){b.addEventListener('click',function(){showDay(b.getAttribute('data-go'));});});
+  // 既定表示日=今日: ブラウザのローカル日付に一致する日があればそれを選ぶ（無ければ先頭のまま）。
+  (function(){
+    var n=new Date();
+    var iso=n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);
+    var td=document.querySelector('.day[data-date="'+iso+'"]');
+    if(td){var wd=td.getAttribute('data-day'); if(wd)showDay(wd);}
+  })();
   // 週ピッカー実切替: 押下した週の wkpanel だけ出す（日切替と同型）。
   var wts=document.querySelectorAll('.cal-go-week');
   function showWeek(t){document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==t;});
