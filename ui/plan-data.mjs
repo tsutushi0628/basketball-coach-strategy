@@ -19,6 +19,7 @@
  */
 
 import { normalizeDrills } from '../engine/src/normalize.js';
+import { editorBlockOf } from '../engine/src/allocate.js';
 import { planWeek } from '../engine/src/planWeek.js';
 import { resolveMonth, resolveWeekFocus, yearArc, peaks as annualPeaks, wrapMonth } from '../engine/src/annualPlan.js';
 import { coachingMode } from '../engine/src/filter.js';
@@ -177,6 +178,42 @@ function buildSelfFillPool(drills, dominantCat, usedNames) {
       video: d.video_url || null,
       alternatives: [],
     }));
+}
+
+/** 編集画面の7枠（自動生成6枠＋ゲーム枠）。editorBlockOf の写像先と一致させる。 */
+const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
+
+/**
+ * 編集画面の枠（ブロック）別ドリル候補を、エンジンと同じ正規化済みドリル集合から構築する。
+ *
+ * 各ドリルを editorBlockOf でちょうど1枠に振り分け（自動生成の枠分けと同一判定＝唯一の真実源
+ * blockOf を再利用）、その枠の候補配列に drill.name（drillIndex のキー＝カタログ名と一致）を
+ * 重複なく積む。フィニッシュの mastery 分割（習得→ファンダ、反復/実戦化→シュート）も editorBlockOf
+ * 経由で blockOf がそのまま行うので、ここで再判定はしない。editorBlockOf が null を返すドリル
+ * （主ブロック非該当＝傷害予防の非アップ等）はどの枠にも入れない。
+ *
+ * @param {Array} drills 正規化済みドリル全件（blockOf が見る category/mastery_stage/philosophy_tags/
+ *   sub_skill/intensity_class/name が揃っている集合）
+ * @returns {Object<string, string[]>} 枠キー→候補ドリル名配列（EDITOR_BLOCKS の順）
+ */
+function buildBlockCandidates(drills) {
+  /** @type {Object<string, string[]>} */
+  const out = {};
+  /** @type {Object<string, Set<string>>} 枠ごとの重複排除セット。 */
+  const seen = {};
+  for (const b of EDITOR_BLOCKS) {
+    out[b] = [];
+    seen[b] = new Set();
+  }
+  for (const d of drills) {
+    const block = editorBlockOf(d);
+    if (!block || !out[block]) continue; // 主ブロック非該当はどの枠にも出さない
+    const name = d.name;
+    if (!name || seen[block].has(name)) continue;
+    seen[block].add(name);
+    out[block].push(name);
+  }
+  return out;
 }
 
 /**
@@ -746,6 +783,10 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
   // 名前→詳細オブジェクトの Map。タイムラインのドリル名が Map に無い場合は throw。
   const drillIndex = buildDrillRegistry(rawDrills);
 
+  // 編集画面の枠別ドリル候補（自動生成と同一の枠判定＝editorBlockOf 経由で blockOf を再利用）。
+  // エンジンと同じ正規化済みドリル集合（drills）から作るので、手編集の候補が自動生成の枠分けと揃う。
+  const blockCandidates = buildBlockCandidates(drills);
+
   return {
     // テナント名（解決後の tenant.name）。マルチテナント前のローカル静的ビルドは従来の現行校名にフォールバック。
     school: school ?? '南中野中',
@@ -759,6 +800,7 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,
     drillIndex,
+    blockCandidates, // 編集画面の枠別ドリル候補（枠に応じた候補だけを提案する）
     assumptions: [
       '練習メニューは男女共通（コーチ1人が両方を見るため）。組違いはコーチ付き段を男女でずらして回す。',
       '体育館のコート割り（男女どちらが左/右半面・どの曜日に合同/分離）は年間予定に書かれていないため暫定。',

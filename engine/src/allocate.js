@@ -113,6 +113,23 @@ export function blockOf(drill) {
   return null;
 }
 
+/**
+ * Which of the EDITOR's 7 blocks a drill belongs to — the manual-edit mirror of the auto-generated
+ * 6-block mapping. The editor exposes one extra block, ゲーム, so the coach can hand-place the
+ * session-ending 5on5 / scrimmage (意思決定/ゲーム形式) as its own block; in the auto session that
+ * game-form work is not a fixed block (it rides the 対人 tail), which is why blockOf returns null
+ * for it. editorBlockOf delegates to blockOf for the 6 auto blocks (so the finishing 16 split by
+ * mastery — 習得→ファンダ, 反復/実戦化→シュート — is inherited, not re-decided here) and only adds the
+ * ゲーム branch. blockOf stays the single source of truth for block judgement; this function adds
+ * nothing to it beyond surfacing the game category as an editor-only block.
+ *
+ * @param {Drill} drill
+ * @returns {('アップ'|'ファンダ'|'シュート'|'対人'|'ラン'|'静的'|'ゲーム'|null)}
+ */
+export function editorBlockOf(drill) {
+  return blockOf(drill) || (drill.category === GAME_CATEGORY ? 'ゲーム' : null);
+}
+
 /** Round to the nearest 5 minutes (the coach's display / planning grain). */
 function round5(x) {
   return Math.round(x / 5) * 5;

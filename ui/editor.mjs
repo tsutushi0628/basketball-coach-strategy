@@ -185,6 +185,9 @@ export function editorDataIsland(data) {
   const g = data.session && data.session.goals ? data.session.goals : null;
   const island = {
     catalog: catalogNames(data.drillIndex),
+    // 枠（ブロック）別ドリル候補。各行のドリル名候補をその行の枠に絞るために使う。
+    // 無ければ null（クライアントは従来どおり全 catalog にフォールバック）。
+    blockCandidates: data.blockCandidates || null,
     tints: tintsObject(),
     blocks: BLOCK_KEYS,
     prefill,
@@ -213,10 +216,24 @@ export function editorScript() {
   if(!island)return;
   var ED=JSON.parse(island.textContent||'{}');
   var CATALOG=ED.catalog||[];
+  var BLOCKCAND=ED.blockCandidates||null; // 枠別ドリル候補（無ければ null＝全catalogにフォールバック）
   var TINTS=ED.tints||{};
   var BLOCKS=ED.blocks||[];
   var PREFILL=ED.prefill||{};
   var GOALS=ED.goals||null;
+
+  // ── 枠別 datalist の id 解決 ──
+  // 全catalog用の datalist は 'ed-catalog'、各枠は 'ed-cat-<index>'。ある枠の候補が空 or
+  // blockCandidates 自体が無ければ全catalogにフォールバック（候補を絞れない＝従来挙動）。
+  // datalist は候補の提案だけで自由入力は妨げない（list 属性はハード制限にならない）。
+  function blockHasCandidates(block){
+    return !!(BLOCKCAND&&Array.isArray(BLOCKCAND[block])&&BLOCKCAND[block].length>0);
+  }
+  function listIdForBlock(block){
+    if(!blockHasCandidates(block))return 'ed-catalog';
+    var i=BLOCKS.indexOf(block);
+    return i>=0?('ed-cat-'+i):'ed-catalog';
+  }
 
   // ── 共通ユーティリティ ──
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -391,8 +408,16 @@ export function editorScript() {
       return '<option value="'+esc(b)+'"'+(b===sel?' selected':'')+'>'+esc(b)+'</option>';
     }).join('');
   }
+  function optionsHtml(names){
+    return (names||[]).map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('');
+  }
   function catalogDatalist(){
-    return '<datalist id="ed-catalog">'+CATALOG.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('')+'</datalist>';
+    // 全catalog（フォールバック）＋ 枠別 datalist（候補のある枠だけ）。name input の list が指す先。
+    var html='<datalist id="ed-catalog">'+optionsHtml(CATALOG)+'</datalist>';
+    BLOCKS.forEach(function(b,i){
+      if(blockHasCandidates(b))html+='<datalist id="ed-cat-'+i+'">'+optionsHtml(BLOCKCAND[b])+'</datalist>';
+    });
+    return html;
   }
   // 他の日（既存のコーチ上書き日）からこの日へ内容を丸ごと取り込むセレクタ。コピー元が無ければ何も出さない。
   function copyFromOptions(){
@@ -432,16 +457,18 @@ export function editorScript() {
   function trashSvg(){
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
   }
-  function itemHtml(ri,side,ii,it){
+  function itemHtml(ri,side,ii,it,listId){
     return '<div class="ed-item" data-ri="'+ri+'" data-side="'+esc(side)+'" data-ii="'+ii+'">'+
       '<button type="button" class="ed-grip ed-grip-item" aria-label="ドリルを並べ替え" title="ドラッグで並べ替え">'+gripSvg()+'</button>'+
-      '<input class="ed-in ed-name" list="ed-catalog" placeholder="ドリル名（選択 or 自由入力）" value="'+esc(it.name)+'" data-k="name">'+
+      '<input class="ed-in ed-name" list="'+esc(listId||'ed-catalog')+'" placeholder="ドリル名（選択 or 自由入力）" value="'+esc(it.name)+'" data-k="name">'+
       '<input class="ed-in ed-note" placeholder="メモ（任意）" value="'+esc(it.note)+'" data-k="note">'+
       '<button type="button" class="ed-iconbtn ed-del" data-act="del-item" aria-label="項目を削除" title="項目を削除">'+trashSvg()+'</button>'+
     '</div>';
   }
   function cellHtml(ri,side,teamLabel,cell){
-    var items=(cell.items||[]).map(function(it,ii){return itemHtml(ri,side,ii,it);}).join('');
+    // この行（セル）の現在ブロックに応じた候補 datalist を name input に当てる（自由入力は維持）。
+    var listId=listIdForBlock(cell.block);
+    var items=(cell.items||[]).map(function(it,ii){return itemHtml(ri,side,ii,it,listId);}).join('');
     return '<div class="ed-cell" data-ri="'+ri+'" data-side="'+esc(side)+'">'+
       '<div class="ed-cell-head">'+
         '<span class="ed-cell-team">'+esc(teamLabel)+'</span>'+
@@ -616,6 +643,20 @@ export function editorScript() {
     }
   }
   function onPanelChange(e){
+    // 枠（ブロック）select が変わったら、そのセルのドリル名候補（datalist）を新しい枠に絞り直す。
+    // 全体再描画はしない（入力中の値を失わないため）＝該当セルの name input の list 属性だけ差し替える。
+    var blockSel=e.target.closest('[data-k="block"]');
+    if(blockSel){
+      var bCellEl=blockSel.closest('.ed-cell');
+      if(bCellEl){
+        var bRi=Number(bCellEl.getAttribute('data-ri'));var bSide=bCellEl.getAttribute('data-side');
+        var bCell=cellOf(model.rows[bRi],bSide);
+        if(bCell)bCell.block=blockSel.value; // モデルにも反映（保存・再描画前提を崩さない）
+        var listId=listIdForBlock(blockSel.value);
+        bCellEl.querySelectorAll('.ed-name').forEach(function(nameEl){nameEl.setAttribute('list',listId);});
+      }
+      return;
+    }
     // 開始時刻が入ったら終了時刻を開始に合わせる（終了が空 or 開始より前のときだけ。妥当に手入力済みの終了は壊さない）。
     var fromEl=e.target.closest('[data-k="from"]');
     if(fromEl){
