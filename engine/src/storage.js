@@ -27,6 +27,7 @@ import { readFile } from 'node:fs/promises';
  * @property {() => Promise<TeamInput>} getTeamInput   Team measured-indicator input.
  * @property {() => Promise<Array<Object>>} getOverrides  Coach-authored day overrides (empty array when none).
  * @property {() => Promise<Object>} getAnnualPlan    Annual-plan document (months/peaks/...).
+ * @property {() => Promise<{weeks:Object<string,string>, arcMonths:Object<string,string>}>} getGoalOverrides  Coach-authored week/month goal text overrides (empty maps when none).
  */
 
 /**
@@ -86,11 +87,32 @@ export function createLocalStorage({ drillsPath, configPath, inputPath, override
       }
       return readJson(annualPath);
     },
+    async getGoalOverrides() {
+      // 静的ビルド経路（ローカルJSON）は目標上書きを持たない。常に空マップを返す
+      // （週/月の目標編集はマルチテナント＝Firestore 経路だけの機能）。
+      return { weeks: {}, arcMonths: {} };
+    },
   };
 }
 
 /** doc-ID 文字種ゲート（コーチ入力由来の date を doc ID に使う前段の検証）。 */
 const DATE_DOC_ID = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Firestore マップフィールドを「string 値だけ」の plain object に正規化する。
+ * object でない（doc 未編集・型汚染）入力は空 object 扱い。各エントリは値が string のものだけ採用し、
+ * 数値・null・object 等が混入しても描画側へ流さない（goalOverrides の型汚染除去）。
+ * @param {*} raw
+ * @returns {Object<string,string>}
+ */
+function stringMap(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return out;
+}
 
 /**
  * Firestore storage backend (Admin SDK). Mirrors createLocalStorage's contract.
@@ -158,6 +180,15 @@ export function createFirestoreStorage({ db, tenantId, teamId }) {
       const doc = await tenantRef.collection('annualPlan').doc('current').get();
       if (!doc.exists) throw new Error(`Firestore: tenants/${tenantId}/annualPlan/current が見つかりません`);
       return doc.data();
+    },
+    async getGoalOverrides() {
+      // tenants/{tenantId}/goalOverrides/current の weeks / arcMonths マップを読む。
+      // doc 無し＝コーチが未編集の正常状態なので空マップを返す（getOverrides と同じく欠損は空で表現）。
+      const doc = await tenantRef.collection('goalOverrides').doc('current').get();
+      if (!doc.exists) return { weeks: {}, arcMonths: {} };
+      const data = doc.data() || {};
+      // 各マップは string 値のものだけ採用する（書き側のゲートと二重化＝型汚染した値を描画に流さない）。
+      return { weeks: stringMap(data.weeks), arcMonths: stringMap(data.arcMonths) };
     },
   };
 }

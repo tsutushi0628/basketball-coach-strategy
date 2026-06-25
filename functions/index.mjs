@@ -21,7 +21,7 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import express from 'express';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -63,6 +63,9 @@ const app = getApps().length ? getApps()[0] : initializeApp({ projectId: PROJECT
 const db = getFirestore(app, DATABASE_NAME);
 
 const DATE_DOC_ID = /^\d{4}-\d{2}-\d{2}$/;
+// 'HH:MM'（H=0..23・M=00..59）妥当性。コーチ上書きの時刻ペアを保存段階で検証する（描画ゲートとの二重化）。
+const HM_TIME = /^([01]?\d|2[0-3]):[0-5]\d$/;
+const hmToMin = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + m; };
 
 // ── ローカル永続（エミュレータ専用）──────────────────────────────────────────
 // エミュレータの名前付きDBは組み込みexport/importで永続化できず再起動で消える。
@@ -128,7 +131,7 @@ function localRemove(tenantId, date) {
  * 余計なキーは落とし、保存スキーマ（date/weekday/source/layout/court/title/aim/rows）だけ通す。
  * 不正なら throw（呼び出し側が 400 にする）。
  */
-function sanitizeOverride(body) {
+export function sanitizeOverride(body) {
   if (!body || typeof body !== 'object') throw new Error('body required');
   const date = String(body.date || '');
   if (!DATE_DOC_ID.test(date)) throw new Error('date must be YYYY-MM-DD');
@@ -147,6 +150,12 @@ function sanitizeOverride(body) {
   const rows = body.rows.map((r) => {
     const rr = (r && typeof r === 'object') ? r : {}; // null/非オブジェクト行でも落ちない
     const row = { from: str(rr.from, 5), to: str(rr.to, 5) };
+    // 時刻ペアが両方入る行は HH:MM 妥当かつ「終了≥開始」を要求（終了<開始の打ち間違いだけを保存段階で弾く
+    // ＝週グリッド/タイムラインの負値・軸破壊を防ぐ）。終了=開始（0分・編集UIが未完成行で作りうる）は許容。
+    // 片方/両方が空の行は時間割を持たない指定として許容（描画側が時刻なし・0分行を除外する）。
+    if (row.from && row.to && (!HM_TIME.test(row.from) || !HM_TIME.test(row.to) || hmToMin(row.to) < hmToMin(row.from))) {
+      throw new Error('time range invalid (use HH:MM with start before end)');
+    }
     if (typeof rr.minutes === 'number' && rr.minutes >= 0) row.minutes = Math.floor(rr.minutes);
     const both = cell(rr.both);
     if (both) { row.both = both; } else {
@@ -233,6 +242,65 @@ export function themeWriteDecision(ctx, body) {
     return { ok: false, status: 400, error: 'themeKey が不正です' };
   }
   return { ok: true, themeKey };
+}
+
+/**
+ * 学校名変更の認可＋入力検証（テナント解決後・Firestore 書き込み前の純判定）。
+ * themeWriteDecision と同型（isAdmin ゲート＝テナント設定スコープ）。文字数判定はコード側に閉じる。
+ *   - 管理者でない（ctx.isAdmin !== true）→ 403。
+ *   - 学校名が 1〜60 文字でない（空・60超）→ 400（壊れデータ・空表示を作らせない）。
+ *   - 上記を通過 → ok:true（ハンドラが ctx.tenantId 配下へ merge 書き込み）。
+ * @param {{isAdmin?:boolean}} ctx 解決済みテナントコンテキスト
+ * @param {*} body リクエストボディ（name を持つ想定）
+ * @returns {{ok:true, name:string} | {ok:false, status:number, error:string}}
+ */
+export function nameWriteDecision(ctx, body) {
+  if (!ctx || ctx.isAdmin !== true) {
+    return { ok: false, status: 403, error: '設定の変更権限がありません' };
+  }
+  const name = String(body?.name || '').trim();
+  if (name.length < 1 || name.length > 60) {
+    return { ok: false, status: 400, error: '学校名が不正です' };
+  }
+  return { ok: true, name };
+}
+
+/** 月の目標キー（"1".."12"）の文字種ゲート。コーチ入力由来の key をマップキーに使う前段の検証。 */
+const MONTH_KEY = /^(?:[1-9]|1[0-2])$/;
+
+/**
+ * 週/月の目標テキスト編集の認可＋入力検証（テナント解決後・Firestore 書き込み前の純判定）。
+ * /api/override と同型（owner ロールゲート＝上書き編集スコープ）。scope/key/text の厳密判定はコード側に閉じる。
+ *   - owner ロールでない（ctx.role !== 'owner'）→ 403。
+ *   - scope が 'week'|'month' 以外 → 400。
+ *   - scope==='week' で key が YYYY-MM-DD でない → 400。
+ *   - scope==='month' で key が "1".."12" でない → 400。
+ *   - text が 200 文字超 → 400（空文字は許可＝該当キー削除の意図）。
+ *   - 上記を通過 → ok:true（ハンドラが weeks/arcMonths マップへ merge 書き込み・空 text は該当キー削除）。
+ * @param {{role?:string}} ctx 解決済みテナントコンテキスト
+ * @param {*} body リクエストボディ（scope/key/text を持つ想定）
+ * @returns {{ok:true, scope:'week'|'month', key:string, text:string} | {ok:false, status:number, error:string}}
+ */
+export function goalWriteDecision(ctx, body) {
+  if (!ctx || ctx.role !== 'owner') {
+    return { ok: false, status: 403, error: '編集権限がありません' };
+  }
+  const scope = body?.scope;
+  if (scope !== 'week' && scope !== 'month') {
+    return { ok: false, status: 400, error: 'scope が不正です' };
+  }
+  const key = typeof body?.key === 'string' ? body.key : '';
+  if (scope === 'week' && !DATE_DOC_ID.test(key)) {
+    return { ok: false, status: 400, error: 'key が不正です' };
+  }
+  if (scope === 'month' && !MONTH_KEY.test(key)) {
+    return { ok: false, status: 400, error: 'key が不正です' };
+  }
+  const text = String(body?.text || '').trim();
+  if (text.length > 200) {
+    return { ok: false, status: 400, error: 'text が長すぎます' };
+  }
+  return { ok: true, scope, key, text };
 }
 
 /**
@@ -428,6 +496,67 @@ export function mountWriteApi(appServer, dbInstance) {
       res.status(500).json({ ok: false, error: 'save failed' });
     }
   });
+
+  // ── 学校名の変更（テナント設定スコープ＝isAdmin ゲート）───────────────────────────
+  // /api/tenant/theme と同型（resolveRequestTenant→kind 分岐→純判定→tenants/{tid} doc 本体へ merge）。
+  // 差分は保存フィールドが name であることだけ（認可・越境担保・merge 作法は theme と同じ）。
+  appServer.post('/api/tenant/name', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    // 認可（isAdmin・403）＋入力検証（1〜60文字・400）はコード側の純判定に閉じる。
+    const decision = nameWriteDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+    try {
+      // 対象は必ず解決済み tenantId 配下（越境はパスで担保＝theme と同じ作法）。
+      await dbInstance.collection('tenants').doc(ctx.tenantId).set({ name: decision.name }, { merge: true });
+      res.json({ ok: true, name: decision.name });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
+
+  // ── 週/月の目標テキスト編集（上書き編集スコープ＝owner ゲート）──────────────────────
+  // /api/override と同型（resolveRequestTenant→kind 分岐→owner 認可→純判定→Firestore 書き込み）。
+  // 保存先は tenants/{tid}/goalOverrides/current の weeks（週）/ arcMonths（月）マップフィールド。
+  // text 非空＝該当キーに set、空文字＝該当キーを FieldValue.delete()（どちらも merge で他キーを壊さない）。
+  appServer.post('/api/tenant/goal', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    // 認可（owner・403）＋入力検証（scope/key/text・400）はコード側の純判定に閉じる。
+    const decision = goalWriteDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+    const field = decision.scope === 'week' ? 'weeks' : 'arcMonths';
+    // 非空はテキストを set、空文字は該当キーを削除（コーチが空にしたら叩き台へ戻す意図）。
+    const fieldValue = decision.text
+      ? { [field]: { [decision.key]: decision.text } }
+      : { [field]: { [decision.key]: FieldValue.delete() } };
+    try {
+      // 対象は必ず解決済み tenantId 配下（越境はパスで担保＝/api/override と同じ作法）。
+      await dbInstance.collection('tenants').doc(ctx.tenantId)
+        .collection('goalOverrides').doc('current').set(fieldValue, { merge: true });
+      res.json({ ok: true, scope: decision.scope, key: decision.key, text: decision.text });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
 }
 
 const server = express();
@@ -491,7 +620,9 @@ server.get('*', async (req, res) => {
         return;
       }
     }
-    const schoolName = tenant && typeof tenant.name === 'string' ? tenant.name : undefined;
+    // マルチテナント経路は必ず安全な既定を渡す（空文字名で空表示にしない／plan-data の静的既定
+    // '南中野中'＝別テナントの実校名に落とさない）。未設定・空白のみは 'マイチーム' を充てる。
+    const schoolName = (tenant && typeof tenant.name === 'string' && tenant.name.trim()) ? tenant.name.trim() : 'マイチーム';
 
     const storage = createFirestoreStorage({ db, tenantId: ctx.tenantId, teamId: BOYS_TEAM });
     const girlsStorage = createFirestoreStorage({ db, tenantId: ctx.tenantId, teamId: GIRLS_TEAM });
@@ -518,7 +649,7 @@ server.get('*', async (req, res) => {
     const html = renderPage({
       title: `${data.school} ${data.month}月 練習メニュー（男子・女子） — ${mod.meta?.name || patternId}`,
       css: css + themeCss + (ENFORCE_AUTH ? AUTH_CSS : ''),
-      body: body + (ENFORCE_AUTH ? authClientHtml(WEB_CONFIG, { isAdmin: ctx.isAdmin === true, themeKey }) : ''),
+      body: body + (ENFORCE_AUTH ? authClientHtml(WEB_CONFIG, { isAdmin: ctx.isAdmin === true, themeKey, schoolName }) : ''),
     });
     res.set('Content-Type', 'text/html; charset=utf-8').send(html);
   } catch (e) {

@@ -13,6 +13,7 @@ import {
   genderChip, VIDEO_SVG,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
+import { GOAL_EDITOR_CSS, goalEditorScript } from './goal-editor.mjs';
 // 並べ替え（D&D）ライブラリは firebase-kit 共有vendorが正本。ページにインライン注入して window.Sortable を生やす。
 // 注: 配信時はデプロイのvendoringで本モジュールも functions 配下へ同梱する（現状はローカル相対解決）。
 import { SORTABLE_MIN_JS } from '../../firebase-kit/ui/vendor/sortable.min.mjs';
@@ -381,17 +382,66 @@ const toMin = (hm) => {
   return (h || 0) * 60 + (m || 0);
 };
 
+/** 'HH:MM'（H=0..23・M=00..59）妥当性。コーチ入力の時刻ペアを週グリッドに載せる前段の検証。 */
+const HM_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
 /** px/分スケール: segH（m*3.6）と同係数で日スパインと比例感を揃える。承認モック尺（1分2.0px）を優先。 */
 const PX_PER_MIN = 2.0;
 
 /** 畳んだ未使用帯の固定高さ（px）。承認モックの46pxに合わせる。 */
 const BREAK_PX = 46;
 
+/**
+ * コーチ上書き日（twoCol スキーマ）の各 row から、週グリッドに置ける時間ブロックを合成する。
+ * from/to が両方非空の行だけを 1行=1ブロックに変換する（時刻欄が空の行は 0:00 潰れを招くので除外）。
+ * both/男子/女子 の items を {name, mode:'self'} で集約し、ブロック種別は both>男子>女子 の順で拾う。
+ * @param {object} d 上書き日（d.twoCol===true・d.rows を持つ）
+ * @returns {Array|null} 合成ブロック配列（0件なら null）
+ */
+function coachTwoColBlocks(d) {
+  const blocks = [];
+  for (const row of d.rows || []) {
+    if (!row.from || !row.to) continue; // 時刻が無い行は週グリッドに置けない（0:00潰れ防止）
+    if (!HM_RE.test(row.from) || !HM_RE.test(row.to)) continue; // HH:MM 妥当な行だけ載せる
+    const fm = toMin(row.from);
+    const tm = toMin(row.to);
+    if (!(tm > fm)) continue; // 開始≥終了（コーチの打ち間違い）は軸・高さを負にして週グリッドを壊すので除外
+    const both = row.both;
+    const boys = row.boys;
+    const girls = row.girls;
+    const block = both?.block || boys?.block || girls?.block || '対人';
+    const label = both?.label || [boys?.label, girls?.label].filter(Boolean).join(' / ') || '練習';
+    const items = [];
+    for (const cell of [both, boys, girls]) {
+      for (const it of (cell?.items || [])) {
+        items.push({ name: it.name, mode: 'self' });
+      }
+    }
+    if (items.length === 0) continue; // 中身ゼロの行は週グリッドに出さない（旧スキーマ経路＝items非空要求と対称に）
+    blocks.push({
+      block,
+      label,
+      from: row.from,
+      to: row.to,
+      minutes: tm - fm,
+      items,
+      isBundle: false,
+    });
+  }
+  return blocks.length ? blocks : null;
+}
+
 /** 曜日列に出すブロック一覧（items が空の曜日は null）。
- * コーチ指定の上書き日は時間割を持たない（from/to 空）ため週グリッドの時刻配置から除外する
- * （週ヘッダには「コーチ指定」だけ出す）。0:00 起点への潰れを防ぐ。 */
-function dayBlocks(d) {
-  if (d.source === 'coach') return null;
+ * コーチ上書き日でも時間ブロックを合成して週グリッドに反映する（fix: コーチ編集日が空欄になる不具合）:
+ *  - twoCol スキーマ: 各 row（from/to 両方非空）を 1行=1ブロックに合成する。
+ *  - 旧スキーマ（単一 blocks）: blocks は既に from/to を持つので、items 非空の blocks をそのまま返す。
+ * from/to が無い行・items 空の blocks は 0:00 起点への潰れを防ぐため除外する。 */
+export function dayBlocks(d) {
+  if (d.source === 'coach') {
+    if (d.twoCol) return coachTwoColBlocks(d);
+    const cblocks = (d.blocks || []).filter((b) => b.items.length > 0 && b.from && b.to);
+    return cblocks.length ? cblocks : null;
+  }
   const blocks = d.blocks.filter((b) => b.items.length > 0);
   return blocks.length ? blocks : null;
 }
@@ -418,7 +468,7 @@ function mergeRanges(ranges) {
  * @param {Array} days buildDays 結果の days 配列
  * @returns {{ axisStart:number, axisEnd:number, used:number[][], collapse:{from:number,to:number}|null }|null}
  */
-function buildWeekAxis(days) {
+export function buildWeekAxis(days) {
   const present = days.map(dayBlocks).filter(Boolean);
   if (present.length === 0) return null;
 
@@ -507,10 +557,12 @@ function gutterTicks(axis) {
 /** hhmm ヘルパー（plan-data にも同定義がある・ここはグリッドローカル） */
 const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
-/** 週レベル: Googleカレンダー型の時間グリッド。days と focus を渡せば任意の週を描ける（複数週の実切替用）。 */
-function weekLevel(data, days = data.days, focus = '') {
+/** 週レベル: Googleカレンダー型の時間グリッド。days と focus を渡せば任意の週を描ける（複数週の実切替用）。
+ * weekKey（その週の週起点ISO）を渡すと「今週の焦点」を目標編集導線の対象にする。週起点が無ければ編集属性なし。 */
+function weekLevel(data, days = data.days, focus = '', weekKey = '') {
   const axis = buildWeekAxis(days);
-  const focusNote = focus ? `<p class="note"><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>` : '';
+  const focusAttr = weekKey ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(focus || '')}"` : '';
+  const focusNote = focus ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>` : '';
   if (!axis) {
     return `<h3 class="lvh">この週の練習</h3>${focusNote}<p class="note">この週は予定が入っていません。</p>`;
   }
@@ -519,7 +571,7 @@ function weekLevel(data, days = data.days, focus = '') {
   const totalH = axisY(axis.axisEnd, axis) + 8;
 
   // 曜日ヘッダ
-  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: '' };
+  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: 'コーチ指定' };
   const SHARE_NOTE  = { rotation: '（左右の段取りは日タブ）', together: '', independent: '', authored: '' };
 
   const dayHeads = days.map((d, i) => {
@@ -919,7 +971,7 @@ export function render(data) {
   const dayTimelines = data.days.map((d, i) => dayTimeline(data, d, i)).join('\n');
 
   return {
-    css: PATTERN_CSS + EDITOR_CSS,
+    css: PATTERN_CSS + EDITOR_CSS + GOAL_EDITOR_CSS,
     body: `
     <div class="levels" role="tablist">
       <button class="lvtab on" data-go="day" type="button">日</button>
@@ -940,14 +992,15 @@ export function render(data) {
       ${dayTimelines}
     </div>
 
-    <div class="level" data-level="week" hidden>${weekPicker(data)}${(data.weeks && data.weeks.length ? data.weeks : [{ key: '', days: data.days, focus: '' }]).map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus)}</div>`).join('')}</div>
-    <div class="level" data-level="month" hidden>${monthPicker(data)}${(data.months && data.months.length ? data.months : [{ key: '', month: data.session.month, displayMonth: data.month }]).map((m, i) => `<div class="mopanel" data-month="${esc(m.key)}"${i === 0 ? '' : ' hidden'}>${monthSection(data, m.month, m.displayMonth)}${i === 0 ? goalsSection(data) : ''}</div>`).join('')}</div>
+    <div class="level" data-level="week" hidden>${weekPicker(data)}${(data.weeks && data.weeks.length ? data.weeks : [{ key: '', days: data.days, focus: '', weekStartDate: null }]).map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus, w.weekStartDate || '')}</div>`).join('')}</div>
+    <div class="level" data-level="month" hidden>${monthPicker(data)}${(data.months && data.months.length ? data.months : [{ key: '', month: data.session.month, displayMonth: data.month, arcMonth: data.session.month.arcMonth }]).map((m, i) => `<div class="mopanel" data-month="${esc(m.key)}"${i === 0 ? '' : ' hidden'}>${monthSection(data, m.month, m.displayMonth, m.arcMonth)}${i === 0 ? goalsSection(data) : ''}</div>`).join('')}</div>
     <div class="level" data-level="year" hidden>${yearSection(data)}${assumptionsNote(data)}</div>
     ${drillDetailPanels(data)}
     <p class="foot">${esc(data.school)}　練習タイムライン</p>
     ${editorDataIsland(data)}
     <script>${SORTABLE_MIN_JS}</script>
     <script>${editorScript()}</script>
+    <script>${goalEditorScript()}</script>
     `,
   };
 }

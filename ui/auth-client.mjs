@@ -54,6 +54,26 @@ export function themeSaveErrorText(status, serverError) {
 }
 
 /**
+ * 学校・チーム名の保存失敗時の利用者向け文言を status から決める純関数（themeSaveErrorText と同型）。
+ * サーバが返した本文 error があればそれを最優先（出し分けの真実源をサーバへ寄せる）。
+ *   - サーバ error 文言あり → それをそのまま使う。
+ *   - 401 → 再ログインを促す（セッション失効・張り直し再送も失敗した状態）。
+ *   - 403 → 権限喪失を伝える（管理者でなくなった等）。
+ *   - それ以外（500・ネットワーク断で status 不明等）→ 汎用文言。
+ * いずれも「名前は元のまま」を明示する（保存成功まで現在名のまま＝失敗時に名前が消えない）。
+ * クライアント IIFE はこの関数の本体を埋め込んで使う（node 側でテストした規則と実行時を一致させる＝ドリフト防止）。
+ * @param {number} [status] HTTP ステータス（不明時は undefined）
+ * @param {string} [serverError] サーバ応答 body の error 文言
+ * @returns {string}
+ */
+export function nameSaveErrorText(status, serverError) {
+  if (serverError) return serverError;
+  if (status === 401) return 'サインインし直してください。名前は元のままです。';
+  if (status === 403) return '変更する権限がありません。名前は元のままです。';
+  return '保存できませんでした。名前は元のままです。';
+}
+
+/**
  * 16色スウォッチ格子（4列×4行）の HTML を組む。現テーマを aria-pressed="true" にする。
  * スウォッチのキー・表示名・主色・第2色はすべて color-presets.mjs の PRESET_SWATCHES が真実源。
  * 属性値は二重防御で render-shared の共通 esc を通す（&/</>/" を実体参照化）。
@@ -73,7 +93,8 @@ function swatchGridHtml(currentThemeKey) {
 /**
  * 本番ページに差し込むログインUI＋ブートストラップ（HTML文字列）。
  * @param {{apiKey:string, authDomain:string, projectId:string}} cfg 公開Web設定（秘密ではない）
- * @param {{isAdmin?:boolean, themeKey?:string}} [opts] 管理者なら歯車＋テーマパネルを出す。themeKey は初期選択。
+ * @param {{isAdmin?:boolean, themeKey?:string, schoolName?:string}} [opts] 管理者なら歯車＋チーム設定パネルを出す。
+ *        themeKey は初期選択色、schoolName は学校・チーム名フィールドの初期値。
  * @returns {string}
  */
 export function authClientHtml(cfg, opts = {}) {
@@ -82,12 +103,21 @@ export function authClientHtml(cfg, opts = {}) {
   const themeKey = typeof opts.themeKey === 'string' && THEME_KEYS.includes(opts.themeKey)
     ? opts.themeKey
     : DEFAULT_THEME_KEY;
+  const schoolName = typeof opts.schoolName === 'string' ? opts.schoolName : '';
+  // 学校・チーム名セクション（16色スウォッチ格子の上）。管理者のみ＝パネル自体が管理者限定。
+  const nameSectionHtml = `<div class="ed-name-sec">`
+    + `<span class="ed-name-lab">学校・チーム名</span>`
+    + `<div class="ed-name-row">`
+    + `<input class="ed-name-in" id="ed-name-input" type="text" maxlength="60" value="${esc(schoolName)}" placeholder="例：港北中">`
+    + `<button class="ed-name-save" id="ed-name-save" type="button">保存</button></div>`
+    + `<div class="ed-name-foot" id="ed-name-foot"></div></div>`;
   // パネル本体（歯車＋ポップオーバー）は管理者のときだけ描く（design §3.4・モック状態5＝非管理者は非表示）。
   const panelHtml = isAdmin
-    ? `<button class="ed-gear" id="ed-gear" type="button" aria-expanded="false" aria-haspopup="dialog" aria-label="チームカラーを変更" data-print-hide>${GEAR_SVG}</button>`
-      + `<div class="theme-panel" id="ed-theme-panel" role="dialog" aria-label="チームカラー" hidden data-print-hide>`
-      + `<div class="tp-head"><span class="tp-title">チームカラー</span>`
+    ? `<button class="ed-gear" id="ed-gear" type="button" aria-expanded="false" aria-haspopup="dialog" aria-label="チーム設定を変更" data-print-hide>${GEAR_SVG}</button>`
+      + `<div class="theme-panel" id="ed-theme-panel" role="dialog" aria-label="チーム設定" hidden data-print-hide>`
+      + `<div class="tp-head"><span class="tp-title">チーム設定</span>`
       + `<button class="tp-close" id="ed-tp-close" type="button" aria-label="閉じる">${CLOSE_SVG}</button></div>`
+      + nameSectionHtml
       + `<p class="tp-lede">計画ページ全体の主色が変わります。選ぶとすぐに保存されます。</p>`
       + `<div class="tp-swatches" id="ed-tp-swatches">${swatchGridHtml(themeKey)}</div>`
       + `<div class="tp-foot" id="ed-tp-foot"></div></div>`
@@ -179,10 +209,54 @@ window.__getIdToken = async function(){
     if(typeof window.__getIdToken!=='function')return Promise.resolve(h);
     return window.__getIdToken().then(function(t){if(t)h['Authorization']='Bearer '+t;return h;}).catch(function(){return h;});
   }
+  // 学校・チーム名の保存（テーマ保存と同じ withAuth/withTenantQ/credentials/401一回再送）。
+  // status に応じた失敗文言は node 側でテスト済みの nameSaveErrorText を埋め込んで使う（ドリフト防止）。
+  var nameErrorText=${nameSaveErrorText.toString()};
+  function mountNameField(){
+    var input=document.getElementById('ed-name-input');
+    var saveBtn=document.getElementById('ed-name-save');
+    var foot=document.getElementById('ed-name-foot');
+    if(!input||!saveBtn||!foot)return;
+    function setFoot(kind,text){
+      if(!kind){foot.removeAttribute('data-kind');foot.textContent='';return;}
+      foot.setAttribute('data-kind',kind);foot.textContent=text;
+    }
+    function save(){
+      var name=(input.value||'').trim();
+      input.disabled=true;saveBtn.disabled=true;
+      setFoot('saving','保存しています…');
+      var send=function(){return withAuth({'Content-Type':'application/json'})
+        .then(function(headers){return fetch(withTenantQ('/api/tenant/name'),{
+          method:'POST',headers:headers,credentials:'same-origin',body:JSON.stringify({name:name})});});};
+      send()
+        .then(function(r){
+          // セッションCookieが約24hで失効して401なら、クライアント認証が生きていれば張り直して1回だけ再送。
+          if(r.status===401&&typeof window.__establishSession==='function'){
+            return window.__establishSession().then(send).catch(function(){return r;});
+          }
+          return r;
+        })
+        .then(function(r){
+          var status=r.status;
+          return r.json().catch(function(){return {ok:r.ok};}).then(function(res){
+            if(res&&res.ok){window.location.reload();return;} // SSR再描画で新名を反映
+            input.disabled=false;saveBtn.disabled=false;
+            setFoot('error',nameErrorText(status,res&&res.error)); // 401/403/他を出し分け
+          });
+        })
+        .catch(function(){
+          input.disabled=false;saveBtn.disabled=false;
+          setFoot('error',nameErrorText()); // ネットワーク断等は status 不明＝汎用文言
+        });
+    }
+    saveBtn.addEventListener('click',save);
+  }
+
   // 歯車・パネルの配線は描画のたびに呼ばれる（render() が box.innerHTML を差し替えるため）。
   window.__edMountThemePanel=function(){
     var boot=window.__edThemeBoot||{};
     if(!boot.isAdmin)return; // 非管理者は DOM 自体が無い
+    mountNameField(); // 学校・チーム名フィールドの配線（パネル内・管理者のみ）
     var gear=document.getElementById('ed-gear');
     var panel=document.getElementById('ed-theme-panel');
     var swWrap=document.getElementById('ed-tp-swatches');
@@ -277,6 +351,21 @@ export const AUTH_CSS = `
 .tp-close:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 .tp-close svg{width:16px;height:16px;display:block}
 .tp-lede{font-size:12px;color:var(--mute);line-height:1.55;margin-bottom:13px}
+/* 学校・チーム名セクション（スウォッチ格子の上）。tp-* と同トーン・既存トークンのみ。 */
+.ed-name-sec{margin-bottom:14px;padding-bottom:13px;border-bottom:1px solid var(--line)}
+.ed-name-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:6px}
+.ed-name-row{display:flex;gap:7px;align-items:center}
+.ed-name-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:8px 11px;line-height:1.4}
+.ed-name-in:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+.ed-name-in:disabled{opacity:.6}
+.ed-name-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--orange);color:var(--orange-ink);border:1px solid var(--orange);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
+.ed-name-save:hover{transform:translateY(-1px)}
+.ed-name-save:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.ed-name-save:disabled{opacity:.55;cursor:default;transform:none}
+.ed-name-foot{font-size:12px;line-height:1.5;color:var(--ink);margin-top:6px}
+.ed-name-foot:empty{display:none}
+.ed-name-foot[data-kind="saving"]{color:var(--mute)}
+.ed-name-foot[data-kind="error"]{color:var(--terra);font-weight:600}
 /* 16スウォッチの格子＝4列×4行。押せるものなので各セルは border を持つ。 */
 .tp-swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .tp-swatches .sw{position:relative;appearance:none;cursor:pointer;background:var(--surface);border:1px solid var(--hair);border-radius:11px;padding:7px 3px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font:inherit;transition:transform .16s ease,border-color .16s ease}

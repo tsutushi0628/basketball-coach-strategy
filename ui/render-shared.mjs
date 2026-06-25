@@ -426,12 +426,21 @@ function kpiCard(label, gender, g) {
   return `<div class="kteam"><div class="kth">${genderChip(gender)}の指標</div><div class="kpis">${meters}</div></div>`;
 }
 
-/** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。 */
+/** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。
+ * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。月はアンカーarc月キー、週はアンカー
+ * 週起点ISOキー（週起点が無ければ週セルには編集属性を付けない＝保存キーが作れないため）。 */
 export function goalsBar(data) {
   const g = data.session.goals;
+  const keys = data.goalKeys || {};
+  const monthAttr = (keys.monthArcKey != null)
+    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(keys.monthArcKey))}" data-goal-text="${esc(g.monthMain || '')}"`
+    : '';
+  const weekAttr = keys.weekKey
+    ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(keys.weekKey)}" data-goal-text="${esc(g.week || '')}"`
+    : '';
   return `<div class="goalbar">
-    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
-    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
+    <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
+    <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
   </div>`;
 }
 
@@ -467,7 +476,14 @@ export function yearSection(data) {
         const isNow = a.month === currentMonth;
         const nowChip = isNow ? `<span class="nowchip ${gender}">${gender === 'boys' ? '男子' : '女子'}いま</span>` : '';
         const shortPhase = esc(a.phase.replace(/（.*$/, '').replace(/\(.*$/, ''));
-        return `<div class="arccell${peakCls}${isNow ? ' arccell-now' : ''}" title="${esc(a.headline)}">
+        // 年タブの各arc月セルも目標編集の対象（月＝arcMonthsマップの同一源）。編集対象テキストは
+        // 見出し文（a.headline）。セルは boys/girls の2行に出るが、編集導線は男子行（boys）にだけ
+        // 付ける（同一arc月キーが左右2セルに重複すると保存導線が二重になるため）。
+        // 狭セルなので data-goal-overlay で画面下オーバーレイ編集にする（セル内インライン展開だと行が崩れる）。
+        const goalAttr = gender === 'boys'
+          ? ` data-goal-edit data-goal-overlay="1" data-goal-scope="month" data-goal-key="${esc(String(a.month))}" data-goal-text="${esc(a.headline)}" data-goal-title="${esc(String(a.month))}月の目標"`
+          : '';
+        return `<div class="arccell${peakCls}${isNow ? ' arccell-now' : ''}"${goalAttr} title="${esc(a.headline)}">
           <span class="am">${a.month}月</span>
           <span class="ap">${shortPhase}</span>
           ${peakChip}
@@ -495,8 +511,9 @@ export function yearSection(data) {
     </div>`;
 }
 
-/** 月セクション（今月やること・フェーズ・チェックする数字・共通）。m/displayMonth を渡せば任意の月を描ける（複数月の実切替用）。 */
-export function monthSection(data, m = data.session.month, displayMonth = data.month) {
+/** 月セクション（今月やること・フェーズ・チェックする数字・共通）。m/displayMonth を渡せば任意の月を描ける（複数月の実切替用）。
+ * arcMonthKey（その月のarc月キー）を渡すと「今月やること」を目標編集導線の対象にする（月＝arcMonthsマップ）。 */
+export function monthSection(data, m = data.session.month, displayMonth = data.month, arcMonthKey = (m && m.arcMonth)) {
   const peak = m.peak
     ? `<div class="mc-peak">大会に向けて仕上げる時期（${esc(peakName(data, m.peak))}）</div>`
     : '';
@@ -504,10 +521,13 @@ export function monthSection(data, m = data.session.month, displayMonth = data.m
     m.kpiHints && m.kpiHints.length
       ? `<div class="mc-kpi"><div class="kk">チェックする数字</div><div class="kv">${m.kpiHints.map(esc).join('・')}</div></div>`
       : '';
+  const aimAttr = (arcMonthKey != null)
+    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(arcMonthKey))}" data-goal-text="${esc(m.headline || '')}"`
+    : '';
   return `<h3 class="lvh">${displayMonth}月にやること（年間予定より）</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${displayMonth}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
-      <div class="mc-aim">${esc(m.headline)}</div>
+      <div class="mc-aim"${aimAttr}>${esc(m.headline)}</div>
       ${peak}
       ${kpi}
     </div>

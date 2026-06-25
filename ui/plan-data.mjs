@@ -274,6 +274,7 @@ function buildSession({ annual, drills, config, teamInput, period }) {
 
   const month = {
     displayMonth: resolved.displayMonth,
+    arcMonth: resolved.arcMonth, // 年アーク月キー（月/年の目標上書きの単一真実源キー）
     phase: resolved.phase,
     headline: resolved.headline,
     kpiHints: resolved.kpi_hints,
@@ -661,6 +662,67 @@ export function applyOverrides(days, overrides, weekStartDate) {
 }
 
 /**
+ * コーチが編集した週/月/年の目標テキスト上書きを、組み立て済みの表示データへ適用する（決定論）。
+ *
+ * データモデルの要点（design 確定）:
+ *   - 週の焦点は週起点日キー（YYYY-MM-DD）の `weeks` マップ。各週だけに効く。
+ *   - 月の目標と年アークの各月見出しは同一源（annual.months[arcMonth].headline）。だから月の目標と
+ *     年の各月の目標は arc月キーの同一マップ（`arcMonths`）で扱う＝月タブで編集すると年タブの同じ
+ *     arc月セルにも反映される（単一真実源・正しい挙動）。
+ *
+ * 空文字は上書きとして扱わない（バックエンドが空文字キーを削除＝エンジン値へ戻すため、上書きマップに
+ * 残らない。マップに残った値は必ず非空）。ここでも非空ガードを置いて二重防御する。
+ *
+ * @param {object} parts 組み立て済みデータ片（参照を直接書き換える）
+ * @param {Array}  parts.weeks   週ピッカー用の複数週（先頭=アンカー）。各 weekStartDate/focus/goals を持つ。
+ * @param {Array}  parts.months  月ピッカー用の複数月。各 arcMonth/month.headline を持つ。
+ * @param {object} parts.year    年リボン（arc[].month=arc月・arc[].headline）。
+ * @param {object} parts.session アンカー（session.goals.week/monthMain・session.month.headline/arcMonth）。
+ * @param {{weeks:Object<string,string>, arcMonths:Object<string,string>}} goalOverrides storage.getGoalOverrides() の結果
+ * @returns {object} parts（同一参照・テスト容易性のため返す）
+ */
+export function applyGoalOverrides(parts, goalOverrides) {
+  const weekMap = (goalOverrides && goalOverrides.weeks) || {};
+  const arcMap = (goalOverrides && goalOverrides.arcMonths) || {};
+  const { weeks, months, year, session } = parts;
+
+  // ── 週: weekStartDate キーで該当週だけに効く。アンカー週は session.goals.week も同値に。──
+  for (const w of (weeks || [])) {
+    const key = w.weekStartDate;
+    const text = key ? weekMap[key] : '';
+    if (typeof text === 'string' && text !== '') {
+      w.focus = text;
+      if (w.goals) w.goals.week = text;
+    }
+  }
+  // アンカー週（先頭）の上書きを session.goals.week にも反映（top-level 展開の整合）。
+  if (session && session.goals && weeks && weeks[0] && weeks[0].weekStartDate) {
+    const text = weekMap[weeks[0].weekStartDate];
+    if (typeof text === 'string' && text !== '') session.goals.week = text;
+  }
+
+  // ── 月/年: arc月キーで months / year.arc / session（アンカーarc月）の同一見出しに効く。──
+  for (const m of (months || [])) {
+    const text = arcMap[String(m.arcMonth)];
+    if (typeof text === 'string' && text !== '') {
+      if (m.month) m.month.headline = text;
+    }
+  }
+  for (const a of (year && year.arc ? year.arc : [])) {
+    const text = arcMap[String(a.month)];
+    if (typeof text === 'string' && text !== '') a.headline = text;
+  }
+  if (session && session.month) {
+    const text = arcMap[String(session.month.arcMonth)];
+    if (typeof text === 'string' && text !== '') {
+      session.month.headline = text;
+      if (session.goals) session.goals.monthMain = text;
+    }
+  }
+  return parts;
+}
+
+/**
  * 練習計画UIの単一データを組み立てる（決定論・LLM不使用）。
  *
  * データ源は注入された storage に一本化（ローカルJSON or Firestore）。storage は
@@ -680,13 +742,14 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     throw new Error('buildPlanData: storage と girlsStorage の注入が必須です');
   }
 
-  const [annual, rawDrills, config, teamInput, girlsInput, overrides] = await Promise.all([
+  const [annual, rawDrills, config, teamInput, girlsInput, overrides, goalOverrides] = await Promise.all([
     storage.getAnnualPlan(),
     storage.getDrills(),
     storage.getConfig(),
     storage.getTeamInput(),
     girlsStorage.getTeamInput(),
     storage.getOverrides(),
+    storage.getGoalOverrides(),
   ]);
   const drills = normalizeDrills(rawDrills);
 
@@ -748,8 +811,10 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
       key: mp.key,
       label: mp.label,
       displayMonth: mp.displayMonth,
+      arcMonth: r.arcMonth, // 月パネルが目標上書きを引くキー（年アーク月＝月と年で同一源）
       month: {
         displayMonth: mp.displayMonth,
+        arcMonth: r.arcMonth,
         phase: r.phase,
         headline: r.headline,
         kpiHints: r.kpi_hints,
@@ -777,6 +842,18 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     peaks: annualPeaks(annual),
   };
 
+  // ── コーチが編集した週/月/年の目標テキストを上書き適用（決定論・空文字は上書きしない）──
+  // 週は週起点日キー、月/年は arc月キー（月と年は同一源）。weeks/months/year/session を同時整合させる。
+  applyGoalOverrides({ weeks, months, year, session }, goalOverrides);
+
+  // 描画キー（編集導線が目標保存APIへ渡す scope/key の単一真実源）。
+  //   - weekKey: アンカー週の週起点ISO（無ければ null＝編集導線を出さない）。
+  //   - monthArcKey: アンカーの arc月（月/年の目標上書きの単一源キー）。
+  const goalKeys = {
+    weekKey: (weeks[0] && weeks[0].weekStartDate) || null,
+    monthArcKey: session.month.arcMonth,
+  };
+
   // ── ドリル詳細レジストリ（素カタログ・notesクレンジング済み）──────────────────
   // normalize.js 経由では balls 等が落ちるため、素レコード(rawDrills)から直接構築する。
   // storage.getDrills() の戻り値を normalize 用と詳細レジストリ用に共用（二重読みなし）。
@@ -799,6 +876,7 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     weeks, // 週ピッカー実切替用の複数週（先頭=アンカー）。
     months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,
+    goalKeys, // 目標編集導線が目標保存APIへ渡す scope/key の単一真実源（weekKey/monthArcKey）
     drillIndex,
     blockCandidates, // 編集画面の枠別ドリル候補（枠に応じた候補だけを提案する）
     assumptions: [
