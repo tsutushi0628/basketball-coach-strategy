@@ -31,6 +31,7 @@ import { createFirestoreStorage } from '../engine/src/storage.js';
 import { buildPlanData } from '../ui/plan-data.mjs';
 import { renderPage } from '../ui/render-shared.mjs';
 import { AUTH_CSS, authClientHtml } from '../ui/auth-client.mjs';
+import { THEME_KEYS, themeOverrideCss } from '../ui/color-presets.mjs';
 
 // セッション認証・テナント解決・招待（マルチテナント核）。
 import { createSession, revokeAndClear, verifySession } from './session-auth.mjs';
@@ -214,6 +215,27 @@ async function resolveRequestTenant(dbInstance, req, { forWrite = false } = {}) 
 }
 
 /**
+ * チームカラー保存の認可＋入力検証（テナント解決後・Firestore 書き込み前の純判定）。
+ * 分岐・集合所属判定はコード側に閉じる（LLM不要）。テナント解決と越境担保はハンドラ側。
+ *   - 管理者でない（ctx.isAdmin !== true）→ 403。
+ *   - themeKey がプリセット集合（THEME_KEYS）外 → 400（壊れデータを作らせない＝書かせない）。
+ *   - 上記を通過 → ok:true（ハンドラが ctx.tenantId 配下へ merge 書き込み）。
+ * @param {{isAdmin?:boolean}} ctx 解決済みテナントコンテキスト
+ * @param {*} body リクエストボディ（themeKey を持つ想定）
+ * @returns {{ok:true, themeKey:string} | {ok:false, status:number, error:string}}
+ */
+export function themeWriteDecision(ctx, body) {
+  if (!ctx || ctx.isAdmin !== true) {
+    return { ok: false, status: 403, error: '設定の変更権限がありません' };
+  }
+  const themeKey = typeof body?.themeKey === 'string' ? body.themeKey : '';
+  if (!THEME_KEYS.includes(themeKey)) {
+    return { ok: false, status: 400, error: 'themeKey が不正です' };
+  }
+  return { ok: true, themeKey };
+}
+
+/**
  * 書き込みAPI・認証API・招待APIを express サーバへマウントする。
  * db は依存注入（本番は Admin SDK の Firestore、テストはモック db）。書き込みは
  * Function/Admin SDK 経由のみ＝クライアント直書きは rules で全 deny。
@@ -376,6 +398,36 @@ export function mountWriteApi(appServer, dbInstance) {
       res.status(500).json({ ok: false, error: 'delete failed' });
     }
   });
+
+  // ── チームカラー設定の保存（テナント設定スコープ＝isAdmin ゲート）────────────────
+  // 認証・テナント解決は /api/override と同型（resolveRequestTenant→kind 分岐）。差分は3点:
+  //   (a) owner ロールでなく管理者フラグ isAdmin を要求する（テナント設定は招待発行=isSuperAdmin・
+  //       上書き保存=owner と直交する第3系統）。
+  //   (b) themeKey をプリセット集合 THEME_KEYS にコード厳密判定（集合外は 400・LLM不要）。
+  //   (c) overrides サブコレクションでなく tenants/{tid} doc 本体へ themeKey を merge 書き込み。
+  appServer.post('/api/tenant/theme', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    // 認可（isAdmin・403）＋入力検証（集合外themeKey・400）はコード側の純判定に閉じる。
+    const decision = themeWriteDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+    try {
+      // 対象は必ず解決済み tenantId 配下（越境はパスで担保＝/api/override と同じ作法）。
+      await dbInstance.collection('tenants').doc(ctx.tenantId).set({ themeKey: decision.themeKey }, { merge: true });
+      res.json({ ok: true, themeKey: decision.themeKey });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
 }
 
 const server = express();
@@ -457,11 +509,16 @@ server.get('*', async (req, res) => {
     }
 
     const { css, body } = mod.render(data);
+    // チームカラー: テナントの themeKey（未設定→既定オレンジ）でアクセント主色を末尾カスケード上書き。
+    // 末尾連結で BASE_CSS の :root（既定オレンジ）に勝たせる（design §3.2・既定/未知キーは空文字）。
+    const themeKey = tenant && typeof tenant.themeKey === 'string' ? tenant.themeKey : 'orange';
+    const themeCss = themeOverrideCss(themeKey);
     // 本番だけ認証UI（ログイン状態表示＋ログアウト＋セッション再確立＋__getIdToken）を本体に差し込む。
+    // 管理者には歯車＋16色パネルも出す（isAdmin・現テーマを渡す。非管理者はメール＋ログアウトのみ）。
     const html = renderPage({
       title: `${data.school} ${data.month}月 練習メニュー（男子・女子） — ${mod.meta?.name || patternId}`,
-      css: css + (ENFORCE_AUTH ? AUTH_CSS : ''),
-      body: body + (ENFORCE_AUTH ? authClientHtml(WEB_CONFIG) : ''),
+      css: css + themeCss + (ENFORCE_AUTH ? AUTH_CSS : ''),
+      body: body + (ENFORCE_AUTH ? authClientHtml(WEB_CONFIG, { isAdmin: ctx.isAdmin === true, themeKey }) : ''),
     });
     res.set('Content-Type', 'text/html; charset=utf-8').send(html);
   } catch (e) {

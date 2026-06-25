@@ -189,6 +189,7 @@ export async function acceptInvitation(db, authUser, token) {
       name: '新しいチーム',
       status: 'active',
       initialized: false,
+      themeKey: 'orange',
       createdBy: authUser.uid,
       createdAt: FieldValue.serverTimestamp(),
     });

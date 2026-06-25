@@ -174,7 +174,10 @@ a{color:var(--orange-deep)}
 .arccell .am{font-size:12px;font-weight:700}
 /* T6: arccell .ap は 12px（補助段） */
 .arccell .ap{font-size:12px;color:var(--mute);line-height:1.4;min-height:34px}
-.peakchip{font-size:12px;background:var(--orange-deep);color:var(--orange-ink);border-radius:999px;padding:2px 8px;font-weight:700;align-self:flex-start}
+/* 文字色はテーマ非依存の固定淡色。明色テーマ（sky/lime/gold）では --orange-ink が暗色になり、
+ * 濃い --orange-deep 地の上で読めなくなるため --orange-ink から切り離す（deep は全テーマで地より
+ * 十分濃いので固定淡色は必ず読める）。design §1.2.1 / §5.4 のインク反転付帯修正。 */
+.peakchip{font-size:12px;background:var(--orange-deep);color:#fffaf2;border-radius:999px;padding:2px 8px;font-weight:700;align-self:flex-start}
 .nowchip{font-size:12px;border-radius:999px;padding:2px 8px;font-weight:700;white-space:nowrap}
 .nowchip.boys{background:var(--boys);color:var(--orange-ink)}
 .nowchip.girls{background:var(--girls);color:var(--orange-ink)}
