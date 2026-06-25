@@ -634,9 +634,11 @@ export function applyOverrides(days, overrides, weekStartDate) {
  * @param {Object} deps
  * @param {import('../engine/src/storage.js').Storage} deps.storage      男子（共通メニュー本体＋年間計画＋上書き）
  * @param {import('../engine/src/storage.js').Storage} deps.girlsStorage 女子（指標のみ）
+ * @param {string} [deps.school] テナント表示名（マルチテナント解決後の tenant.name）。
+ *                               未指定なら従来の現行校名にフォールバック（ローカル静的ビルド互換）。
  * @returns {Promise<object>} pattern-*.mjs の render() に渡す表示データ
  */
-export async function buildPlanData({ storage, girlsStorage }) {
+export async function buildPlanData({ storage, girlsStorage, school }) {
   if (!storage || !girlsStorage) {
     throw new Error('buildPlanData: storage と girlsStorage の注入が必須です');
   }
@@ -745,7 +747,8 @@ export async function buildPlanData({ storage, girlsStorage }) {
   const drillIndex = buildDrillRegistry(rawDrills);
 
   return {
-    school: '南中野中',
+    // テナント名（解決後の tenant.name）。マルチテナント前のローカル静的ビルドは従来の現行校名にフォールバック。
+    school: school ?? '南中野中',
     month: displayCalendarMonth, // 表示する暦月（週起点由来＝6月）。フェーズ位置(current_month=7)は year/session が保持。
     groups: ['男子', '女子'],
     session: { goals: session.goals, month: session.month },

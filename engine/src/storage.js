@@ -95,29 +95,42 @@ const DATE_DOC_ID = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Firestore storage backend (Admin SDK). Mirrors createLocalStorage's contract.
  *
- * Collection layout (Admin SDK only — clients are blocked by rules):
- *   drills/{drillId}              raw catalog records (un-normalized).
- *   teams/{teamId}                team config doc.
- *   teams/{teamId}/input/latest   team-input doc (indicators).
- *   annualPlan/current            annual-plan doc.
- *   overrides/{date}              coach overrides, top-level & cross-team
- *                                 (getOverrides returns all of them so
- *                                 applyOverrides matches on each body's `team`).
+ * Collection layout (Admin SDK only — clients are blocked by rules). All team /
+ * plan / override data lives *under* a tenant so two coaches never share a
+ * document path; only the drill catalog is global:
+ *   drills/{drillId}                              raw catalog records (un-normalized, GLOBAL/shared).
+ *   tenants/{tenantId}/teams/{teamId}             team config doc.
+ *   tenants/{tenantId}/teams/{teamId}/input/latest  team-input doc (indicators).
+ *   tenants/{tenantId}/annualPlan/current         annual-plan doc (school-specific tournament names).
+ *   tenants/{tenantId}/overrides/{date}           coach overrides, per-tenant & cross-team
+ *                                                 (getOverrides returns all in this tenant so
+ *                                                 applyOverrides matches on each body's `team`).
  *
  * `db` is an already-initialized firebase-admin Firestore instance for the
  * named database; this module never imports firebase-admin so it stays usable
  * from the CLI and unit tests.
  *
+ * Security: `tenantId` is required and validated non-empty at the top. An empty
+ * or missing tenantId would otherwise build a path that reads/writes the wrong
+ * tenant's data — this throw is the structural last line of defence against a
+ * cross-tenant leak (design §7-d). Callers MUST pass a tenantId that has already
+ * been authorized against the caller's memberships; this layer does not authorize.
+ *
  * @param {Object} opts
  * @param {import('firebase-admin/firestore').Firestore} opts.db
- * @param {string} opts.teamId  Team document id (e.g. "minami-nakano-boys").
+ * @param {string} opts.tenantId  Tenant document id (the coach's workspace).
+ * @param {string} opts.teamId    Team document id within the tenant ("boys" | "girls").
  * @returns {Storage}
  */
-export function createFirestoreStorage({ db, teamId }) {
+export function createFirestoreStorage({ db, tenantId, teamId }) {
   if (!db) throw new Error('createFirestoreStorage: db is required');
+  if (!tenantId) throw new Error('createFirestoreStorage: tenantId is required');
   if (!teamId) throw new Error('createFirestoreStorage: teamId is required');
+  // テナント配下の各サブコレクションへの基点。空 tenantId はここに来る前に throw 済み。
+  const tenantRef = db.collection('tenants').doc(tenantId);
   return {
     async getDrills() {
+      // drills はグローバル共有（テナント非依存）。tenant 配下に置かない。
       const snap = await db.collection('drills').get();
       // 台帳順を id で安定化（pattern 描画の決定論性のため）。
       return snap.docs
@@ -125,25 +138,25 @@ export function createFirestoreStorage({ db, teamId }) {
         .sort((a, b) => String(a.id).localeCompare(String(b.id)));
     },
     async getConfig() {
-      const doc = await db.collection('teams').doc(teamId).get();
-      if (!doc.exists) throw new Error(`Firestore: teams/${teamId} が見つかりません`);
+      const doc = await tenantRef.collection('teams').doc(teamId).get();
+      if (!doc.exists) throw new Error(`Firestore: tenants/${tenantId}/teams/${teamId} が見つかりません`);
       return /** @type {Config} */ (doc.data());
     },
     async getTeamInput() {
-      const doc = await db.collection('teams').doc(teamId).collection('input').doc('latest').get();
-      if (!doc.exists) throw new Error(`Firestore: teams/${teamId}/input/latest が見つかりません`);
+      const doc = await tenantRef.collection('teams').doc(teamId).collection('input').doc('latest').get();
+      if (!doc.exists) throw new Error(`Firestore: tenants/${tenantId}/teams/${teamId}/input/latest が見つかりません`);
       return /** @type {TeamInput} */ (doc.data());
     },
     async getOverrides() {
-      const snap = await db.collection('overrides').get();
+      const snap = await tenantRef.collection('overrides').get();
       return snap.docs
         .map((d) => d.data())
         // 念のため: doc ID 規約外の混入を読み側でも弾く（書き側のゲートと二重化）。
         .filter((o) => o && typeof o.date === 'string' && DATE_DOC_ID.test(o.date));
     },
     async getAnnualPlan() {
-      const doc = await db.collection('annualPlan').doc('current').get();
-      if (!doc.exists) throw new Error('Firestore: annualPlan/current が見つかりません');
+      const doc = await tenantRef.collection('annualPlan').doc('current').get();
+      if (!doc.exists) throw new Error(`Firestore: tenants/${tenantId}/annualPlan/current が見つかりません`);
       return doc.data();
     },
   };

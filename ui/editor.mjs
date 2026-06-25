@@ -93,6 +93,10 @@ export const EDITOR_CSS = `
 /* 書き出しフォールバック用 textarea（クリップボード不可時のみ表示） */
 .ed-export-area{width:100%;min-height:160px;font:inherit;font-size:12px;line-height:1.5;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px;margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre}
 .ed-export-area[hidden]{display:none}
+/* 他の日からコピーの行（セレクタ＋取り込みボタン） */
+.ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */
+.cal-go:disabled,.cal-go-week:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 `;
 
 /* ───────────────────────── 2) ツールバー3ボタン ───────────────────────── */
@@ -178,11 +182,14 @@ export function editorDataIsland(data) {
     }
   }
 
+  const g = data.session && data.session.goals ? data.session.goals : null;
   const island = {
     catalog: catalogNames(data.drillIndex),
     tints: tintsObject(),
     blocks: BLOCK_KEYS,
     prefill,
+    // 保存直後の再描画でも印刷の「日ヘッダ右＝月/週目標」を保つための値（編集対象は週内同値）。
+    goals: g ? { monthMain: g.monthMain || '', week: g.week || '' } : null,
   };
 
   // application/json なので esc 不要。</script> 混入だけ無害化する。
@@ -209,6 +216,7 @@ export function editorScript() {
   var TINTS=ED.tints||{};
   var BLOCKS=ED.blocks||[];
   var PREFILL=ED.prefill||{};
+  var GOALS=ED.goals||null;
 
   // ── 共通ユーティリティ ──
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -241,11 +249,15 @@ export function editorScript() {
   // ── 再描画: twoColTimeline / dayHeader(コーチ分岐) の移植（同一クラス・同一構造）──
   function dayHeaderHtml(ov){
     var dateHead=dateLabelISO(ov.date,ov.weekday);
+    var goalsPr=GOALS?('<div class="dh-goals" aria-hidden="true"><span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain||'—')+'</span><span class="dhg-item"><b>週</b>'+esc(GOALS.week||'—')+'</span></div>'):'';
     return '<div class="dayhead">'+
-      '<div class="dh-t">'+esc(dateHead)+
-        '<span class="dh-court">'+esc(ov.court)+'</span>'+
+      '<div class="dh-main">'+
+        '<div class="dh-t">'+esc(dateHead)+
+          '<span class="dh-court">'+esc(ov.court)+'</span>'+
+        '</div>'+
+        '<div class="dh-aim"><span class="dh-aiml">この日のねらい</span>'+esc(ov.aim)+'</div>'+
       '</div>'+
-      '<div class="dh-aim"><span class="dh-aiml">この日のねらい</span>'+esc(ov.aim)+'</div>'+
+      goalsPr+
     '</div>';
   }
   function genderChipHtml(g){
@@ -293,10 +305,10 @@ export function editorScript() {
     var rowsHtml=rows.map(rowHtml).join('');
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
     var endRow='<div class="spine-row spine-together spine-end">'+
-      '<div class="spine-band left spine-band-end"><span class="tbl">終了</span><span class="tbm">今日の振り返りひとことで解散。</span></div>'+
+      '<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>'+
       '<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
         '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
-      '<div class="spine-band right spine-band-end"><span class="tbl">終了</span><span class="tbm">今日の振り返りひとことで解散。</span></div>'+
+      '<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>'+
     '</div>';
     return genderHeader+'<div id="plan-top" class="spine">'+rowsHtml+endRow+'</div>';
   }
@@ -323,7 +335,7 @@ export function editorScript() {
         L.push('　女子｜'+(r['女子']?cellPlain(r['女子']):'—'));
       }
     });
-    L.push('　・終了（今日の振り返りひとことで解散）');
+    L.push('　・終了');
     return L.join('\\n');
   }
   // article 本体の中身（dayHeader + timeline + plain）を ov から作る。
@@ -381,6 +393,33 @@ export function editorScript() {
   }
   function catalogDatalist(){
     return '<datalist id="ed-catalog">'+CATALOG.map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('')+'</datalist>';
+  }
+  // 他の日（既存のコーチ上書き日）からこの日へ内容を丸ごと取り込むセレクタ。コピー元が無ければ何も出さない。
+  function copyFromOptions(){
+    var dates=Object.keys(PREFILL).filter(function(k){return k!==model.date;}).sort();
+    if(!dates.length)return '';
+    var opts='<option value="">選んでください…</option>'+dates.map(function(k){
+      var p=PREFILL[k]||{};
+      var lab=dateLabelISO(k,p.weekday)+(p.title?'：'+p.title:(p.aim?'：'+p.aim:''));
+      return '<option value="'+esc(k)+'">'+esc(lab)+'</option>';
+    }).join('');
+    return '<div class="ed-field"><span class="ed-lab">他の日からコピー</span>'+
+      '<div class="ed-copyfrom">'+
+        '<select class="ed-sel" id="ed-copyfrom" style="width:auto;min-width:200px">'+opts+'</select>'+
+        '<button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button>'+
+      '</div></div>';
+  }
+  // この日の編集モデルに「中身」があるか（見出し or 名前のある項目）。コピー上書きの確認に使う。
+  function modelHasContent(){
+    if(!model)return false;
+    return (model.rows||[]).some(function(r){
+      return ['男子','女子','both'].some(function(side){
+        var c=cellOf(r,side);
+        if(!c)return false;
+        if(c.label&&c.label.trim())return true;
+        return (c.items||[]).some(function(it){return it.name&&it.name.trim();});
+      });
+    });
   }
   // 並べ替えグリップ（6点ハンドル）。掴む所を限定し、入力欄の操作と衝突させない。
   function gripSvg(){
@@ -441,6 +480,7 @@ export function editorScript() {
     var rows=model.rows.map(function(r,ri){return rowHtmlForm(r,ri);}).join('');
     return '<div class="ed-h">この日を編集（'+esc(dateLabelISO(model.date,model.weekday))+'）</div>'+
       catalogDatalist()+
+      copyFromOptions()+
       '<div class="ed-field"><span class="ed-lab">この日のねらい</span>'+
         '<input class="ed-in" id="ed-aim" placeholder="この日のねらい" value="'+esc(model.aim)+'"></div>'+
       '<div class="ed-field"><span class="ed-lab">コート</span>'+
@@ -536,9 +576,24 @@ export function editorScript() {
     collectInputs(); // 構造変更の前に現在値を取り込む
     if(act==='add-row'){
       var newRi=model.rows.length;
-      model.rows.push(blankRow());renderPanel();
+      // 直前の時間帯の終了時刻を、新しい時間帯の開始時刻の既定にする（終了も開始に合わせる＝#3と同じ既定）。
+      var prevRow=model.rows[newRi-1];
+      var startFrom=(prevRow&&prevRow.to)?prevRow.to:'';
+      var nr=blankRow();nr.from=startFrom;nr.to=startFrom;
+      model.rows.push(nr);renderPanel();
       // 再構築でフォーカスが外れるので、新規行の最初の時刻 input へ戻す。
       focusIn('.ed-row[data-ri="'+newRi+'"] [data-k="from"]');
+      return;
+    }
+    if(act==='copy-from'){
+      var cfSel=panel.querySelector('#ed-copyfrom');
+      var srcDate=cfSel?cfSel.value:'';
+      if(!srcDate||!PREFILL[srcDate]){flash('コピー元の日を選んでください');return;}
+      if(modelHasContent()&&!window.confirm('いまの内容を、選んだ日の内容で上書きします。よろしいですか？'))return;
+      // 取り込み元の中身（ねらい・コート・時間帯）をこの日に複製。日付・曜日はこの日のまま保つ。
+      model=normalizeModel(deepClone(PREFILL[srcDate]),model.date,model.weekday);
+      renderPanel();
+      flash(dateLabelISO(srcDate,PREFILL[srcDate].weekday)+'の内容を取り込みました');
       return;
     }
     var rowEl=btn.closest('.ed-row');
@@ -561,6 +616,22 @@ export function editorScript() {
     }
   }
   function onPanelChange(e){
+    // 開始時刻が入ったら終了時刻を開始に合わせる（終了が空 or 開始より前のときだけ。妥当に手入力済みの終了は壊さない）。
+    var fromEl=e.target.closest('[data-k="from"]');
+    if(fromEl){
+      var fRowEl=fromEl.closest('.ed-row');if(!fRowEl)return;
+      var fRi=Number(fRowEl.getAttribute('data-ri'));var fRow=model.rows[fRi];
+      var toEl=fRowEl.querySelector('[data-k="to"]');
+      if(toEl){
+        var fm=toMin(fromEl.value),tm=toMin(toEl.value);
+        if(fromEl.value&&(tm==null||(fm!=null&&tm<fm))){
+          toEl.value=fromEl.value;
+          if(fRow)fRow.to=fromEl.value;
+        }
+      }
+      if(fRow)fRow.from=fromEl.value;
+      return;
+    }
     var box=e.target.closest('[data-act="toggle-both"]');if(!box)return;
     collectInputs();
     var rowEl=box.closest('.ed-row');var ri=Number(rowEl.getAttribute('data-ri'));
@@ -632,6 +703,22 @@ export function editorScript() {
     if(title)ov.title=title;
     return ov;
   }
+  // 本番のログイン時だけ Bearer を付ける。ローカル/テストは __getIdToken 未定義＝ヘッダ無し（サーバも素通り）。
+  function withAuth(headers){
+    var h=headers||{};
+    if(typeof window.__getIdToken!=='function')return Promise.resolve(h);
+    return window.__getIdToken().then(function(t){if(t)h['Authorization']='Bearer '+t;return h;}).catch(function(){return h;});
+  }
+  // 複数テナントに所属するコーチが /?t=B を開いて編集したとき、保存先を「いま見ている画面のテナント」に
+  // 揃えるため、現在URLの ?t を書き込み先URLへ引き継ぐ。単一所属（?t無し）はサーバが唯一の在籍に解決する。
+  // サーバは送られた t を在籍照合してから採用する（在籍外なら拒否＝越境にならない）。
+  function withTenantQ(path){
+    try{
+      var t=new URLSearchParams(location.search).get('t');
+      if(!t)return path;
+      return path+(path.indexOf('?')<0?'?':'&')+'t='+encodeURIComponent(t);
+    }catch(_){return path;}
+  }
   function doSave(){
     collectInputs();
     var ov=buildOverride();
@@ -639,7 +726,16 @@ export function editorScript() {
     var myPanel=panel; // 並行操作（別日編集/キャンセル）でグローバルが差し替わっても誤操作しないため捕捉
     flash('保存中…');
     // バックエンド（Cloud Function）へ保存。Firestore への書き込みは Admin SDK 経由のみ。
-    fetch('/api/override',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ov)})
+    var send=function(){return withAuth({'Content-Type':'application/json'})
+      .then(function(headers){return fetch(withTenantQ('/api/override'),{method:'POST',headers:headers,body:JSON.stringify(ov)});});};
+    send()
+      .then(function(r){
+        // セッションCookieが約24hで失効して401なら、クライアント認証が生きていれば張り直して1回だけ再送。
+        if(r.status===401&&typeof window.__establishSession==='function'){
+          return window.__establishSession().then(send).catch(function(){return r;});
+        }
+        return r;
+      })
       .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
       .then(function(res){
         if(res&&res.ok){
@@ -658,7 +754,21 @@ export function editorScript() {
   }
 
   // ── パネル開閉（記事本体をフォームに差し替え・キャンセルで復帰）──
+  // 編集中に止めたナビボタン（日・週・月・レベル）。解除時はここに入れた分だけ戻す（元から無効な物は触らない）。
+  var navLocked=[];
+  function setNavDisabled(on){
+    if(on){
+      navLocked=[];
+      document.querySelectorAll('.cal-go,.cal-go-week,.cal-go-month,.lvtab').forEach(function(b){
+        if(!b.disabled){b.disabled=true;navLocked.push(b);}
+      });
+    }else{
+      navLocked.forEach(function(b){b.disabled=false;});
+      navLocked=[];
+    }
+  }
   function openPanel(){
+    if(panel){panel.scrollIntoView({behavior:'smooth',block:'start'});return;} // 既に編集中なら二重に開かない
     var article=curDay();
     if(!article){flash('編集できる日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
@@ -675,10 +785,12 @@ export function editorScript() {
     renderPanel();
     panel.addEventListener('click',onPanelClick);
     panel.addEventListener('change',onPanelChange);
+    setNavDisabled(true); // 編集中は日・週・月・レベルの移動を止める
     panel.scrollIntoView({behavior:'smooth',block:'start'});
   }
   function closePanel(){
     destroySortables();
+    setNavDisabled(false); // 移動の制限を解除
     if(panel&&panel.parentNode)panel.parentNode.removeChild(panel);
     if(editingArticle)editingArticle.hidden=false;
     panel=null;model=null;editingArticle=null;
@@ -691,7 +803,8 @@ export function editorScript() {
     var date=(article.getAttribute('data-date')||'').trim();
     if(!date){flash('この日は上書き編集の対象外です');return;}
     flash('自動に戻しています…');
-    fetch('/api/override/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:date})})
+    withAuth({'Content-Type':'application/json'})
+      .then(function(headers){return fetch(withTenantQ('/api/override/delete'),{method:'POST',headers:headers,body:JSON.stringify({date:date})});})
       .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
       .then(function(res){
         if(res&&res.ok){ delete PREFILL[date]; location.reload(); }

@@ -11,6 +11,9 @@ node_modules/
 # エミュレータ永続データ（ローカル開発用・コミットしない。コーチ編集の保存先＝再起動でも残す）
 .emulator-data/
 
+# functions デプロイ用バンドル（再生成= npm --prefix functions run build / predeployで自動）
+functions/dist/
+
 # QAスクリーンショット（検証用の生成物・コミットしない。再生成= headless Chrome）
 e2e/screenshots/
 # 生成HTML（再生成= node ui/build.mjs）
