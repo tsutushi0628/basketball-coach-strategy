@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "description": "練習メニュー配信 Cloud Function（Firestore → 既存エンジン/描画 → HTML）",
   "type": "module",
-  "main": "index.mjs",
+  "main": "dist/index.mjs",
   "engines": {
     "node": "22"
   },
   "scripts": {
-    "build": "node -e \"process.stdout.write('functions: ESM JS — no build step\\n')\""
+    "build": "npx -y esbuild@0.24.0 index.mjs --bundle --platform=node --format=esm --packages=external --outfile=dist/index.mjs"
   },
   "dependencies": {
     "express": "^4.18.2",

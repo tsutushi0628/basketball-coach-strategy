@@ -84,7 +84,7 @@ function menuTimeline(pd, drillIndex) {
     .join('');
   const endRow = `<div class="tlrow tlrow-end">
       <div class="tlclock"><span class="tk">${esc(pd.end)}</span></div>
-      <div class="tlseg"><div class="tlend"><span class="tbl">終了</span><span class="tbn">今日の振り返りひとことで解散。</span></div></div>
+      <div class="tlseg"><div class="tlend"><span class="tbl">終了</span></div></div>
     </div>`;
   return `<div id="plan-top" class="timeline">${rows}${endRow}</div>`;
 }
@@ -173,8 +173,7 @@ function rotationTimeline(pd, drillIndex) {
   }).join('');
 
   // 終了時刻行（pd.end を使う）。ダウン本体はエンジンのダウン枠が担うため、ここは終了マーカーのみ。
-  const endBandInner = `<span class="tbl">終了</span>
-      <span class="tbm">今日の振り返りひとことで解散。</span>`;
+  const endBandInner = `<span class="tbl">終了</span>`;
   const endRow = `<div class="spine-row spine-together spine-end">
     <div class="spine-band left spine-band-end">
       ${endBandInner}
@@ -258,12 +257,12 @@ function twoColTimeline(pd) {
   }).join('');
 
   const endRow = `<div class="spine-row spine-together spine-end">
-    <div class="spine-band left spine-band-end"><span class="tbl">終了</span><span class="tbm">今日の振り返りひとことで解散。</span></div>
+    <div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>
     <div class="spine-clk">
       <span class="tk">${esc(pd.end)}</span>
       <span class="spine-dot" style="background:var(--mute)"></span>
     </div>
-    <div class="spine-band right spine-band-end"><span class="tbl">終了</span><span class="tbm">今日の振り返りひとことで解散。</span></div>
+    <div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>
   </div>`;
 
   return `${genderHeader}<div id="plan-top" class="spine">${rowsHtml}${endRow}</div>`;
@@ -631,7 +630,7 @@ function dayTimeline(data, pd, idx) {
   if (pd.source === 'coach' && pd.twoCol) {
     body = twoColTimeline(pd);
     return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
-    ${dayHeader(pd, data.month)}
+    ${dayHeader(pd, data.month, data.session.goals)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
   </article>`;
@@ -650,7 +649,7 @@ function dayTimeline(data, pd, idx) {
   // rotation 日は中央スパインのみ表示（折りたたみ「共通メニュー」廃止・T3）。
   // 詳細はハッシュ駆動オーバーレイ（#drill-overlay）で表示。日タイムラインに詳細セクションは付与しない。
   return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
-    ${dayHeader(pd, data.month)}
+    ${dayHeader(pd, data.month, data.session.goals)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
   </article>`;

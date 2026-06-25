@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-basketball-strategy"
+    "default": "demo-basketball-strategy",
+    "prod": "ai-bb-coach"
   }
 }

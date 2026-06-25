@@ -79,6 +79,8 @@ a{color:var(--orange-deep)}
 .dayhead .dh-aim{margin-top:11px;font-size:14px;font-weight:600;line-height:1.5;background:var(--bg);border-radius:10px;padding:11px 15px}
 /* T6: dh-aiml は 17px/700（H3段・見出しは本文より大きく） */
 .dayhead .dh-aiml{display:block;font-size:17px;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
+/* 印刷専用の右側目標（月/週）。画面では非表示（画面は day レベルの目標バーで見せる） */
+.dayhead .dh-goals{display:none}
 .inote{font-size:14px;line-height:1.6}
 .inote b{color:var(--orange-deep);font-weight:700}
 
@@ -211,9 +213,6 @@ a{color:var(--orange-deep)}
 .gb-cell{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:11px 14px}
 .gb-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:3px}
 .gb-val{font-size:14px;font-weight:600;line-height:1.5}
-/* 配布物（印刷）専用の細い目標帯。画面では非表示・印刷でのみ全文を小フォントで1枚に収める */
-.goalbar-pr{display:none}
-.gpr{margin:1px 0;font-size:10px;line-height:1.32;color:var(--ink)}
 .gpr b{color:var(--orange-deep);font-weight:700;margin-right:5px}
 @media (max-width:580px){.goalbar{grid-template-columns:1fr}}
 
@@ -229,10 +228,16 @@ a{color:var(--orange-deep)}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
-  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。画面用の2分割カードは隠し、配布物には細い目標帯（全文）を出す */
+  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。画面用の目標バーは隠し、目標は日ヘッダ右に横並びで出す */
   .wrap{max-width:none;padding:0;zoom:.92}
   .goalbar{display:none}
-  .goalbar-pr{display:block;margin:0 0 7px}
+  /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める */
+  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:10px 14px;margin-bottom:8px}
+  .dayhead .dh-main{flex:1 1 auto;min-width:0}
+  .dayhead .dh-aim{margin-top:5px;padding:7px 11px}
+  .dayhead .dh-goals{display:flex;flex-direction:column;gap:14px;flex:0 0 34%;max-width:34%}
+  .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
+  .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
   .drill-overlay{display:none!important}
 }
 `;
@@ -309,10 +314,14 @@ export function modeToggle() {
   </div>`;
 }
 
-/** 日ヘッダ（曜日・コート・時間・本日の狙い）。 */
-export function dayHeader(pd, month) {
+/** 日ヘッダ（曜日・コート・時間・本日の狙い）。印刷時は右側に月/週の目標を横並びにして行を稼ぐ。 */
+export function dayHeader(pd, month, goals) {
   // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
   const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${month}月 ${esc(pd.dayLabel)}`;
+  // 印刷専用: 月/週の目標（画面では day レベルの目標バーで見せ、ここは display:none）。
+  const goalsPr = goals
+    ? `<div class="dh-goals" aria-hidden="true"><span class="dhg-item"><b>月</b>${esc(goals.monthMain || '—')}</span><span class="dhg-item"><b>週</b>${esc(goals.week || '—')}</span></div>`
+    : '';
   // コーチ指定の上書き日: 対象性別チップと手書きの狙いだけ出す。
   // 「コーチ指定」等の内部ラベルは配布物に出さない（コーチが見て無意味なため）。
   // 男女2列日（twoCol）は男女両方が対象なので男子・女子チップを並べ、単一性別表記はしない。
@@ -321,10 +330,13 @@ export function dayHeader(pd, month) {
     const teamChip = pd.twoCol ? '' : (pd.team ? ` ${genderChip(pd.team)}` : '');
     const aimScope = pd.twoCol ? '' : (pd.team ? `（${esc(pd.team)}）` : '');
     return `<div class="dayhead">
-      <div class="dh-t">${dateHead}${teamChip}
-        <span class="dh-court">${esc(pd.court)}</span>
+      <div class="dh-main">
+        <div class="dh-t">${dateHead}${teamChip}
+          <span class="dh-court">${esc(pd.court)}</span>
+        </div>
+        <div class="dh-aim"><span class="dh-aiml">この日のねらい${aimScope}</span>${esc(pd.aim)}</div>
       </div>
-      <div class="dh-aim"><span class="dh-aiml">この日のねらい${aimScope}</span>${esc(pd.aim)}</div>
+      ${goalsPr}
     </div>`;
   }
   // 2部構成の日（火）は日全体の時間帯と「2部構成」である旨を示す（各部の詳細は部ヘッダで）。
@@ -333,8 +345,11 @@ export function dayHeader(pd, month) {
     : `・${esc(pd.court)}`;
   const meta = `${partsNote}・${esc(pd.start)}〜${esc(pd.end)}・計${pd.totalMinutes}分${pd.coachPresent ? '' : '・コーチ不在'}`;
   return `<div class="dayhead">
-    <div class="dh-t">${dateHead}<span class="dh-court">${meta}</span></div>
-    <div class="dh-aim"><span class="dh-aiml">本日の狙い</span>${esc(pd.aim)}</div>
+    <div class="dh-main">
+      <div class="dh-t">${dateHead}<span class="dh-court">${meta}</span></div>
+      <div class="dh-aim"><span class="dh-aiml">本日の狙い</span>${esc(pd.aim)}</div>
+    </div>
+    ${goalsPr}
   </div>`;
 }
 
@@ -414,8 +429,7 @@ export function goalsBar(data) {
   return `<div class="goalbar">
     <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
     <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
-  </div>
-  <div class="goalbar-pr"><p class="gpr"><b>月</b>${esc(g.monthMain || '—')}</p><p class="gpr"><b>週</b>${esc(g.week || '—')}</p></div>`;
+  </div>`;
 }
 
 /** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
@@ -592,6 +606,32 @@ export function clientScript() {
 }
 
 /**
+ * 1パターン分の HTML 文書を組み立てる純関数（外殻＋CSS＋body＋client script）。
+ * 静的ビルド(build.mjs)・Cloud Function 双方から再利用する（描画ロジックは触らない）。
+ * ※ build.mjs には静的ビルド専用の総なめ import があり、Cloud Function 側がそれを束ねると
+ *   非JS資産まで巻き込んで失敗するため、この純関数だけは glob を持たない本モジュールに置く。
+ * @param {{title:string, css?:string, body:string, script?:string}} arg
+ * @returns {string} 完全な HTML 文書
+ */
+export function renderPage({ title, css, body, script }) {
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${esc(title)}</title>
+<style>${BASE_CSS}${css || ''}</style>
+</head>
+<body>
+<main class="wrap">
+${body}
+</main>
+<script>${script || clientScript()}</script>
+</body>
+</html>`;
+}
+
+/**
  * 1区画（または単一日）のブロック明細を配布テキスト行に変換する。
  * @param {string[]} L 追記先の行配列
  * @param {Array} blocks 区画/日のブロック配列
@@ -631,7 +671,7 @@ export function plainText(data, pd) {
           L.push(`　女子｜${r.girls ? `${r.girls.label}：${cellText(r.girls)}` : '—'}`);
         }
       }
-      L.push('　・終了（今日の振り返りひとことで解散）');
+      L.push('　・終了');
       return L.join('\n');
     }
     const teamTxt = pd.team ? `・対象：${pd.team}` : '・男女共通';
@@ -647,7 +687,7 @@ export function plainText(data, pd) {
         L.push(`　・${it.name}${mins}${note}`);
       }
     }
-    L.push('　・終了（今日の振り返りひとことで解散）');
+    L.push('　・終了');
     return L.join('\n');
   }
 
@@ -673,7 +713,7 @@ export function plainText(data, pd) {
       }
       plainBlocks(L, part.blocks);
     });
-    L.push('　・終了（今日の振り返りひとことで解散）');
+    L.push('　・終了');
     return L.join('\n');
   }
 
@@ -718,6 +758,6 @@ export function plainText(data, pd) {
     }
     if (!b.isBundle) L.push('　・給水');
   }
-  L.push('　・終了（今日の振り返りひとことで解散）');
+  L.push('　・終了');
   return L.join('\n');
 }

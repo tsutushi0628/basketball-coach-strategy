@@ -16,36 +16,11 @@ import { writeFileSync, readdirSync } from 'node:fs';
 
 import { createLocalStorage } from '../engine/src/storage.js';
 import { buildPlanData } from './plan-data.mjs';
-import { BASE_CSS, clientScript, esc } from './render-shared.mjs';
+import { esc, renderPage } from './render-shared.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const engineRoot = resolve(__dirname, '../engine');
 const repoRoot = resolve(__dirname, '..');
-
-/**
- * 1パターン分の HTML 文書を組み立てる純関数（外殻＋CSS＋body＋client script）。
- * 静的ビルド(build.mjs)・Cloud Function 双方から再利用する（描画ロジックは触らない）。
- *
- * @param {{title:string, css?:string, body:string, script?:string}} arg
- * @returns {string} 完全な HTML 文書
- */
-export function renderPage({ title, css, body, script }) {
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${esc(title)}</title>
-<style>${BASE_CSS}${css || ''}</style>
-</head>
-<body>
-<main class="wrap">
-${body}
-</main>
-<script>${script || clientScript()}</script>
-</body>
-</html>`;
-}
 
 /**
  * 静的ビルド用のローカル storage を組む（ドリル台帳は docs 配下・config は男女別）。
