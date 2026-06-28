@@ -682,27 +682,74 @@ export function editorScript() {
     collectInputs();
     var rowEl=box.closest('.ed-row');var ri=Number(rowEl.getAttribute('data-ri'));
     var row=model.rows[ri];if(!row)return;
-    // セルが「中身あり」か（見出し or 名前のある項目）。
-    function hasContent(cell){
-      if(!cell)return false;
-      if(cell.label&&cell.label.trim())return true;
-      return (cell.items||[]).some(function(it){return it.name&&it.name.trim();});
-    }
     if(box.checked){
-      // 共通ON: both = 男子の複製（男子が空なら女子）。男子/女子 オブジェクトは保持（往復で失わない）。
-      var seed=hasContent(row['男子'])?row['男子']:(hasContent(row['女子'])?row['女子']:row['男子']);
-      row.both=deepClone(seed)||blankCell();
+      mergeToBoth(row);   // 共通ON: 男女の中身を both へ無損失で集約（片側→そのまま／両側→マージ）
     }else{
-      // 共通OFF: both の内容を 男子・女子 両方へ復元してから both=null。
-      if(row.both){
-        row['男子']=deepClone(row.both);
-        row['女子']=deepClone(row.both);
-      }
-      if(!row['男子'])row['男子']=blankCell();
-      if(!row['女子'])row['女子']=blankCell();
-      row.both=null;
+      splitFromBoth(row); // 共通OFF: 元の男女別へ復元（未編集なら元内容を完全復元・共通を編集していたら両側へ複製）
     }
     renderPanel();
+  }
+  // セルが「中身あり」か（見出し or 名前のある項目）。見出しだけ・項目だけでも中身ありとみなす。
+  function cellHasContent(cell){
+    if(!cell)return false;
+    if(cell.label&&cell.label.trim())return true;
+    return (cell.items||[]).some(function(it){return it.name&&it.name.trim();});
+  }
+  // 名前のある項目だけを取り出す（共通化の集約で空項目を持ち込まない）。
+  function nonEmptyItems(cell){
+    if(!cell)return [];
+    return (cell.items||[]).filter(function(it){return it.name&&it.name.trim();});
+  }
+  // 2セルのitemsを順序維持で結合し、name+note完全一致の重複だけ畳む（同一ドリルの二重掲載を防ぐ）。
+  function mergeItems(a,b){
+    var out=[],seen={};
+    [].concat(nonEmptyItems(a),nonEmptyItems(b)).forEach(function(it){
+      var key=(it.name||'').trim()+'\\u0001'+(it.note||'').trim();
+      if(seen[key])return; seen[key]=true;
+      out.push({name:it.name||'',note:it.note||''});
+    });
+    return out;
+  }
+  // 非空を優先して片方を採る（共通化時の見出し・枠の選択。男子優先・無ければ女子）。
+  function pickNonEmpty(a,b){var x=(a||'').trim();return x?a:(b||'');}
+  // 共通ON: 男女の中身を both へ集約する。内容は絶対に失わない。
+  //  片側のみ内容あり→その内容をそのまま採用 / 両側に内容あり→items結合・見出しと枠は非空優先 /
+  //  両側空→空の both（失う内容が無い）。元の男女別は _memo に退避し、OFFで完全復元できるようにする。
+  function mergeToBoth(row){
+    var boys=row['男子'],girls=row['女子'];
+    var hb=cellHasContent(boys),hg=cellHasContent(girls);
+    var both;
+    if(hb&&hg){
+      both={block:pickNonEmpty(boys.block,girls.block)||BLOCKS[0]||'',
+        label:pickNonEmpty(boys.label,girls.label),
+        items:mergeItems(boys,girls)};
+    }else if(hb){
+      both=deepClone(boys);
+    }else if(hg){
+      both=deepClone(girls);
+    }else{
+      both=blankCell();
+    }
+    // 元の男女別を退避（OFFで距離をおいた別内容を完全復元するため）と、ON時点の both 基準を控える。
+    row._memo={'男子':deepClone(boys)||blankCell(),'女子':deepClone(girls)||blankCell()};
+    row._mergeBase=deepClone(both);
+    row.both=both;
+  }
+  // 共通OFF: both を男女別へ戻す。
+  //  共通セルを編集していなければ（ON時点と同一）元の男女別をそのまま復元（別内容を失わない）。
+  //  共通セルを編集していれば、その最新内容を両側へ複製（共通での編集も失わない）。
+  function splitFromBoth(row){
+    var editedCommon=!row._mergeBase||JSON.stringify(row.both)!==JSON.stringify(row._mergeBase);
+    if(row._memo&&!editedCommon){
+      row['男子']=row._memo['男子']||blankCell();
+      row['女子']=row._memo['女子']||blankCell();
+    }else if(row.both){
+      row['男子']=deepClone(row.both);
+      row['女子']=deepClone(row.both);
+    }
+    if(!row['男子'])row['男子']=blankCell();
+    if(!row['女子'])row['女子']=blankCell();
+    row._memo=null;row._mergeBase=null;row.both=null;
   }
 
   // ── 保存: model→override（保存スキーマ）。空名item・空行は捨てる。minutes は from/to 算出 ──
