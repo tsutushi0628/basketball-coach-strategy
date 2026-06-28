@@ -57,9 +57,10 @@ export const BLOCK_ORDER = ['アップ', 'ファンダ', 'シュート', '対人
 const BUNDLE_BLOCKS = new Set(['アップ', 'ラン', '静的']);
 
 /**
- * Fundamentals block categories (ファンダ): individual ball skill done off the ball-vs-rim
- * axis — handling, passing, footwork. Finishing's *foundational* reps are also fundamentals
- * (handled via blockOf below, which routes finishing by mastery stage).
+ * Fundamentals block categories (ファンダ): the owner's three fundamentals ONLY —
+ * handling, passing, footwork. ファンダ＝ハンドリング/パス/フットワークの3つだけ。
+ * Scoring actions (finishing / Mikan / layups / catch-&-shoot) are NEVER fundamentals;
+ * they all belong to the shooting block (see SHOOT_CATEGORIES / blockOf below).
  */
 const FUNDA_CATEGORIES = new Set([
   'ハンドリング/ドリブル',
@@ -67,10 +68,14 @@ const FUNDA_CATEGORIES = new Set([
   'フットワーク/アジリティ/ピボット',
 ]);
 
-/** Shooting block categories (シュート): catch-&-shoot, free-throw, plus finishing at the rim. */
+/**
+ * Shooting block categories (シュート): every scoring action at/around the rim and beyond —
+ * catch-&-shoot, free-throw, AND all finishing (ゴール下/レイアップ/マイカン). Finishing is a
+ * scoring action, so it is ALWAYS shooting. The separate finishing category was retired —
+ * all scoring actions live under the single シュート category, so this set holds only シュート.
+ */
 const SHOOT_CATEGORIES = new Set([
   'シュート',
-  'フィニッシュ(ゴール下/レイアップ)',
 ]);
 
 /**
@@ -87,10 +92,11 @@ const CONTESTED_CATEGORIES = new Set([
 
 /**
  * Which fixed block a drill belongs to (null = not a main-block drill, e.g. injury
- * prevention that isn't warm-up activation). Finishing splits by mastery: foundational
- * (習得系) finishing reps go to ファンダ, settled finishing (反復/実戦化) to シュート, so
- * the shooting block carries the running/C2C/game-speed finishes and ファンダ carries the
- * close-range base reps — matching the owner's per-day menus.
+ * prevention that isn't warm-up activation). Finishing (ゴール下/レイアップ/マイカン) is a
+ * scoring action, so it ALWAYS goes to the shooting block regardless of mastery stage —
+ * fundamentals are the owner's three基礎 only (handling / passing / footwork). The shooting
+ * block therefore carries every finishing drill (close-range base reps AND running/C2C
+ * finishes), matching the owner's rule ファンダ=3基礎だけ・得点動作は全てシュート枠.
  *
  * @param {Drill} drill
  * @returns {('アップ'|'ファンダ'|'シュート'|'対人'|'ラン'|'静的'|null)}
@@ -103,11 +109,7 @@ export function blockOf(drill) {
     return 'アップ'; // warm-up activation / mobility / NMT
   }
   if (FUNDA_CATEGORIES.has(cat)) return 'ファンダ';
-  if (cat === 'フィニッシュ(ゴール下/レイアップ)') {
-    // Foundational finishing (acquisition) is fundamentals; settled finishing is shooting.
-    return /習得/.test(drill.mastery_stage || '') ? 'ファンダ' : 'シュート';
-  }
-  if (cat === 'シュート') return 'シュート';
+  if (SHOOT_CATEGORIES.has(cat)) return 'シュート'; // シュート＋フィニッシュ＝全て得点動作→シュート枠
   if (CONTESTED_CATEGORIES.has(cat)) return '対人';
   if (cat === GAME_CATEGORY) return null; // scrimmage is the 対人-tail special case, not a block
   return null;
@@ -118,8 +120,8 @@ export function blockOf(drill) {
  * 6-block mapping. The editor exposes one extra block, ゲーム, so the coach can hand-place the
  * session-ending 5on5 / scrimmage (意思決定/ゲーム形式) as its own block; in the auto session that
  * game-form work is not a fixed block (it rides the 対人 tail), which is why blockOf returns null
- * for it. editorBlockOf delegates to blockOf for the 6 auto blocks (so the finishing 16 split by
- * mastery — 習得→ファンダ, 反復/実戦化→シュート — is inherited, not re-decided here) and only adds the
+ * for it. editorBlockOf delegates to blockOf for the 6 auto blocks (so all finishing → シュート枠 is
+ * inherited, not re-decided here — 得点動作は全てシュート、ファンダは3基礎だけ) and only adds the
  * ゲーム branch. blockOf stays the single source of truth for block judgement; this function adds
  * nothing to it beyond surfacing the game category as an editor-only block.
  *
@@ -361,6 +363,12 @@ function preferRunningFinish(candidates) {
 /**
  * Order a candidate list by educational fit (descending), id ascending for ties.
  * Narrows to FT drills when the category is FT-only (and any exist).
+ *
+ * `skipFtOnly` opts a single seat OUT of the FT-only narrowing even when the category is FT-only:
+ * used by the 火 全面60 走ってフィニッシュ slot, which now lives in the シュート category (得点動作は
+ * 全てシュート) but is about running finishes (トランジション/レイアップ), not free throws — so a
+ * team's FT率 gap must not collapse that slot to free-throw drills. Ordinary シュート seats keep
+ * the FT-only narrowing.
  * @param {Object} args
  * @param {Drill[]} args.pool
  * @param {string} args.category
@@ -368,11 +376,12 @@ function preferRunningFinish(candidates) {
  * @param {WeekFocus} args.weekFocus
  * @param {Object<string, number>} args.finalWeights
  * @param {Set<string>} args.headlineTokens
+ * @param {boolean} [args.skipFtOnly]
  * @returns {Drill[]}
  */
-function categoryCandidates({ pool, category, ftOnlyCategories, weekFocus, finalWeights, headlineTokens }) {
+function categoryCandidates({ pool, category, ftOnlyCategories, weekFocus, finalWeights, headlineTokens, skipFtOnly = false }) {
   let inCat = pool.filter((d) => d.category === category);
-  if (ftOnlyCategories.has(category)) {
+  if (!skipFtOnly && ftOnlyCategories.has(category)) {
     const ft = inCat.filter(isFtDrill);
     if (ft.length > 0) inCat = ft;
   }
@@ -733,7 +742,10 @@ function fillCurriculumBlock({
     const cat = seatCats[i];
     let segMin = sizes[i];
     if (segMin < MIN_BLOCK) continue;
-    let candidates = categoryCandidates({ pool, category: cat, ftOnlyCategories, weekFocus, finalWeights, headlineTokens });
+    // 火 全面60 のシュート枠＝走ってフィニッシュ は FT-only 絞り込みを外す（走る系フィニッシュは
+    // 得点動作としてシュートカテゴリに統合済み。FT率ギャップでこの枠をフリースローに潰さない）。
+    const skipFtOnly = noFunda && block === 'シュート';
+    let candidates = categoryCandidates({ pool, category: cat, ftOnlyCategories, weekFocus, finalWeights, headlineTokens, skipFtOnly });
     // 火 全面60 のシュート枠＝走ってフィニッシュ: トランジション/2on1速攻系（走る系）を主に優先し、
     // 静的な遊び系（リバースショット＆阻止 等）を主から降格する。
     if (noFunda && block === 'シュート') candidates = preferRunningFinish(candidates);

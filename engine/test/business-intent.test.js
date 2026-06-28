@@ -86,11 +86,18 @@ test('S1: a low free-throw rate puts shooting / free-throw drills into the week'
   const input = inputWith(baseInput, { 'FT率': { latest: 30, target: 70, baseline: 40 } });
   const plan = planWeek(drills, config, input);
 
-  const shotItems = allItems(plan).filter((it) => it.category === 'シュート');
-  assert.ok(shotItems.length > 0, 'a struggling FT% must pull シュート work into the plan');
-  // The FT率 emphasis is FT-only: every シュート placed must be an actual free-throw drill.
-  for (const it of shotItems) {
-    assert.match(it.name, /フリースロー|FT/i, `非FTのシュートが混入: ${it.name}`);
+  // 火 全面60 の「走ってフィニッシュ」枠（2部構成日の part 付きシュートブロック）は得点動作の枠で、
+  // FT率ギャップでもFTに潰さない設計。その枠以外の通常シュート枠はFT専従であるべき。
+  const ordinaryShotItems = plan.days.flatMap((d) =>
+    d.blocks
+      .filter((b) => !(b.block === 'シュート' && Number.isInteger(b.part)))
+      .flatMap((b) => b.items)
+      .filter((it) => it.category === 'シュート'),
+  );
+  assert.ok(ordinaryShotItems.length > 0, 'a struggling FT% must pull シュート work into the plan');
+  // The FT率 emphasis is FT-only for ordinary シュート blocks: each must be an actual free-throw drill.
+  for (const it of ordinaryShotItems) {
+    assert.match(it.name, /フリースロー|FT/i, `非FTのシュートが通常枠に混入: ${it.name}`);
   }
 });
 
@@ -195,7 +202,7 @@ test('S6: load caps bound the heavy volume and forbid consecutive heavy days', (
       normalizeDrill({
         id: `H${i}`,
         name: `高強度${i}`,
-        category: 'フィニッシュ(ゴール下/レイアップ)',
+        category: 'シュート',
         court: '不問',
         grades: '全',
         intensity_class: '高',
@@ -204,7 +211,7 @@ test('S6: load caps bound the heavy volume and forbid consecutive heavy days', (
       }),
     );
   }
-  const finalWeights = { 'フィニッシュ(ゴール下/レイアップ)': 1.0 };
+  const finalWeights = { 'シュート': 1.0 };
   const budget = createLoadBudget(caps);
 
   const schedule = [
@@ -249,24 +256,32 @@ test('S6: load caps bound the heavy volume and forbid consecutive heavy days', (
 // ───────────────────────────────────────────────────────────────────────────
 // 7. Changing the input re-shapes the allocation (not a baked-in plan).
 // ───────────────────────────────────────────────────────────────────────────
-test('S7: meeting the FT target shifts time away from shooting (responsive, not fixed)', async () => {
+test('S7: a turnover gap pulls handling/passing/decision work into the plan (responsive, not fixed)', async () => {
   const { drills, config, baseInput } = await loadContext();
 
-  const below = planWeek(drills, config, inputWith(baseInput, { 'FT率': { latest: 30 } }));
-  const met = planWeek(drills, config, inputWith(baseInput, { 'FT率': { latest: 70 } }));
+  // 設計の実体: 各ブロックの「分数」は曜日枠テンプレ（コート/時間）で決まり、指標ギャップでは動かない。
+  // 指標ギャップが動かすのは「どのカテゴリ・どのドリルを各ブロックに据えるか」の選定。だから
+  // 責任あるテストは『ギャップでカテゴリ配分（中身）が変わる』を検証する（旧テストはフィニッシュ/シュート
+  // のカテゴリ分割が分数差を吸収していた前提で、得点動作のシュート集約後は成立しないため作り直し）。
+  const badTO = inputWith(baseInput, {
+    '試合TO': { good_direction: 'down', baseline: 30, latest: 30, target: 10 }, // TO 未達（大ギャップ）
+    'FT率': { latest: 70, target: 70, baseline: 40 },
+    'ゴール下成功率': { latest: 70, target: 70, baseline: 45 },
+  });
+  const goodTO = inputWith(badTO, {
+    '試合TO': { good_direction: 'down', baseline: 30, latest: 10, target: 10 }, // TO 到達
+  });
+  const planBad = planWeek(drills, config, badTO);
+  const planGood = planWeek(drills, config, goodTO);
 
-  const shotBelow = (minutesByCategory(below)['シュート'] ?? 0);
-  const shotMet = (minutesByCategory(met)['シュート'] ?? 0);
-
-  assert.ok(shotBelow > 0, '未達時はシュートに時間が割かれるべき');
-  assert.ok(
-    shotMet < shotBelow,
-    `目標到達でシュート配分が減るべき（未達 ${shotBelow}分 → 到達 ${shotMet}分）`,
-  );
-  // Whole-plan shape must differ — proves the engine isn't returning a constant.
+  const byBad = minutesByCategory(planBad);
+  const TO_CATS = ['ハンドリング/ドリブル', 'パス&スペーシング', '意思決定/ゲーム形式'];
+  const toMinutesBad = TO_CATS.reduce((s, c) => s + (byBad[c] ?? 0), 0);
+  assert.ok(toMinutesBad > 0, 'TO 未達時はハンドリング/パス/判断の練習が計画に入るべき');
+  // Whole-plan shape must differ — proves the engine reacts to the input (not a constant plan).
   assert.notDeepEqual(
-    minutesByCategory(below),
-    minutesByCategory(met),
+    minutesByCategory(planBad),
+    minutesByCategory(planGood),
     '入力を変えても配分が同一＝固定値を返している疑い',
   );
 });
@@ -350,7 +365,7 @@ test('S8e: heavy work on consecutive days trips assertLoadCap', () => {
 test('S8f: dropping the main focus all week trips assertMainFocusPresent', () => {
   const plan = { days: [buildDay([planItem({ category: 'シュート' })])] };
   assert.throws(
-    () => assertMainFocusPresent(plan, 'フィニッシュ(ゴール下/レイアップ)'),
+    () => assertMainFocusPresent(plan, '1on1'),
     /assertMainFocusPresent/,
   );
 });

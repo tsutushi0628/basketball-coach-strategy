@@ -52,7 +52,7 @@ function d(over) {
   return normalizeDrill({
     id: over.id,
     name: over.name ?? over.id,
-    category: over.category ?? 'フィニッシュ(ゴール下/レイアップ)',
+    category: over.category ?? 'シュート',
     court: over.court ?? '不問',
     grades: '全',
     intensity_class: over.intensity_class ?? '低',
@@ -82,9 +82,9 @@ function variedPool() {
   // ファンダ.
   for (let i = 0; i < 3; i++) pool.push(d({ id: `HND${i}`, category: 'ハンドリング/ドリブル', duration_min: 10 }));
   for (let i = 0; i < 2; i++) pool.push(d({ id: `PAS${i}`, category: 'パス&スペーシング', duration_min: 10 }));
-  // シュート.
+  // シュート（得点動作は全てシュート枠。旧フィニッシュ系も同枠に集約）.
   for (let i = 0; i < 3; i++) pool.push(d({ id: `SHT${i}`, category: 'シュート', duration_min: 10 }));
-  for (let i = 0; i < 2; i++) pool.push(d({ id: `FIN${i}`, category: 'フィニッシュ(ゴール下/レイアップ)', duration_min: 10 }));
+  for (let i = 0; i < 2; i++) pool.push(d({ id: `FIN${i}`, name: `レイアップ${i}`, category: 'シュート', duration_min: 10 }));
   // 対人.
   for (let i = 0; i < 3; i++) pool.push(d({ id: `ONE${i}`, category: '1on1', duration_min: 10 }));
   for (let i = 0; i < 2; i++) pool.push(d({ id: `TDF${i}`, category: 'チームディフェンス(オールコートマンツー/ヘルプ/帰陣)', duration_min: 10 }));
@@ -94,8 +94,7 @@ function variedPool() {
 }
 
 const FINAL_WEIGHTS = {
-  'フィニッシュ(ゴール下/レイアップ)': 0.2,
-  'シュート': 0.15,
+  'シュート': 0.35,
   'ハンドリング/ドリブル': 0.15,
   'パス&スペーシング': 0.05,
   '1on1': 0.15,

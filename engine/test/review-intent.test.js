@@ -184,7 +184,7 @@ test('R3: a team-input with missing/NaN indicator numbers yields finite weights 
     phase_category_weights: {
       'ハンドリング/ドリブル': 0.4,
       'シュート': 0.3,
-      'フィニッシュ(ゴール下/レイアップ)': 0.3,
+      '1on1': 0.3,
     },
   };
   // Every indicator is broken in a different way (missing field / NaN / null).

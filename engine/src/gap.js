@@ -31,13 +31,16 @@ export const DEFAULT_MAIN_FOCUS = 'ファンダメンタル基礎';
  * @type {Object<string, Array<{category: string, w: number, ft_only?: boolean}>>}
  */
 export const METRIC_TO_CATEGORY = {
+  // FT率 emphasizes free-throw drills within シュート (ft_only). ゴール下成功率 measures rim
+  // finishing (layups/Mikan), which is a scoring action → now also シュート (得点動作は全てシュート枠),
+  // but NOT ft_only (rim finishes, not free throws). Both feed the シュート category.
   'FT率': [{ category: 'シュート', ft_only: true, w: 1.0 }],
   '試合TO': [
     { category: 'ハンドリング/ドリブル', w: 0.4 },
     { category: 'パス&スペーシング', w: 0.3 },
     { category: '意思決定/ゲーム形式', w: 0.3 },
   ],
-  'ゴール下成功率': [{ category: 'フィニッシュ(ゴール下/レイアップ)', w: 1.0 }],
+  'ゴール下成功率': [{ category: 'シュート', w: 1.0 }],
 };
 
 /** clamp(x, 0, 1) */

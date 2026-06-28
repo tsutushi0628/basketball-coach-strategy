@@ -97,14 +97,14 @@ test('assertLoadCap throws when weekly total exceeds the cap', () => {
 test('assertMainFocusPresent throws when the main focus is absent all week', () => {
   const plan = { days: [day([item({ category: 'シュート' })])] };
   assert.throws(
-    () => assertMainFocusPresent(plan, 'フィニッシュ(ゴール下/レイアップ)'),
+    () => assertMainFocusPresent(plan, '1on1'),
     /assertMainFocusPresent/,
   );
 });
 
 test('assertMainFocusPresent passes when the focus appears at least once', () => {
-  const plan = { days: [day([item({ category: 'フィニッシュ(ゴール下/レイアップ)' })])] };
+  const plan = { days: [day([item({ category: '1on1' })])] };
   assert.doesNotThrow(() =>
-    assertMainFocusPresent(plan, 'フィニッシュ(ゴール下/レイアップ)'),
+    assertMainFocusPresent(plan, '1on1'),
   );
 });

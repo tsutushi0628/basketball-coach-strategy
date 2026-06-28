@@ -78,14 +78,32 @@ test('planWeek: half-court days contain no full-court-only drills', async () => 
   }
 });
 
-test('planWeek: the FT-only emphasis keeps the シュート category to free-throw drills', async () => {
+test('planWeek: the FT-only emphasis keeps ordinary シュート blocks to free-throw drills', async () => {
   const { plan } = await loadPlan();
-  const shotItems = plan.days
-    .flatMap((d) => d.blocks.flatMap((b) => b.items))
-    .filter((it) => it.category === 'シュート');
-  assert.ok(shotItems.length > 0, 'expected some シュート work given the FT率 gap');
-  for (const it of shotItems) {
-    assert.ok(/フリースロー|FT/i.test(it.name), `non-FT シュート drill placed: ${it.name}`);
+  // 火 全面60 の「走ってフィニッシュ」枠は得点動作（トランジション/レイアップ）の枠で、FT率ギャップでも
+  // フリースローに潰さない設計（FT-only 絞り込みを外す）。その枠以外の通常シュート枠はFT専従であるべき。
+  // 走ってフィニッシュ枠＝2部構成日（火）の part>0 のシュートブロック。
+  const ordinaryShotItems = plan.days.flatMap((d) =>
+    d.blocks
+      .filter((b) => !(b.block === 'シュート' && Number.isInteger(b.part)))
+      .flatMap((b) => b.items)
+      .filter((it) => it.category === 'シュート'),
+  );
+  assert.ok(ordinaryShotItems.length > 0, 'expected some ordinary シュート work given the FT率 gap');
+  for (const it of ordinaryShotItems) {
+    assert.ok(/フリースロー|FT/i.test(it.name), `non-FT シュート drill placed in ordinary block: ${it.name}`);
+  }
+  // 走ってフィニッシュ枠（火の全面）には逆に走る系フィニッシュ（FT以外）が来てよい＝FT専従に潰れていない。
+  const runFinishItems = plan.days.flatMap((d) =>
+    d.blocks
+      .filter((b) => b.block === 'シュート' && Number.isInteger(b.part))
+      .flatMap((b) => b.items),
+  );
+  if (runFinishItems.length > 0) {
+    assert.ok(
+      runFinishItems.some((it) => !/フリースロー|FT/i.test(it.name)),
+      '火の走ってフィニッシュ枠は走る系フィニッシュ（FT以外）を持てる（FT専従に潰れていないこと）',
+    );
   }
 });
 
@@ -160,12 +178,13 @@ test('planWeek: every practice day static-stretch is low-intensity stretch only 
   }
 });
 
-test('planWeek: the main focus (フィニッシュ) appears in the week', async () => {
+test('planWeek: the main focus (シュート＝得点動作の集約) appears in the week', async () => {
   const { plan } = await loadPlan();
+  // 方針反映後: 得点動作（ゴール下/レイアップ/マイカン）はシュートに集約。準備始動月の主眼＝シュート。
   const present = plan.days.some((d) =>
-    d.blocks.flatMap((b) => b.items).some((it) => it.category === 'フィニッシュ(ゴール下/レイアップ)'),
+    d.blocks.flatMap((b) => b.items).some((it) => it.category === 'シュート'),
   );
-  assert.ok(present, 'main-focus category must appear at least once');
+  assert.ok(present, 'main-focus category (シュート) must appear at least once');
 });
 
 test('planWeek: weekly high-intensity total respects the cap', async () => {

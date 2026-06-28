@@ -5,10 +5,10 @@
  *   (a) Every drill in the real catalog is routed to exactly ONE of the 7 editor blocks —
  *       no drill is lost (取りこぼし) and none lands in two buckets (二重所属); the bucket
  *       sizes sum to the total drill count.
- *   (b) Finishing (フィニッシュ・ゴール下/レイアップ) splits by mastery — acquisition (習得) reps
- *       become fundamentals (ファンダ), settled (反復/実戦化) reps become shooting (シュート) — and
- *       BOTH buckets are non-empty. This is inherited from blockOf, so a change to blockOf's
- *       finishing routing breaks this test.
+ *   (b) Finishing (フィニッシュ・ゴール下/レイアップ) is a scoring action, so EVERY finishing drill
+ *       routes to the shooting block (シュート) regardless of mastery stage — none falls into the
+ *       fundamentals block (ファンダ＝3基礎だけ・得点動作は全てシュート枠). This is inherited from
+ *       blockOf, so a change to blockOf's finishing routing breaks this test.
  *   (c) The ゲーム block is exactly the game-form / decision category (意思決定/ゲーム形式) — the
  *       editor-only block the auto session does not have (blockOf returns null for it).
  *
@@ -77,30 +77,40 @@ test('editorBlockOf partitions the whole catalog into the 7 editor blocks (no lo
   assert.equal(placed, drills.length, '7枠のサイズ合計＝総ドリル数');
 });
 
-// ── (b) finishing splits by mastery: 習得→ファンダ, 反復/実戦化→シュート, 両バケツとも非空 ──
-test('finishing (ゴール下/レイアップ) splits by mastery — acquisition→ファンダ, settled→シュート, both non-empty', () => {
+// ── (b) 得点動作（マイカン/レイアップ/ゴール下フィニッシュ）は全てシュート枠（ファンダ枠に出ない）──
+test('得点動作（マイカン/レイアップ等のフィニッシュ系）は全てシュート枠に入り、ファンダ枠には出ない', () => {
   const drills = loadDrills();
-  const fin = drills.filter((d) => d.category === 'フィニッシュ(ゴール下/レイアップ)');
-  assert.ok(fin.length > 0, '実カタログにフィニッシュ(ゴール下/レイアップ)が存在するべき');
+  // 方針反映後: フィニッシュ(ゴール下/レイアップ)カテゴリは廃止され、得点動作は全てシュートに集約。
+  const finCat = drills.filter((d) => d.category === 'フィニッシュ(ゴール下/レイアップ)');
+  assert.equal(finCat.length, 0, 'フィニッシュ(ゴール下/レイアップ)カテゴリは廃止＝0件（得点動作は全てシュート枠）');
 
-  const toFunda = fin.filter((d) => editorBlockOf(d) === 'ファンダ');
-  const toShoot = fin.filter((d) => editorBlockOf(d) === 'シュート');
-
-  // Every acquisition-stage finishing rep is a fundamental; settled (反復/実戦化) is shooting.
-  for (const d of fin) {
-    const isAcquisition = /習得/.test(d.mastery_stage || '');
-    const block = editorBlockOf(d);
-    if (isAcquisition) {
-      assert.equal(block, 'ファンダ', `習得段階のフィニッシュ「${d.name}」はファンダ枠に入るべき`);
-    } else {
-      assert.equal(block, 'シュート', `反復/実戦化のフィニッシュ「${d.name}」はシュート枠に入るべき`);
-    }
+  // 得点動作の代表（マイカン・レイアップ・ゴール下フィニッシュ）を名前で拾い、全てシュート枠に入る。
+  const SCORING_NAME = /マイカン|レイアップ|ゴール下|フィニッシュ|ユーロステップ|フローター/;
+  const scoring = drills.filter((d) => SCORING_NAME.test(d.name));
+  assert.ok(scoring.length > 0, '得点動作ドリル（マイカン/レイアップ等）が実カタログに存在するべき');
+  for (const d of scoring) {
+    assert.equal(d.category, 'シュート', `得点動作「${d.name}」のカテゴリはシュートであるべき（得点動作の集約）`);
+    assert.equal(editorBlockOf(d), 'シュート', `得点動作「${d.name}」はシュート枠に入るべき`);
+    assert.notEqual(editorBlockOf(d), 'ファンダ', `得点動作「${d.name}」がファンダ枠に出てはならない`);
   }
-  // Both buckets are actually filled (the split is real, not all-to-one).
-  assert.ok(toFunda.length > 0, '習得系フィニッシュ（ファンダ枠）が非空であるべき');
-  assert.ok(toShoot.length > 0, '反復/実戦化フィニッシュ（シュート枠）が非空であるべき');
-  // Finishing is fully partitioned between the two buckets (no finishing drill goes elsewhere).
-  assert.equal(toFunda.length + toShoot.length, fin.length, 'フィニッシュは全件がファンダ/シュートのどちらかに入る');
+});
+
+// ── (b2) ファンダ枠＝3基礎カテゴリだけ（得点動作カテゴリが1件も入らない）──
+test('ファンダ枠は3基礎カテゴリ（ハンドリング/パス/フットワーク）だけ＝得点動作カテゴリが入らない', () => {
+  const drills = loadDrills();
+  const FUNDA_CATEGORIES = new Set([
+    'ハンドリング/ドリブル',
+    'パス&スペーシング',
+    'フットワーク/アジリティ/ピボット',
+  ]);
+  const inFunda = drills.filter((d) => editorBlockOf(d) === 'ファンダ');
+  assert.ok(inFunda.length > 0, 'ファンダ枠が非空であるべき');
+  for (const d of inFunda) {
+    assert.ok(
+      FUNDA_CATEGORIES.has(d.category),
+      `ファンダ枠の「${d.name}」(${d.category}) は3基礎カテゴリのいずれかであるべき`,
+    );
+  }
 });
 
 // ── (c) ゲーム枠＝意思決定/ゲーム形式 のドリル（編集時だけの独立枠）──
