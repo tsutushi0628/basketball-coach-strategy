@@ -428,19 +428,29 @@ function kpiCard(label, gender, g) {
 
 /** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。
  * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。月はアンカーarc月キー、週はアンカー
- * 週起点ISOキー（週起点が無ければ週セルには編集属性を付けない＝保存キーが作れないため）。 */
-export function goalsBar(data) {
+ * 週起点ISOキー（週起点が無ければ週セルには編集属性を付けない＝保存キーが作れないため）。
+ *
+ * 週セルは「表示中の週」に追従させる必要がある（日レベルは全週ぶんの .daywk グループを描き、表示中の
+ * 週だけが見える）。そのため週のテキスト・編集キーは引数 week で差し替えられる。week 省略時はアンカー週
+ * （session.goals.week ＋ goalKeys.weekKey）にフォールバック（既存の単一週呼び出しと後方互換）。
+ * 月/定性/KPIは同一アーク月内で不変なので常にアンカー値（month は引数化しない）。
+ * @param {object} data buildPlanData の戻り値
+ * @param {{text:string, key:?string}} [week] 表示する週の {週の焦点テキスト, 週起点ISOキー}
+ */
+export function goalsBar(data, week) {
   const g = data.session.goals;
   const keys = data.goalKeys || {};
+  const weekText = week ? week.text : g.week;
+  const weekKey = week ? week.key : keys.weekKey;
   const monthAttr = (keys.monthArcKey != null)
     ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(keys.monthArcKey))}" data-goal-text="${esc(g.monthMain || '')}"`
     : '';
-  const weekAttr = keys.weekKey
-    ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(keys.weekKey)}" data-goal-text="${esc(g.week || '')}"`
+  const weekAttr = weekKey
+    ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(weekText || '')}"`
     : '';
   return `<div class="goalbar">
     <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
-    <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span><span class="gb-val">${esc(g.week || '—')}</span></div>
+    <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span><span class="gb-val">${esc(weekText || '—')}</span></div>
   </div>`;
 }
 
@@ -553,20 +563,91 @@ export function clientScript() {
   function tabs(group,target){
     document.querySelectorAll('[data-'+group+']').forEach(function(p){p.hidden=p.getAttribute('data-'+group)!==target;});
   }
+  function setLevel(t){
+    document.querySelectorAll('.lvtab').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-go')===t);});
+    tabs('level',t);
+  }
   document.querySelectorAll('.lvtab').forEach(function(b){b.addEventListener('click',function(){
-    document.querySelectorAll('.lvtab').forEach(function(x){x.classList.toggle('on',x===b);});
-    tabs('level',b.getAttribute('data-go'));
+    setLevel(b.getAttribute('data-go'));
   });});
-  var dts=document.querySelectorAll('.cal-go');
-  function showDay(t){document.querySelectorAll('[data-day]').forEach(function(p){if(p.classList.contains('day'))p.hidden=p.getAttribute('data-day')!==t;});
-    dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curDay=t;}
-  dts.forEach(function(b){b.addEventListener('click',function(){showDay(b.getAttribute('data-go'));});});
-  // 既定表示日=今日: ブラウザのローカル日付に一致する日があればそれを選ぶ（無ければ先頭のまま）。
-  (function(){
+  // ── 日レベルは全週ぶんに広がる（編集できる「日」画面が複数週）。可視は常に1日（単一可視日の不変条件）。
+  // 日付(ISO)を唯一の起点にして切り替える。曜日名は別週の同曜日と衝突するため使わない。──
+  var dts=document.querySelectorAll('.cal-go');           // 各週の日ピッカーのボタン（data-date付き）
+  var dws=document.querySelectorAll('.cal-go-dayweek');   // 日レベルの週セレクタ（data-dayweek）
+  // ある .day[data-date] が属する .daywk[data-week] のキーを返す。
+  function weekKeyOfDay(node){
+    var wk=node&&node.closest?node.closest('.daywk'):null;
+    return wk?wk.getAttribute('data-week'):null;
+  }
+  // 指定ISOの日だけを可視にする（全 .day を一旦 hidden→該当1つだけ表示）。属する週グループも揃える。
+  function showDayByDate(iso){
+    if(!iso)return;
+    var target=document.querySelector('.day[data-date="'+iso+'"]');
+    if(!target)return;
+    document.querySelectorAll('.day[data-date]').forEach(function(p){p.hidden=p.getAttribute('data-date')!==iso;});
+    var wkKey=weekKeyOfDay(target);
+    // 対象日が属する週グループだけ表示（他は隠す）。週セレクタの on も同期。
+    document.querySelectorAll('.daywk[data-week]').forEach(function(g){g.hidden=g.getAttribute('data-week')!==wkKey;});
+    dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===wkKey);});
+    // 日ピッカーの on は「いま見えている日＝同じISO」のボタンだけ。
+    dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-date')===iso);});
+    window.__curDay=target.getAttribute('data-day'); // 既存コピー導線の互換（表示中の曜日）
+    window.__curDate=iso;                              // 表示中の実ISO（単一可視日）
+  }
+  // 週起点未設定テナント（全日 date:null＝cal-go の data-date が空）用フォールバック。
+  // 実ISOが無いので曜日(data-go)で切り替える。単一週なので .daywk は1グループ＝週同期は不要だが、
+  // 多週時と同型に「全 .day を一旦 hidden→対象の1つだけ表示」で可視一意化する（curDay の前提＝
+  // hidden でない最初の .day が常に1件、を曜日経路でも守る）。
+  function showDayByDay(dayName){
+    if(!dayName)return;
+    var target=document.querySelector('.day[data-day="'+(window.CSS&&CSS.escape?CSS.escape(dayName):dayName)+'"]');
+    if(!target)return;
+    document.querySelectorAll('.day[data-date]').forEach(function(p){p.hidden=p!==target;});
+    // 日ピッカーの on は同じ曜日のボタンだけ（ISO経路と対称）。
+    dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===dayName);});
+    window.__curDay=dayName;       // 表示中の曜日（コピー導線の互換）
+    window.__curDate=null;         // 実ISO無し（曜日フォールバック経路）
+  }
+  // cal-go は実ISO(data-date)があればそれで切り替える（多週・曜日衝突を実ISOで回避）。
+  // 週起点未設定で data-date が空なら曜日(data-go)フォールバックで切り替える（無反応の退行を根治）。
+  dts.forEach(function(b){b.addEventListener('click',function(){
+    var iso=b.getAttribute('data-date');
+    if(iso){showDayByDate(iso);}else{showDayByDay(b.getAttribute('data-go'));}
+  });});
+  // その週グループの既定日ISO（今日がその週内なら今日、無ければその週の先頭練習日）。
+  function defaultDateOfWeek(wkKey,todayIso){
+    var grp=document.querySelector('.daywk[data-week="'+(window.CSS&&CSS.escape?CSS.escape(wkKey):wkKey)+'"]');
+    if(!grp)return null;
+    var days=grp.querySelectorAll('.day[data-date]');
+    for(var i=0;i<days.length;i++){if(days[i].getAttribute('data-date')===todayIso)return todayIso;}
+    return days.length?days[0].getAttribute('data-date'):null;
+  }
+  // 週セレクタ: その週グループを表示し、その週の既定日（今日 or 先頭練習日）を出す。
+  dws.forEach(function(b){b.addEventListener('click',function(){
+    var wkKey=b.getAttribute('data-dayweek');
+    var iso=defaultDateOfWeek(wkKey,todayISO());
+    if(iso)showDayByDate(iso);
+  });});
+  // レベルを day に切替＋指定日を出す（週グリッドの曜日ヘッダ・他導線からの遷移）。
+  function jumpToDate(iso){
+    if(!iso)return;
+    setLevel('day');
+    showDayByDate(iso);
+  }
+  function todayISO(){
     var n=new Date();
-    var iso=n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);
-    var td=document.querySelector('.day[data-date="'+iso+'"]');
-    if(td){var wd=td.getAttribute('data-day'); if(wd)showDay(wd);}
+    return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);
+  }
+  // 週グリッドの曜日ヘッダ（[data-jumpdate]）クリックでその日の入力へ遷移。
+  document.querySelectorAll('[data-jumpdate]').forEach(function(b){b.addEventListener('click',function(){
+    jumpToDate(b.getAttribute('data-jumpdate'));
+  });});
+  // 既定表示日=今日（多週対応）: 今日のISOに一致する日があればそれを出す。無ければ先頭週の先頭日。
+  (function(){
+    var iso=todayISO();
+    if(document.querySelector('.day[data-date="'+iso+'"]')){showDayByDate(iso);return;}
+    var first=document.querySelector('.daywk .day[data-date]')||document.querySelector('.day[data-date]');
+    if(first)showDayByDate(first.getAttribute('data-date'));
   })();
   // 週ピッカー実切替: 押下した週の wkpanel だけ出す（日切替と同型）。
   var wts=document.querySelectorAll('.cal-go-week');
@@ -587,7 +668,14 @@ export function clientScript() {
   setMode('on');
   var p=document.getElementById('printBtn'); if(p)p.addEventListener('click',function(){window.print();});
   var c=document.getElementById('copyBtn'); if(c)c.addEventListener('click',function(){
-    var el=document.querySelector('.day[data-day="'+(window.__curDay||'')+'"] .plain')||document.querySelector('.plain');
+    // 現在表示中の日（単一可視日＝__curDate）の .plain を拾う。多週で曜日名は衝突するので実ISOで引く。
+    // フォールバック: __curDate が無ければ hidden でない最初の .day の .plain（curDay 相当）。
+    var day=(window.__curDate&&document.querySelector('.day[data-date="'+window.__curDate+'"]'))||(function(){
+      var ns=document.querySelectorAll('.day[data-date]');
+      for(var i=0;i<ns.length;i++){if(!ns[i].hidden)return ns[i];}
+      return null;
+    })();
+    var el=day?day.querySelector('.plain'):document.querySelector('.plain');
     navigator.clipboard.writeText(el?el.textContent:'').then(function(){c.textContent='コピーしました';setTimeout(function(){c.textContent='テキストでコピー';},1500);});
   });
   // ── ハッシュ駆動ドリル詳細オーバーレイ（§2.2）──

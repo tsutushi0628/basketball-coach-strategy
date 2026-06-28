@@ -96,7 +96,7 @@ export const EDITOR_CSS = `
 /* 他の日からコピーの行（セレクタ＋取り込みボタン） */
 .ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 /* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */
-.cal-go:disabled,.cal-go-week:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+.cal-go:disabled,.cal-go-week:disabled,.cal-go-dayweek:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 `;
 
 /* ───────────────────────── 2) ツールバー3ボタン ───────────────────────── */
@@ -171,14 +171,19 @@ function dayToPrefill(d) {
  * @returns {string} <script type="application/json" id="bcs-ed">…</script>
  */
 export function editorDataIsland(data) {
-  const days = (data.days && data.days.length)
-    ? data.days
-    : (data.weeks && data.weeks[0] ? data.weeks[0].days : []);
+  // 編集できる「日」画面は全週ぶん描かれる（pattern-timeline.render の多週化）。だから prefill も
+  // 全週のコーチ上書き日（twoCol）から作る。先頭週だけだと翌週のコーチ編集日が空テンプレで開く。
+  // 実日付(date)キーなので週をまたいで一意（別週の同曜日と衝突しない）。
+  const weekDayLists = (data.weeks && data.weeks.length)
+    ? data.weeks.map((w) => w.days)
+    : [data.days || []];
 
   const prefill = {};
-  for (const d of (days || [])) {
-    if (d.source === 'coach' && d.twoCol && d.date) {
-      prefill[d.date] = dayToPrefill(d);
+  for (const days of weekDayLists) {
+    for (const d of (days || [])) {
+      if (d.source === 'coach' && d.twoCol && d.date) {
+        prefill[d.date] = dayToPrefill(d);
+      }
     }
   }
 
@@ -800,7 +805,7 @@ export function editorScript() {
   function setNavDisabled(on){
     if(on){
       navLocked=[];
-      document.querySelectorAll('.cal-go,.cal-go-week,.cal-go-month,.lvtab').forEach(function(b){
+      document.querySelectorAll('.cal-go,.cal-go-week,.cal-go-dayweek,.cal-go-month,.lvtab').forEach(function(b){
         if(!b.disabled){b.disabled=true;navLocked.push(b);}
       });
     }else{

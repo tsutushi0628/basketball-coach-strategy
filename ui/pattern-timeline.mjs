@@ -581,11 +581,15 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
     const toLabel   = blocks ? blocks[blocks.length - 1].to : '';
     const shareLabel = SHARE_LABEL[d.sharedKind] || d.sharedKind;
     const shareNote  = SHARE_NOTE[d.sharedKind] || '';
-    return `<div class="wg-dayhead" style="grid-column:${colIdx}">
-      <span class="wd">${esc(d.day)}</span>
+    const inner = `<span class="wd">${esc(d.day)}</span>
       <span class="wr">${esc(shareLabel)}${esc(shareNote)}</span>
-      <span class="wt">${esc(fromLabel)}–${esc(toLabel)}</span>
-    </div>`;
+      <span class="wt">${esc(fromLabel)}–${esc(toLabel)}</span>`;
+    // 実日付のある曜日ヘッダは、その日の入力画面へ飛ぶクリック要素（button）にする。
+    // 空日（d.date無し）はクリック不可のまま素の div で出す。色帯・emoji・gradientは持ち込まない。
+    if (d.date) {
+      return `<button type="button" class="wg-dayhead wg-dayhead-go" data-jumpdate="${esc(d.date)}" style="grid-column:${colIdx}">${inner}</button>`;
+    }
+    return `<div class="wg-dayhead" style="grid-column:${colIdx}">${inner}</div>`;
   }).join('');
 
   // 時刻ガター（毎時のみ）
@@ -674,14 +678,18 @@ function sessionTimeline(session, drillIndex) {
   return isRotation ? rotationTimeline(session, drillIndex) : menuTimeline(session, drillIndex);
 }
 
-function dayTimeline(data, pd, idx) {
+/** 1日の編集可能タイムライン記事。visible=true の1日だけ markup 上で可視（ほかは hidden）。
+ * 多週化により「可視は常に1日」の不変条件を満たすため、可視判定は呼び出し側が一意に決める
+ * （週内idxでなく全週通しで1日だけ true）。JS無効時のフォールバックも先頭週先頭日だけ見える。 */
+function dayTimeline(data, pd, visible) {
   // コーチ指定の上書き日は手書きドリル名（registry 外）なので drillIndex を渡さず素テキスト化する。
   const reg = pd.source === 'coach' ? null : data.drillIndex;
+  const hiddenAttr = visible ? '' : ' hidden';
   // コーチ指定の男女2列日（twoCol）: 専用の男女2列タイムライン。
   let body;
   if (pd.source === 'coach' && pd.twoCol) {
     body = twoColTimeline(pd);
-    return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
+    return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${hiddenAttr}>
     ${dayHeader(pd, data.month, data.session.goals)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
@@ -700,7 +708,7 @@ function dayTimeline(data, pd, idx) {
   }
   // rotation 日は中央スパインのみ表示（折りたたみ「共通メニュー」廃止・T3）。
   // 詳細はハッシュ駆動オーバーレイ（#drill-overlay）で表示。日タイムラインに詳細セクションは付与しない。
-  return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${idx === 0 ? '' : ' hidden'}>
+  return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${hiddenAttr}>
     ${dayHeader(pd, data.month, data.session.goals)}
     ${body}
     <pre class="plain" hidden>${esc(plainText(data, pd))}</pre>
@@ -760,6 +768,13 @@ const PATTERN_CSS = `
 }
 .wg-corner{grid-column:1;grid-row:1}
 .wg-dayhead{grid-row:1;text-align:center;padding:0 4px 10px;border-bottom:1px solid var(--hair)}
+/* クリックできる曜日ヘッダ（その日の入力画面へ飛ぶ）。button の既定外観を消し、div版と同じ見た目に
+ * 揃える（左右下罫線のみ・背景透明）。押せる手がかりは .btn/.pk 系の作法（cursor・色シフト・上トランス）。
+ * 色帯（side-stripe）・emoji・gradient・汎用書体は持ち込まない。 */
+.wg-dayhead-go{appearance:none;background:transparent;border:none;border-bottom:1px solid var(--hair);border-radius:8px 8px 0 0;cursor:pointer;font:inherit;color:inherit;width:100%;display:block;transition:transform .14s ease,color .14s ease}
+.wg-dayhead-go:hover{transform:translateY(-2px)}
+.wg-dayhead-go:hover .wd{color:var(--orange-deep)}
+.wg-dayhead-go:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 /* T6: wd は 17px/700（H3段・列見出し） */
 .wg-dayhead .wd{display:block;font-size:17px;font-weight:700;letter-spacing:-.01em}
 /* T6: wr は 12px/700（補助段） */
@@ -932,19 +947,32 @@ const PATTERN_CSS = `
 
 export const meta = { id: 'timeline', name: 'タイムライン', tagline: '練習の流れを縦の比例タイムラインで・男女共通メニュー' };
 
-/** 日ピッカー: 日〜土の曜日ボタン。練習日のみ選択可（cal-go）、無い曜日はグレーアウト。日曜始まり。 */
-function dayPicker(data) {
+/** 日ピッカー: 日〜土の曜日ボタン。練習日のみ選択可（cal-go）、無い曜日はグレーアウト。日曜始まり。
+ * days を渡せば任意の週の日ぶんを描ける（複数週の実切替用）。先頭が初期表示候補（on）。
+ * cal-go は曜日(data-go)に加えて実ISO(data-date)も持つ。曜日だけだと別週の同曜日と衝突するため、
+ * クライアントは data-date を起点に切り替える（showDayByDate）。 */
+function dayPicker(days) {
   const WD = ['日', '月', '火', '水', '木', '金', '土'];
   const pr = new Map();
-  data.days.forEach((d, i) => { if (d.day) pr.set(d.day, { dateLabel: d.dateLabel, first: i === 0 }); });
+  days.forEach((d, i) => { if (d.day) pr.set(d.day, { dateLabel: d.dateLabel, date: d.date || '', first: i === 0 }); });
   const btns = WD.map((w, i) => {
     const wk = i === 0 ? ' sun' : i === 6 ? ' sat' : '';
     const p = pr.get(w);
     if (!p) return `<span class="pk pk-off${wk}">${w}</span>`;
     const md = p.dateLabel ? p.dateLabel.slice(5) : '';
-    return `<button class="pk cal-go${p.first ? ' on' : ''}${wk}" data-go="${esc(w)}" type="button">${w}${md ? `<small>${esc(md)}</small>` : ''}</button>`;
+    return `<button class="pk cal-go${p.first ? ' on' : ''}${wk}" data-go="${esc(w)}" data-date="${esc(p.date)}" type="button">${w}${md ? `<small>${esc(md)}</small>` : ''}</button>`;
   });
   return `<div class="picker" data-print-hide>${btns.join('')}</div>`;
+}
+
+/** 日レベルの週セレクタ: 編集できる「日」画面を週ごとに切り替えるハンドル（.daywk グループの切替）。
+ * 週ピッカー(cal-go-week)と同じ見た目だが別系統（data-dayweek）。data.weeks が1件なら出さない。 */
+function dayWeekSelector(weeks) {
+  if (!weeks || weeks.length <= 1) return '';
+  const items = weeks.map((w, i) =>
+    `<button class="pk cal-go-dayweek${i === 0 ? ' on' : ''}" data-dayweek="${esc(w.key)}" type="button">${esc(w.label)}</button>`
+  ).join('');
+  return `<div class="picker" data-print-hide>${items}</div>`;
 }
 
 /** 週ピッカー: 生成済みの各週（data.weeks）を「yyyy/mm/dd〜」で実選択できるボタンで並べる。先頭=表示中。 */
@@ -968,7 +996,30 @@ function monthPicker(data) {
 }
 
 export function render(data) {
-  const dayTimelines = data.days.map((d, i) => dayTimeline(data, d, i)).join('\n');
+  // 日レベルを全週ぶんに広げる（編集できる「日」画面を data.weeks 全週で描く）。
+  // weeks が空でも後方互換: 先頭週=top-level days の単一週にフォールバック（週レベルと同じ正規化）。
+  // フォールバック週も focus（アンカー週の焦点）と weekStartDate（アンカー週の週起点ISO）を持たせ、
+  // 単一週でも週の目標バーが従来どおりアンカー値を出す（per-group goalsBar の引数源を欠かさない）。
+  const dayWeeks = (data.weeks && data.weeks.length)
+    ? data.weeks
+    : [{ key: '', days: data.days, focus: data.session.goals.week, weekStartDate: (data.goalKeys && data.goalKeys.weekKey) || null }];
+
+  // 可視は常に1日（単一可視日の不変条件）。markup 上の初期可視は全週通しで先頭週・先頭日の1つだけ。
+  // 読み込み後にクライアント（showDayByDate）が今日へ寄せ、無ければこの初期可視に留まる。
+  // 週の目標バーは各 .daywk グループ内に1つずつ置き、その週の焦点・週起点ISOキーを指す（週レベルの
+  // per-week 焦点と同型）。表示中の週グループだけが見えるので、追従用の追加JSなしで「表示中の週の目標」
+  // だけが見え、編集導線も当該週キーをPOSTする（週0固定の誤上書きを根治）。月/定性/KPIは不変（アンカー値）。
+  const dayGroups = dayWeeks.map((w, wi) => {
+    const timelines = w.days
+      .map((d, di) => dayTimeline(data, d, wi === 0 && di === 0))
+      .join('\n');
+    // 先頭週以外の日グループは hidden（クライアントが週セレクタ・既定日で切替）。
+    return `<div class="daywk" data-week="${esc(w.key)}"${wi === 0 ? '' : ' hidden'}>
+      ${dayPicker(w.days)}
+      ${goalsBar(data, { text: w.focus || '', key: w.weekStartDate || '' })}
+      ${timelines}
+    </div>`;
+  }).join('\n');
 
   return {
     css: PATTERN_CSS + EDITOR_CSS + GOAL_EDITOR_CSS,
@@ -987,9 +1038,8 @@ export function render(data) {
         <button class="btn" id="copyBtn" type="button">テキストでコピー</button>
         ${editorToolbar()}
       </div>
-      ${dayPicker(data)}
-      ${goalsBar(data)}
-      ${dayTimelines}
+      ${dayWeekSelector(dayWeeks)}
+      ${dayGroups}
     </div>
 
     <div class="level" data-level="week" hidden>${weekPicker(data)}${(data.weeks && data.weeks.length ? data.weeks : [{ key: '', days: data.days, focus: '', weekStartDate: null }]).map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus, w.weekStartDate || '')}</div>`).join('')}</div>
