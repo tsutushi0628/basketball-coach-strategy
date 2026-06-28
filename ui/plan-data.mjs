@@ -662,6 +662,59 @@ export function applyOverrides(days, overrides, weekStartDate) {
 }
 
 /**
+ * 叩き台（エンジン生成日）を「空状態日」へ畳む（既定空白の単一真実源）。
+ *
+ * オーナー方針: コーチが入力していない日は中身を出さない。エンジンが各日に作る叩き台メニュー
+ * （ドリル/時間割/組違いローテ/2部構成）は表示しない＝空状態に倒す。ただし日付・曜日・コート・
+ * コーチ在席は日ピッカー／週グリッド／ヘッダの連続性のために残す（描画は空状態UIで出す）。
+ * 叩き台そのものは捨てず seedDays として温存し、コーチが「自動で叩き台を入れる」を押したときの
+ * 自動入力ソースにする（buildPlanData が seedDays を保持し editor のデータ島へ prefill する）。
+ *
+ * @param {object} day buildDays の結果1日（エンジン叩き台）
+ * @param {?string} dISO この表示日の実日付ISO（週起点から算出済み・null可）
+ * @returns {object} source:'empty' の空状態日
+ */
+function toEmptyDay(day, dISO) {
+  return {
+    day: day.day,
+    dayLabel: day.dayLabel,
+    date: dISO ?? day.date ?? null,
+    dateLabel: dISO ? dateLabelYMD(dISO) : (day.dateLabel || ''),
+    court: day.court,
+    coachPresent: day.coachPresent,
+    isSaturday: day.isSaturday,
+    source: 'empty', // 描画分岐キー（空状態UIを出す）
+    aim: '', // 叩き台の狙いは出さない（未入力）
+    blocks: [], // 叩き台メニューは出さない
+    parts: undefined, // 2部構成も出さない
+    sharedKind: 'empty',
+    rotation: null,
+  };
+}
+
+/**
+ * 既定空白の合流（決定論・実日付一致）。コーチ上書きがある日だけ手書き内容を出し、無い日は
+ * エンジン叩き台を表示せず空状態に倒す（オーナー方針「未入力は空白」）。
+ *
+ * applyOverrides との違い: 上書きの無い日を「エンジン日そのまま」ではなく「空状態日」にする。
+ * これが製品中核の挙動変更（自動で叩き台を出す→既定は空白）。叩き台は捨てず seedDays に残す。
+ *
+ * @param {Array} days buildDays の結果（エンジン叩き台）
+ * @param {Array} overrides getOverrides() の結果
+ * @param {?string} weekStartDate 表示週の月曜ISO。未設定なら全日 date:null の空状態に倒す。
+ * @returns {Array} コーチ上書き日＝手書き／その他＝空状態 の days
+ */
+export function applyOverridesWithEmpty(days, overrides, weekStartDate) {
+  const ovs = Array.isArray(overrides) ? overrides : [];
+  return days.map((day) => {
+    const dISO = weekStartDate ? dayDateISO(weekStartDate, day.day) : null;
+    const ov = dISO ? ovs.find((o) => o.source === 'coach' && o.date === dISO) : null;
+    if (ov) return toAuthoredDay(day, ov, dISO);
+    return toEmptyDay(day, dISO);
+  });
+}
+
+/**
  * コーチが編集した週/月/年の目標テキスト上書きを、組み立て済みの表示データへ適用する（決定論）。
  *
  * データモデルの要点（design 確定）:
@@ -723,6 +776,71 @@ export function applyGoalOverrides(parts, goalOverrides) {
 }
 
 /**
+ * 既定空白の目標合流（決定論・空文字は上書きしない）。
+ *
+ * オーナー方針「未入力は空白」を目標（週/月/年）にも適用する。applyGoalOverrides は上書きの
+ * 無い目標をエンジン既定見出しのまま残すが、本関数はコーチ上書きの**無い**目標を空文字に倒す
+ * （＝空状態UIを出す）。エンジン既定見出し（叩き台）は捨てず seed* フィールドに退避し、コーチが
+ * 「自動で叩き台を入れる」を押せば編集欄に呼べるようにする（目標の自動入力ソース）。
+ *
+ * 効かせる範囲は applyGoalOverrides と同じ（weeks の focus/goals.week・months の month.headline・
+ * year.arc[].headline・session の month.headline/goals.monthMain）。定性（qualitative）と KPI ヒントは
+ * 「数字」であって自由記述の目標ではないため空白化しない（叩き台のまま＝チェックする数字の案内）。
+ *
+ * @param {object} parts applyGoalOverrides と同じ {weeks, months, year, session}
+ * @param {{weeks:Object<string,string>, arcMonths:Object<string,string>}} goalOverrides
+ * @returns {object} parts（同一参照）
+ */
+export function applyGoalOverridesWithEmpty(parts, goalOverrides) {
+  const weekMap = (goalOverrides && goalOverrides.weeks) || {};
+  const arcMap = (goalOverrides && goalOverrides.arcMonths) || {};
+  const { weeks, months, year, session } = parts;
+  const authored = (v) => typeof v === 'string' && v !== '';
+
+  // ── 週: コーチ上書きがあればそれ／無ければ空白（叩き台は seedFocus へ退避）。──
+  for (const w of (weeks || [])) {
+    const text = w.weekStartDate ? weekMap[w.weekStartDate] : '';
+    w.seedFocus = w.focus; // エンジン既定（叩き台）を退避＝自動入力ソース
+    if (authored(text)) {
+      w.focus = text;
+      if (w.goals) w.goals.week = text;
+    } else {
+      w.focus = '';
+      if (w.goals) { w.goals.seedWeek = w.goals.week; w.goals.week = ''; }
+    }
+  }
+  if (session && session.goals) {
+    const w0 = weeks && weeks[0];
+    const text = w0 && w0.weekStartDate ? weekMap[w0.weekStartDate] : '';
+    session.goals.seedWeek = session.goals.seedWeek ?? session.goals.week;
+    session.goals.week = authored(text) ? text : '';
+  }
+
+  // ── 月/年: arc月キーで該当見出し。コーチ上書きが無ければ空白（叩き台は seedHeadline へ退避）。──
+  for (const m of (months || [])) {
+    if (!m.month) continue;
+    const text = arcMap[String(m.arcMonth)];
+    m.month.seedHeadline = m.month.headline;
+    m.month.headline = authored(text) ? text : '';
+  }
+  for (const a of (year && year.arc ? year.arc : [])) {
+    const text = arcMap[String(a.month)];
+    a.seedHeadline = a.headline;
+    a.headline = authored(text) ? text : '';
+  }
+  if (session && session.month) {
+    const text = arcMap[String(session.month.arcMonth)];
+    session.month.seedHeadline = session.month.headline;
+    session.month.headline = authored(text) ? text : '';
+    if (session.goals) {
+      session.goals.seedMonthMain = session.goals.monthMain;
+      session.goals.monthMain = authored(text) ? text : '';
+    }
+  }
+  return parts;
+}
+
+/**
  * 練習計画UIの単一データを組み立てる（決定論・LLM不使用）。
  *
  * データ源は注入された storage に一本化（ローカルJSON or Firestore）。storage は
@@ -761,11 +879,15 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
   };
 
   // 1期間（1週）を生成する単位。period を変えて反復することで複数週を作る（案B）。
+  // 既定空白方針: エンジン叩き台（buildDays）は seedDays として温存し、表示用 days は
+  // コーチ上書きのある日だけ手書き／その他は空状態に倒す（applyOverridesWithEmpty）。
+  // 叩き台を捨てないので「自動で叩き台を入れる」で editor に呼び戻せる。
   const buildOneWeek = (period) => {
     const s = buildSession({ annual, drills, config, teamInput, period });
-    // コーチ指定の上書きは各週の週起点で実日付一致＝別週へ漏れない（applyOverrides 既存設計）。
-    const weekDays = applyOverrides(buildDays(s), overrides, period.weekStartDate);
-    return { session: s, days: weekDays };
+    const seedDays = buildDays(s); // エンジン叩き台（自動入力ソース・表示しない）
+    // コーチ上書きは各週の週起点で実日付一致＝別週へ漏れない（applyOverrides 既存設計を踏襲）。
+    const weekDays = applyOverridesWithEmpty(seedDays, overrides, period.weekStartDate);
+    return { session: s, days: weekDays, seedDays };
   };
 
   // ── 週ピッカー用の複数週（現アーク月の週1..N。焦点が型→反復で変わる）──────────────
@@ -783,6 +905,7 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
       weekStartDate: wp.weekStartDate,
       focus: built.session.goals.week, // 今週の焦点（週ごとに変わる＝実切替の中身差）
       days: built.days,
+      seedDays: built.seedDays, // エンジン叩き台（表示しない・自動入力ソース）
       goals: built.session.goals,
       month: built.session.month,
       warnings: built.session.warnings || [],
@@ -793,6 +916,7 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
   const anchorWeek = weeks[0];
   const session = { goals: anchorWeek.goals, month: anchorWeek.month };
   const days = anchorWeek.days;
+  const seedDays = anchorWeek.seedDays; // アンカー週の叩き台（表示しない・自動入力ソース）
 
   // 表示する暦月: 週起点の暦月（例 2026-06-22 → 6月）。フェーズ位置（current_month=7）とは別軸で、
   // ヘッダ・index・配布テキストの「N月」表示に使う。週起点未設定時は従来どおり current_month。
@@ -842,9 +966,10 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     peaks: annualPeaks(annual),
   };
 
-  // ── コーチが編集した週/月/年の目標テキストを上書き適用（決定論・空文字は上書きしない）──
-  // 週は週起点日キー、月/年は arc月キー（月と年は同一源）。weeks/months/year/session を同時整合させる。
-  applyGoalOverrides({ weeks, months, year, session }, goalOverrides);
+  // ── コーチが編集した週/月/年の目標テキストを上書き適用（既定空白・決定論）──
+  // 既定空白方針: コーチ上書きのある目標だけ表示し、無い目標は空白（叩き台＝seed* へ退避し
+  // 「自動で叩き台を入れる」で呼べる）。週は週起点日キー、月/年は arc月キー（月と年は同一源）。
+  applyGoalOverridesWithEmpty({ weeks, months, year, session }, goalOverrides);
 
   // 描画キー（編集導線が目標保存APIへ渡す scope/key の単一真実源）。
   //   - weekKey: アンカー週の週起点ISO（無ければ null＝編集導線を出さない）。
@@ -873,6 +998,7 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     boysGoals: teamGoals(teamInput),
     girlsGoals: teamGoals(girlsInput),
     days, // アンカー週（先頭期間）の days。日レベルはこれを使う（後方互換）。
+    seedDays, // アンカー週のエンジン叩き台（表示しない・「自動で叩き台を入れる」の自動入力ソース）。
     weeks, // 週ピッカー実切替用の複数週（先頭=アンカー）。
     months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,

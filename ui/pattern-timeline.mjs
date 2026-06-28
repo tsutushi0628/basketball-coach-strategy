@@ -10,7 +10,7 @@ import {
   esc, modeTag, modeMark, altLine, videoLink, plainText, BLOCK_TINT,
   modeToggle, dayHeader, partHeader,
   goalsSection, monthSection, yearSection, assumptionsNote, goalsBar,
-  genderChip, VIDEO_SVG,
+  genderChip, VIDEO_SVG, emptyState, emptyDayActions,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
 import { GOAL_EDITOR_CSS, goalEditorScript } from './goal-editor.mjs';
@@ -562,9 +562,12 @@ const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${S
 function weekLevel(data, days = data.days, focus = '', weekKey = '') {
   const axis = buildWeekAxis(days);
   const focusAttr = weekKey ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(focus || '')}"` : '';
-  const focusNote = focus ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>` : '';
+  // 今週の焦点: コーチ入力があればそれ／無ければ「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
+  const focusNote = focus
+    ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>`
+    : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline">未入力</span></p>` : '');
   if (!axis) {
-    return `<h3 class="lvh">この週の練習</h3>${focusNote}<p class="note">この週は予定が入っていません。</p>`;
+    return `<h3 class="lvh">この週の練習</h3>${focusNote}${emptyState({ text: 'この週はまだ入力がありません。各曜日の入力は「日」タブから、自動の叩き台もそこから入れられます。' })}`;
   }
 
   // グリッド全体の高さ
@@ -682,9 +685,26 @@ function sessionTimeline(session, drillIndex) {
  * 多週化により「可視は常に1日」の不変条件を満たすため、可視判定は呼び出し側が一意に決める
  * （週内idxでなく全週通しで1日だけ true）。JS無効時のフォールバックも先頭週先頭日だけ見える。 */
 function dayTimeline(data, pd, visible) {
+  const hiddenAttr = visible ? '' : ' hidden';
+  // 空状態日（既定空白＝コーチ未入力）: 叩き台を出さず簡潔な空状態UIを出す。
+  // data-date / data-day は残す（日ピッカー・週グリッド遷移・editor の curDay/openPanel が拾う）。
+  // .plain も空で持つ（コピー導線が表示中の .day .plain を読む前提を壊さない）。
+  // 2導線（入力する／自動で叩き台を入れる）は editor の openPanel に渡るが、openPanel は実日付
+  // (data-date)を保存APIの doc ID に使うため date 無しの日を弾く。週起点未設定テナント＝全日 date:null
+  // では押しても無反応の死んだボタンになるので、実日付のある空状態日にだけ導線を出し、実日付の無い
+  // 空状態日は文言だけにする（押せない導線を見せない）。
+  if (pd.source === 'empty') {
+    const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${data.month}月 ${esc(pd.dayLabel)}`;
+    const court = pd.court ? `<span class="dh-court">${esc(pd.court)}${pd.coachPresent ? '' : '・コーチ不在'}</span>` : '';
+    const actions = pd.date ? emptyDayActions() : '';
+    return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${hiddenAttr}>
+    <div class="dayhead"><div class="dh-main"><div class="dh-t">${dateHead}${court}</div></div></div>
+    ${emptyState({ text: 'まだ入力がありません。この日の練習を入力してください。', actions })}
+    <pre class="plain" hidden></pre>
+  </article>`;
+  }
   // コーチ指定の上書き日は手書きドリル名（registry 外）なので drillIndex を渡さず素テキスト化する。
   const reg = pd.source === 'coach' ? null : data.drillIndex;
-  const hiddenAttr = visible ? '' : ' hidden';
   // コーチ指定の男女2列日（twoCol）: 専用の男女2列タイムライン。
   let body;
   if (pd.source === 'coach' && pd.twoCol) {

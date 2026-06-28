@@ -55,9 +55,10 @@ function weekGoalKeyOf(groupHtml) {
   return m ? m[1] : null;
 }
 
-/** グループHTMLから「週の目標」バーの表示テキスト（gb-val）を拾う。 */
+/** グループHTMLから「週の目標」バーの表示テキスト（gb-val）を拾う。
+ * 既定空白では空セルが <span class="gb-val es-inline">未入力</span> になるので、その class 差も許容して拾う。 */
 function weekGoalTextOf(groupHtml) {
-  const m = groupHtml.match(/<span class="gb-lab">週の目標<\/span><span class="gb-val">([^<]*)<\/span>/);
+  const m = groupHtml.match(/<span class="gb-lab">週の目標<\/span><span class="gb-val(?: es-inline)?">([^<]*)<\/span>/);
   return m ? m[1] : null;
 }
 
@@ -199,14 +200,16 @@ test('日レベルの各 .daywk グループの週目標バーが、その週の
   const groups = dayWeekGroupsOf(region);
   assert.equal(groups.length, data.weeks.length, '日グループ数＝週数（各週に1つ週目標バー）');
 
-  // 各週グループの週目標バー: 編集キー＝その週の週起点ISO、表示テキスト＝その週の焦点。
+  // 各週グループの週目標バー: 編集キー＝その週の週起点ISO（誤上書き防止の核）、表示テキストは
+  // コーチ入力があればその焦点／既定空白（未入力）なら「未入力」を出す（叩き台を自動表示しない）。
   for (const grp of groups) {
     const w = data.weeks.find((x) => x.key === grp.key);
     assert.ok(w, `グループキー ${grp.key} に対応する週が data.weeks にある`);
     assert.equal(weekGoalKeyOf(grp.html), w.weekStartDate,
       `週 ${grp.key} の週目標編集キーは自週の週起点ISO（誤上書き防止＝他週キーを送らない）`);
-    assert.equal(weekGoalTextOf(grp.html), w.focus,
-      `週 ${grp.key} の週目標テキストは自週の焦点（未来週で週0の焦点を出さない）`);
+    const expected = w.focus ? w.focus : '未入力';
+    assert.equal(weekGoalTextOf(grp.html), expected,
+      `週 ${grp.key} の週目標テキストは自週の焦点（未入力なら「未入力」・未来週で週0の焦点を出さない）`);
   }
 });
 

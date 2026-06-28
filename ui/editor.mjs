@@ -108,6 +108,7 @@ export const EDITOR_CSS = `
  */
 export function editorToolbar() {
   return `<button class="btn" id="ed-edit" type="button" data-print-hide>この日を編集</button>` +
+    `<button class="btn" id="ed-seed" type="button" data-print-hide>自動で叩き台を入れる</button>` +
     `<button class="btn" id="ed-auto" type="button" data-print-hide>自動に戻す</button>` +
     `<button class="btn" id="ed-export" type="button" data-print-hide>入力を書き出し</button>` +
     `<span class="ed-msg" id="ed-msg" data-print-hide></span>`;
@@ -165,6 +166,47 @@ function dayToPrefill(d) {
 }
 
 /**
+ * エンジン叩き台日（blocks 形）を編集スキーマ（twoCol・男女共通 both 行）の prefill へ変換する。
+ *
+ * オプトイン自動入力のソース。叩き台メニューは男女共通（1本）なので各ブロックを both 行にする。
+ * 各ブロックの from/to/minutes と items（name＋自走表示等の説明 note）をそのまま編集欄に載せる。
+ * コーチが確認・編集して保存すれば通常のコーチ上書き（two-col）として保存される。
+ * 2部構成の日（火）も blocks にフラット化済みの from/to を各ブロックが持つので、ブロック単位で
+ * 時間行に展開できる（区画の入れ子は編集スキーマに無いため from/to の時間行へ畳む）。
+ *
+ * @param {object} d buildDays の結果1日（エンジン叩き台・source は coach/empty いずれでもない）
+ * @returns {{court:string, aim:string, title:string, rows:Array}} 編集データ島の prefill 形
+ */
+function engineDayToPrefill(d) {
+  // 2部構成の日は parts 配下にブロックがあるので、parts があればそのブロックを順に集める。
+  const blocks = (Array.isArray(d.parts) && d.parts.length > 0)
+    ? d.parts.flatMap((p) => p.blocks || [])
+    : (d.blocks || []);
+  const rows = blocks
+    .filter((b) => Array.isArray(b.items) && b.items.length > 0)
+    .map((b) => ({
+      from: b.from || '',
+      to: b.to || '',
+      minutes: Number.isFinite(b.minutes) ? b.minutes : null,
+      both: {
+        block: b.block || '',
+        label: b.label || b.block || '',
+        items: b.items.map((it) => {
+          const out = { name: it.name };
+          // 叩き台の補助情報（いずれか候補・自走/レクチャ表示）はメモに残す（コーチが消せる）。
+          const note = it.note
+            || (it.mode === 'practice' ? 'コーチ付き'
+              : it.mode === 'lecture' ? 'レクチャ'
+                : (Array.isArray(it.alternatives) && it.alternatives.length ? `いずれか：${it.alternatives.join('・')}` : ''));
+          if (note) out.note = note;
+          return out;
+        }),
+      },
+    }));
+  return { court: d.court || '', aim: d.aim || '', title: '', rows };
+}
+
+/**
  * 編集UIの初期データ（カタログ・色・ブロック・既存上書き日の prefill）を JSON で埋める。
  * data.days（または data.weeks[0].days）のうち source==='coach' && twoCol の日から prefill を作る。
  * @param {object} data buildPlanData の戻り値
@@ -187,6 +229,19 @@ export function editorDataIsland(data) {
     }
   }
 
+  // ── オプトイン自動入力ソース（エンジン叩き台）──────────────────────────────────
+  // 各週の seedDays（表示しない叩き台）を date キーで prefill 形に温存する。コーチが
+  // 「自動で叩き台を入れる」を押した日だけ、この叩き台を編集欄に読み込む（既定では使わない）。
+  const seedDayLists = (data.weeks && data.weeks.length)
+    ? data.weeks.map((w) => w.seedDays || [])
+    : [data.seedDays || []];
+  const seedPrefill = {};
+  for (const days of seedDayLists) {
+    for (const d of (days || [])) {
+      if (d && d.date) seedPrefill[d.date] = engineDayToPrefill(d);
+    }
+  }
+
   const g = data.session && data.session.goals ? data.session.goals : null;
   const island = {
     catalog: catalogNames(data.drillIndex),
@@ -196,6 +251,7 @@ export function editorDataIsland(data) {
     tints: tintsObject(),
     blocks: BLOCK_KEYS,
     prefill,
+    seedPrefill, // 「自動で叩き台を入れる」が日付キーで引くエンジン叩き台（表示はしない）
     // 保存直後の再描画でも印刷の「日ヘッダ右＝月/週目標」を保つための値（編集対象は週内同値）。
     goals: g ? { monthMain: g.monthMain || '', week: g.week || '' } : null,
   };
@@ -225,6 +281,7 @@ export function editorScript() {
   var TINTS=ED.tints||{};
   var BLOCKS=ED.blocks||[];
   var PREFILL=ED.prefill||{};
+  var SEEDPREFILL=ED.seedPrefill||{}; // 「自動で叩き台を入れる」用のエンジン叩き台（表示しない）
   var GOALS=ED.goals||null;
 
   // ── 枠別 datalist の id 解決 ──
@@ -377,6 +434,12 @@ export function editorScript() {
   function initModel(date,weekday){
     // サーバ由来の現状態（prefill）を初期値に。無ければ空テンプレ。
     if(PREFILL[date])return normalizeModel(deepClone(PREFILL[date]),date,weekday);
+    return {date:date,weekday:weekday,court:'',aim:'',title:'',rows:[blankRow()]};
+  }
+  // 自動入力: エンジン叩き台（seedPrefill）を初期値にする。叩き台が無ければ空テンプレ。
+  // コーチが確認・編集して保存すれば通常のコーチ上書きとして保存される（既定では呼ばれない）。
+  function initModelFromSeed(date,weekday){
+    if(SEEDPREFILL[date])return normalizeModel(deepClone(SEEDPREFILL[date]),date,weekday);
     return {date:date,weekday:weekday,court:'',aim:'',title:'',rows:[blankRow()]};
   }
   // store/prefill 形（rows に 男子/女子/both）を編集モデルに正規化。
@@ -860,7 +923,8 @@ export function editorScript() {
       navLocked=[];
     }
   }
-  function openPanel(){
+  // 編集パネルを開く。fromSeed=true なら現状態でなくエンジン叩き台を初期値にする（オプトイン自動入力）。
+  function openPanel(fromSeed){
     if(panel){panel.scrollIntoView({behavior:'smooth',block:'start'});return;} // 既に編集中なら二重に開かない
     var article=curDay();
     if(!article){flash('編集できる日が表示されていません');return;}
@@ -869,7 +933,8 @@ export function editorScript() {
     if(!date){flash('この日は上書き編集の対象外です');return;}
     editingArticle=article;
     var weekday=article.getAttribute('data-day')||'';
-    model=initModel(date,weekday);
+    model=fromSeed?initModelFromSeed(date,weekday):initModel(date,weekday);
+    if(fromSeed)flash('叩き台を読み込みました。確認・編集して保存してください');
     panel=document.createElement('section');
     panel.className='ed-panel';
     panel.setAttribute('data-print-hide','');
@@ -961,9 +1026,17 @@ export function editorScript() {
   }
 
   // ── ボタン結線 ──
-  var editBtn=document.getElementById('ed-edit');if(editBtn)editBtn.addEventListener('click',openPanel);
+  var editBtn=document.getElementById('ed-edit');if(editBtn)editBtn.addEventListener('click',function(){openPanel(false);});
+  var seedBtn=document.getElementById('ed-seed');if(seedBtn)seedBtn.addEventListener('click',function(){openPanel(true);});
   var autoBtn=document.getElementById('ed-auto');if(autoBtn)autoBtn.addEventListener('click',revertAuto);
   var exportBtn=document.getElementById('ed-export');if(exportBtn)exportBtn.addEventListener('click',exportJson);
+
+  // 空状態日の中の導線（「入力する」「自動で叩き台を入れる」）。表示中の空状態日からそのまま編集に入る。
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-empty-act]');
+    if(!b)return;
+    openPanel(b.getAttribute('data-empty-act')==='seed');
+  });
 
   window.__bcsEditor={renderDay:renderDay,exportJson:exportJson,openPanel:openPanel,model:function(){return model;}};
 })();`;

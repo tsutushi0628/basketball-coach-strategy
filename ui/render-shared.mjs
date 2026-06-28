@@ -209,6 +209,12 @@ a{color:var(--orange-deep)}
 .note{font-size:12px;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 15px;margin:14px 0;line-height:1.6}
 .assume{font-size:12px;color:var(--mute);line-height:1.7;margin-top:6px}
 .assume li{margin-left:18px}
+/* 空状態（未入力の日/週/月/年）: surface面＋hair全周罫線（border帯にしない）。文言は本文段14px・
+ * 導線は既存 .btn を流用。emoji・色帯・gradient・偽chrome なし（design-hallmark準拠）。 */
+.emptystate{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:26px 22px;text-align:center}
+.emptystate .es-text{font-size:14px;color:var(--mute);line-height:1.6}
+.emptystate .es-actions{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:14px}
+.es-inline{font-size:12px;color:var(--mute)}
 /* フッター: タイトルを小さく置くだけ（主役は計画本体） */
 .foot{margin-top:26px;color:var(--mute);font-size:11px;text-align:center;letter-spacing:.04em}
 /* 月/週の目標バー（この日の狙いの上・横2分割） */
@@ -308,6 +314,33 @@ export const altLine = (alts, registry) => {
 /** 男女チップ。 */
 export const genderChip = (gender) =>
   `<span class="gchip ${gender === '男子' ? 'boys' : 'girls'}">${esc(gender)}</span>`;
+
+/**
+ * 空状態ブロック（未入力の日/週/月/年に出す簡潔な案内＋導線）。
+ *
+ * オーナー方針「未入力は空白」。叩き台を自動表示せず、コーチが入れるまでは空状態にする。
+ * 導線2つ:「入力する」＝空のまま編集を開く／「自動で叩き台を入れる」＝エンジン叩き台を編集欄へ読む。
+ * design-hallmark 準拠: emoji・border帯（side-stripe）・紫ピンクgradient・汎用書体・偽chrome なし。
+ * 既存トークン（surface/hair/mute）と既存 .btn 作法のみ。導線が不要な面（週/月/年の目標等）では
+ * actions を空文字にして文言だけ出す。
+ *
+ * @param {object} arg
+ * @param {string} arg.text 案内文（例「まだ入力がありません」）
+ * @param {string} [arg.actions] 導線HTML（省略時は文言だけ）
+ * @returns {string} HTML
+ */
+export function emptyState({ text, actions = '' }) {
+  return `<div class="emptystate">
+    <p class="es-text">${esc(text)}</p>
+    ${actions ? `<div class="es-actions">${actions}</div>` : ''}
+  </div>`;
+}
+
+/** 日の空状態の標準導線（「入力する」「自動で叩き台を入れる」）。editor.mjs が data-empty-act で拾う。 */
+export function emptyDayActions() {
+  return `<button type="button" class="btn" data-empty-act="blank" data-print-hide>入力する</button>` +
+    `<button type="button" class="btn" data-empty-act="seed" data-print-hide>自動で叩き台を入れる</button>`;
+}
 
 /** 組違いON/OFFトグル。 */
 export function modeToggle() {
@@ -448,9 +481,13 @@ export function goalsBar(data, week) {
   const weekAttr = weekKey
     ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(weekText || '')}"`
     : '';
+  // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
+  const valHtml = (v) => v
+    ? `<span class="gb-val">${esc(v)}</span>`
+    : `<span class="gb-val es-inline">未入力</span>`;
   return `<div class="goalbar">
-    <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span><span class="gb-val">${esc(g.monthMain || '—')}</span></div>
-    <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span><span class="gb-val">${esc(weekText || '—')}</span></div>
+    <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span>${valHtml(g.monthMain)}</div>
+    <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span>${valHtml(weekText)}</div>
   </div>`;
 }
 
@@ -458,10 +495,15 @@ export function goalsBar(data, week) {
 export function goalsSection(data) {
   const g = data.session.goals;
   const qual = g.qualitative.map((q) => `・${esc(q)}`).join('<br>');
+  // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（goalsBar と同じ非対称解消）。
+  // 空欄のままだと「壊れて見える」（質行が || '—' で守られているのと同じ守りを今月/今週にも揃える）。
+  const goalTxt = (v) => v
+    ? `<span class="txt">${esc(v)}</span>`
+    : `<span class="txt es-inline">未入力</span>`;
   return `<section class="goals">
     <h3>目標（チェックする数字は各チーム別）</h3>
-    <div class="gline"><span class="lab">今月</span><span class="txt">${esc(g.monthMain)}</span></div>
-    <div class="gline"><span class="lab">今週</span><span class="txt">${esc(g.week)}</span></div>
+    <div class="gline"><span class="lab">今月</span>${goalTxt(g.monthMain)}</div>
+    <div class="gline"><span class="lab">今週</span>${goalTxt(g.week)}</div>
     <div class="gline"><span class="lab">質</span><span class="txt">${qual || '—'}</span></div>
     <div class="kgrid">
       ${kpiCard('男子', '男子', data.boysGoals)}
@@ -534,14 +576,18 @@ export function monthSection(data, m = data.session.month, displayMonth = data.m
   const aimAttr = (arcMonthKey != null)
     ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(arcMonthKey))}" data-goal-text="${esc(m.headline || '')}"`
     : '';
-  return `<h3 class="lvh">${displayMonth}月にやること（年間予定より）</h3>
+  // 未入力（既定空白）はエンジン既定見出しを出さず「未入力」を淡色で示す（編集導線はそのまま）。
+  const aimHtml = m.headline
+    ? `<div class="mc-aim"${aimAttr}>${esc(m.headline)}</div>`
+    : `<div class="mc-aim es-inline"${aimAttr}>今月の目標は未入力</div>`;
+  return `<h3 class="lvh">${displayMonth}月にやること</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${displayMonth}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
-      <div class="mc-aim"${aimAttr}>${esc(m.headline)}</div>
+      ${aimHtml}
       ${peak}
       ${kpi}
     </div>
-    <p class="note">今月のテーマ・フェーズ・確認したい数字は年間予定どおり。</p>`;
+    <p class="note">フェーズ・確認したい数字は年間予定どおり。今月の目標は入力したぶんだけ表示します。</p>`;
 }
 
 /** ピークkeyから表示名を引く。 */
