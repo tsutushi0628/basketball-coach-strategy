@@ -359,7 +359,9 @@ export function editorScript() {
       '<div class="tc2-body">'+items+'</div>';
   }
   // 全幅バンド1本（男女共通 or オンリー1列で共用）。cell から見出し＋item群を描く。
-  function bandRowHtml(cell,from,mirror){
+  //  mirror=true: 男女共通（左右2バンドミラー・2列グリッド）。
+  //  only=true: オンリー1列（内容フル幅＋右端時計レール・tc2-only グリッド）。
+  function bandRowHtml(cell,from,mirror,only){
     var tint=cell?tintOf(cell.block):'var(--mute)';
     var bandInner=cell
       ?('<span class="tll tll-lg" style="--t:'+tint+'">'+esc(cell.label)+'</span>'+
@@ -367,7 +369,7 @@ export function editorScript() {
           return '<span class="tc2-bn">'+esc(it.name)+(it.note?'（'+esc(it.note)+'）':'')+'</span>';
         }).join(''))
       :'<div class="tc2-empty">—</div>';
-    return '<div class="spine-row spine-together tc2-together" style="--t:'+tint+'">'+
+    return '<div class="spine-row spine-together tc2-together'+(only?' tc2-only':'')+'" style="--t:'+tint+'">'+
       '<div class="spine-band left">'+bandInner+'</div>'+
       '<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
         '<span class="spine-dot" style="background:var(--t)"></span></div>'+
@@ -378,9 +380,9 @@ export function editorScript() {
     // オンリー時は対象性別1列（バンド）。対象セルが無く共通(both)があれば both を出す（F: '—'にしない）。
     if(onlyG){
       var cellOnly=cellHasContent(row[onlyG])?row[onlyG]:(row.both||row[onlyG]);
-      return bandRowHtml(cellOnly,row.from,false);
+      return bandRowHtml(cellOnly,row.from,false,true);
     }
-    if(row.both)return bandRowHtml(row.both,row.from,true); // 男女共通の全幅バンド（左右ミラー）
+    if(row.both)return bandRowHtml(row.both,row.from,true,false); // 男女共通の全幅バンド（左右ミラー）
     return '<div class="spine-row spine-rotation tc2-split">'+
       '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['男子'])+'</div>'+
       '<div class="spine-clk"><span class="tk">'+esc(row.from)+'</span>'+
@@ -391,12 +393,11 @@ export function editorScript() {
   function timelineHtml(ov){
     var rows=ov.rows||[];
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
-    // オンリー時は対象性別チップ1つ・右列ラベルは空（サーバ描画 twoColTimeline と一致・C）。
+    // オンリー時は対象性別チップ1つ・内容フル幅＋右端時計レールの1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
     var genderHeader=onlyG
-      ?('<div class="spine-header">'+
+      ?('<div class="spine-header tc2-only">'+
           '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
           '<div class="spine-clock-header"></div>'+
-          '<div class="spine-col-label"></div>'+
         '</div>')
       :('<div class="spine-header">'+
           '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
@@ -405,13 +406,13 @@ export function editorScript() {
         '</div>');
     var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG);}).join('');
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
-    var endRow='<div class="spine-row spine-together spine-end">'+
+    var endRow='<div class="spine-row spine-together spine-end'+(onlyG?' tc2-only':'')+'">'+
       '<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>'+
       '<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
         '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
       (onlyG?'':'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>')+
     '</div>';
-    return genderHeader+'<div id="plan-top" class="spine">'+rowsHtml+endRow+'</div>';
+    return genderHeader+'<div id="plan-top" class="spine'+(onlyG?' spine-only':'')+'">'+rowsHtml+endRow+'</div>';
   }
   // 既存「テキストでコピー」用のプレーンテキスト（編集中 override から組む）。
   // 既存 plainText(twoCol分岐) と同趣旨: 日付（曜日）／狙い／各行 from-to ＋ 男女別 or 男女共通。

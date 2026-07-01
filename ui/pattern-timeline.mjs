@@ -229,13 +229,12 @@ function twoColTimeline(pd) {
       <div class="tc2-body">${items}</div>`;
   };
 
-  // オンリーモード: 対象性別の1列のみ（体育館独占）。既存の全幅バンド（both行と同型）を流用する。
+  // オンリーモード: 対象性別の1列のみ（体育館独占）。内容フル幅＋右端に時計レールの本物の1列レイアウト。
   if (pd.onlyGender === '男子' || pd.onlyGender === '女子') {
     const side = pd.onlyGender === '男子' ? 'boys' : 'girls';
-    const genderHeader = `<div class="spine-header">
+    const genderHeader = `<div class="spine-header tc2-only">
       <div class="spine-col-label">${genderChip(pd.onlyGender)}</div>
       <div class="spine-clock-header"></div>
-      <div class="spine-col-label"></div>
     </div>`;
     const rowsHtml = rows.map((row) => {
       // 対象性別セルを優先。無く row.both があれば共通(both)を1列に出す（F: '—'幽霊を避ける）。
@@ -245,7 +244,7 @@ function twoColTimeline(pd) {
         ? `<span class="tll tll-lg" style="--t:${tint}">${esc(cell.label)}</span>
           ${(cell.items || []).map((it) => `<span class="tc2-bn">${esc(it.name)}${it.note ? `（${esc(it.note)}）` : ''}</span>`).join('')}`
         : '<div class="tc2-empty">—</div>';
-      return `<div class="spine-row spine-together tc2-together" style="--t:${tint}">
+      return `<div class="spine-row spine-together tc2-together tc2-only" style="--t:${tint}">
         <div class="spine-band left">${bandInner}</div>
         <div class="spine-clk">
           <span class="tk">${esc(row.from)}</span>
@@ -253,14 +252,14 @@ function twoColTimeline(pd) {
         </div>
       </div>`;
     }).join('');
-    const endRowOnly = `<div class="spine-row spine-together spine-end">
+    const endRowOnly = `<div class="spine-row spine-together spine-end tc2-only">
       <div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>
       <div class="spine-clk">
         <span class="tk">${esc(pd.end)}</span>
         <span class="spine-dot" style="background:var(--mute)"></span>
       </div>
     </div>`;
-    return `${genderHeader}<div id="plan-top" class="spine">${rowsHtml}${endRowOnly}</div>`;
+    return `${genderHeader}<div id="plan-top" class="spine spine-only">${rowsHtml}${endRowOnly}</div>`;
   }
 
   const genderHeader = `<div class="spine-header">
@@ -942,8 +941,22 @@ const PATTERN_CSS = `
 .tc2-cell .tll-lg{display:block;color:var(--t)}
 .tc2-cell .tc2-body{display:flex;flex-direction:column;gap:6px}
 
+/* ── オンリーモード（女子のみ/男子のみ）1列タイムライン ── */
+/* 2列バンドの右抜き流用をやめ、内容フル幅｜右端に時計レール の本物の1列レイアウトにする。 */
+/* グリッドを「内容=1fr ｜ 時計=auto(右端)」に切り替える（既存 spine トークン・ドット/罫線/tint 作法は再利用）。 */
+.spine-header.tc2-only,.spine-row.tc2-only{grid-template-columns:1fr auto}
+/* 1列なので中央縦罫線は引かない（2列ミラー専用の装飾）。 */
+.spine.spine-only::before{display:none}
+/* 単独バンドは全周を丸める（左バンドの左だけ丸い形をやめる）。 */
+.spine-row.tc2-only .spine-band.left{border-radius:10px}
+/* 時計レールは右端・内容の縦中央に合わせる（左寄り浮きをなくす）。 */
+.spine-row.tc2-only .spine-clk{justify-content:center;padding-top:0}
+/* ヘッダの右端は時計列に合わせた幅だけ確保（性別チップは左＝内容側）。 */
+.spine-header.tc2-only .spine-clock-header{width:54px}
+
 @media (max-width:580px){
   .spine-header,.spine-rotation,.spine-together{grid-template-columns:1fr 44px 1fr}
+  .spine-header.tc2-only,.spine-row.tc2-only{grid-template-columns:1fr auto}
   .spine-clk{width:44px}
   .spine-clk .tk{font-size:12px;padding:2px 4px}
   .spine::before{left:calc(50% - 1px)}

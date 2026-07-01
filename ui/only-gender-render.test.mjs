@@ -307,9 +307,29 @@ test('(F) both＋onlyGender の日: 共通(both)内容が1列(spine)に出る（
   const m = body.match(/<article class="day pageb"[^>]*data-date="2026-06-23"[^>]*>([\s\S]*?)<\/article>/);
   assert.ok(m, '火(06/23)の article が存在する');
   // .plain（テキストコピー用）には出るので、視覚タイムライン(spine)部分だけを切り出して検証する。
-  const spineMatch = m[1].match(/<div id="plan-top" class="spine">([\s\S]*?)<\/div>\s*<pre/);
+  // オンリー日の spine は class="spine spine-only"（1列レイアウト）。
+  const spineMatch = m[1].match(/<div id="plan-top" class="spine[^"]*">([\s\S]*?)<\/div>\s*<pre/);
   assert.ok(spineMatch, '視覚タイムライン(.spine)が存在する');
   const spine = spineMatch[1];
   assert.match(spine, /共通アップ/, 'both の見出しが1列タイムラインに出る（"—"で潰れない）');
   assert.match(spine, /共通ドリルX/, 'both の項目が1列タイムラインに出る');
+});
+
+// 【レイアウト】オンリー日は「内容フル幅＋右端に時計レール」の1列レイアウト（2列バンドの右抜き流用でない）。
+// 業務意図: 1性別だけの日は右半分が空白の間延びした崩れでなく、本物の1列で出る。
+test('(layout) オンリー日は1列レイアウト（spine-only/tc2-only）で、右バンドや2列グリッドを使わない', async () => {
+  const data = await buildPlanData(localStorages());
+  const tue = data.weeks[0].days.find((d) => d.day === '火');
+  tue.onlyGender = '女子';
+  const { body } = render(data);
+  const m = body.match(/<article class="day pageb"[^>]*data-date="2026-06-23"[^>]*>([\s\S]*?)<\/article>/);
+  assert.ok(m, '火(06/23)の article が存在する');
+  const article = m[1];
+  // spine コンテナ・行・ヘッダが 1列レイアウトのフラグを持つ。
+  assert.match(article, /id="plan-top" class="spine spine-only"/, 'spine コンテナが1列モード(spine-only)');
+  assert.match(article, /class="spine-header tc2-only"/, 'ヘッダが1列グリッド(tc2-only)');
+  assert.match(article, /class="spine-row spine-together tc2-together tc2-only"/, '通常行が1列グリッド(tc2-only)');
+  assert.match(article, /class="spine-row spine-together spine-end tc2-only"/, '終了行も1列グリッド(tc2-only)');
+  // オンリー日に右バンド（2列ミラー専用）が出ていない＝右半分空白の崩れを作らない。
+  assert.doesNotMatch(article, /class="spine-band right"/, 'オンリー日に右バンド（左半分どまりの原因）が出ない');
 });
