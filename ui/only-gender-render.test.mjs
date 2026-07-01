@@ -315,9 +315,10 @@ test('(F) both＋onlyGender の日: 共通(both)内容が1列(spine)に出る（
   assert.match(spine, /共通ドリルX/, 'both の項目が1列タイムラインに出る');
 });
 
-// 【レイアウト】オンリー日は「内容フル幅＋右端に時計レール」の1列レイアウト（2列バンドの右抜き流用でない）。
-// 業務意図: 1性別だけの日は右半分が空白の間延びした崩れでなく、本物の1列で出る。
-test('(layout) オンリー日は1列レイアウト（spine-only/tc2-only）で、右バンドや2列グリッドを使わない', async () => {
+// 【レイアウト】オンリー日は「左レール(時計)＋内容フル幅・連結線あり」の1列レイアウト。
+// 業務意図: 1性別だけの日は、時計が左・内容が右フル幅・点をつなぐ縦線が左レールに出る本物の1列で出る
+//（右半分空白の崩れでも、右レールでもない）。
+test('(layout) オンリー日は左レール1列レイアウト（時計が先・内容フル幅・線あり）', async () => {
   const data = await buildPlanData(localStorages());
   const tue = data.weeks[0].days.find((d) => d.day === '火');
   tue.onlyGender = '女子';
@@ -326,10 +327,17 @@ test('(layout) オンリー日は1列レイアウト（spine-only/tc2-only）で
   assert.ok(m, '火(06/23)の article が存在する');
   const article = m[1];
   // spine コンテナ・行・ヘッダが 1列レイアウトのフラグを持つ。
-  assert.match(article, /id="plan-top" class="spine spine-only"/, 'spine コンテナが1列モード(spine-only)');
+  assert.match(article, /id="plan-top" class="spine spine-only"/, 'spine コンテナが1列モード(spine-only)＝連結線が出る土台');
   assert.match(article, /class="spine-header tc2-only"/, 'ヘッダが1列グリッド(tc2-only)');
   assert.match(article, /class="spine-row spine-together tc2-together tc2-only"/, '通常行が1列グリッド(tc2-only)');
   assert.match(article, /class="spine-row spine-together spine-end tc2-only"/, '終了行も1列グリッド(tc2-only)');
   // オンリー日に右バンド（2列ミラー専用）が出ていない＝右半分空白の崩れを作らない。
   assert.doesNotMatch(article, /class="spine-band right"/, 'オンリー日に右バンド（左半分どまりの原因）が出ない');
+  // 各行で「時計(spine-clk)が先・内容バンド(spine-band)が後」の順＝時計が左レール。
+  const rowMatch = article.match(/<div class="spine-row spine-together tc2-together tc2-only"[^>]*>([\s\S]*?)<\/div>\s*(?:<div class="spine-row|<\/div>\s*<pre)/);
+  assert.ok(rowMatch, '通常行の中身が取れる');
+  const firstRowInner = rowMatch[1];
+  const clkIdx = firstRowInner.indexOf('spine-clk');
+  const bandIdx = firstRowInner.indexOf('spine-band');
+  assert.ok(clkIdx >= 0 && bandIdx >= 0 && clkIdx < bandIdx, '時計(spine-clk)が内容バンド(spine-band)より先＝時計が左レール');
 });

@@ -360,7 +360,7 @@ export function editorScript() {
   }
   // 全幅バンド1本（男女共通 or オンリー1列で共用）。cell から見出し＋item群を描く。
   //  mirror=true: 男女共通（左右2バンドミラー・2列グリッド）。
-  //  only=true: オンリー1列（内容フル幅＋右端時計レール・tc2-only グリッド）。
+  //  only=true: オンリー1列（左レール時計＋内容フル幅・tc2-only グリッド）。
   function bandRowHtml(cell,from,mirror,only){
     var tint=cell?tintOf(cell.block):'var(--mute)';
     var bandInner=cell
@@ -369,11 +369,13 @@ export function editorScript() {
           return '<span class="tc2-bn">'+esc(it.name)+(it.note?'（'+esc(it.note)+'）':'')+'</span>';
         }).join(''))
       :'<div class="tc2-empty">—</div>';
+    var clk='<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
+      '<span class="spine-dot" style="background:var(--t)"></span></div>';
+    var band='<div class="spine-band left">'+bandInner+'</div>';
+    // オンリー時は 左=時計→右=内容 の順（グリッド 54px 1fr）。共通(mirror)時は従来の 左band｜clk｜右band。
+    var inner=only?(clk+band):(band+clk+(mirror?'<div class="spine-band right">'+bandInner+'</div>':''));
     return '<div class="spine-row spine-together tc2-together'+(only?' tc2-only':'')+'" style="--t:'+tint+'">'+
-      '<div class="spine-band left">'+bandInner+'</div>'+
-      '<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
-        '<span class="spine-dot" style="background:var(--t)"></span></div>'+
-      (mirror?'<div class="spine-band right">'+bandInner+'</div>':'')+
+      inner+
     '</div>';
   }
   function rowHtml(row,onlyG){
@@ -393,11 +395,11 @@ export function editorScript() {
   function timelineHtml(ov){
     var rows=ov.rows||[];
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
-    // オンリー時は対象性別チップ1つ・内容フル幅＋右端時計レールの1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
+    // オンリー時は 左=時計列（空ヘッダ）／右=性別チップ の順・左レール時計＋内容フル幅の1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
     var genderHeader=onlyG
       ?('<div class="spine-header tc2-only">'+
-          '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
           '<div class="spine-clock-header"></div>'+
+          '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
         '</div>')
       :('<div class="spine-header">'+
           '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
@@ -406,11 +408,13 @@ export function editorScript() {
         '</div>');
     var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG);}).join('');
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
+    // 終了行: オンリー時は 左=時計→右=終了バンド の順。共通/2列時は従来どおり 左バンド｜clk｜右バンド。
+    var endClk='<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
+      '<span class="spine-dot" style="background:var(--mute)"></span></div>';
+    var endBand='<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>';
+    var endInner=onlyG?(endClk+endBand):(endBand+endClk+'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>');
     var endRow='<div class="spine-row spine-together spine-end'+(onlyG?' tc2-only':'')+'">'+
-      '<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>'+
-      '<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
-        '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
-      (onlyG?'':'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>')+
+      endInner+
     '</div>';
     return genderHeader+'<div id="plan-top" class="spine'+(onlyG?' spine-only':'')+'">'+rowsHtml+endRow+'</div>';
   }
