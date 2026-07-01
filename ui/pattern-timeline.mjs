@@ -924,8 +924,11 @@ const PATTERN_CSS = `
 
 /* クロック（中央列共通） */
 .spine-clk{width:54px;display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:3px;flex-shrink:0}
-/* T6: spine-clk .tk は素テキスト12px（枠線・ピル廃止。背景は中央線マスク用） */
-.spine-clk .tk{font-size:12px;font-weight:700;color:var(--ink);background:var(--bg);padding:3px 4px;white-space:nowrap}
+/* T6: spine-clk .tk は素テキスト13px（枠線・ピル・背景箱なし）。基底 .tk の背景箱(background:var(--bg))・
+   pad は打ち消し（background:none/padding:0）、代わりに数字そのものに白い縁取り（多方向 text-shadow
+   ハロー）を付け、下の連結線に重なっても読めるようにする。色は白＝var(--surface)。細めで潰さない。
+   これは spine 系タイムライン（2列=男女別 と オンリー の両モード）共通＝モードで時刻の見た目を変えない。 */
+.spine-clk .tk{font-size:13px;font-weight:700;color:var(--ink);background:none;padding:0;white-space:nowrap;text-shadow:0 0 2px var(--surface),0 0 2px var(--surface),1px 0 1px var(--surface),-1px 0 1px var(--surface),0 1px 1px var(--surface),0 -1px 1px var(--surface)}
 .spine-dot{width:9px;height:9px;border-radius:50%}
 .spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
@@ -954,17 +957,16 @@ const PATTERN_CSS = `
 .spine-row.tc2-only .spine-clk{justify-content:center;padding-top:0}
 /* ヘッダの左端は時計列(54px)に合わせ、性別チップは内容側（右）に置く。 */
 .spine-header.tc2-only .spine-clock-header{width:54px}
-/* オンリー時の時刻は少し大きめの「白チップ」（縦線に重なっても読める）。既存トークンのみ。 */
-.spine-row.tc2-only .spine-clk .tk{font-size:13px;background:var(--surface);border:1px solid var(--hair);border-radius:6px;padding:2px 6px}
+/* 時刻(.tk)は基底 .spine-clk .tk を両モード共通で使う（オンリー専用の上書きは持たない＝モードで
+   時刻の見た目を変えない）。箱・枠なし・数字に白縁取りは基底で定義済み。 */
 
 @media (max-width:580px){
   .spine-header,.spine-rotation,.spine-together{grid-template-columns:1fr 44px 1fr}
   .spine-header.tc2-only,.spine-row.tc2-only{grid-template-columns:44px 1fr}
   .spine-clk{width:44px}
-  .spine-clk .tk{font-size:12px;padding:2px 4px}
+  .spine-clk .tk{font-size:12px}
   .spine::before{left:calc(50% - 1px)}
   .spine.spine-only::before{left:21.5px}
-  .spine-row.tc2-only .spine-clk .tk{font-size:12px;padding:2px 5px}
 }
 
 /* ── T2: ドリル詳細オーバーレイ（ハッシュ駆動・§2.2） ── */
