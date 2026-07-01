@@ -40,10 +40,15 @@ before(async () => {
 
 after(async () => { if (browser) await browser.close(); });
 
-/** 対象日の編集パネルを開く（curDay＝hidden でない最初の .day に揃える）。 */
+/** 対象日の編集パネルを開く（curDay＝hidden でない最初の .day に揃える）。
+ * 対象日が属する週グループ（.daywk）も合わせて可視にする（多週描画は表示中の週グループだけが
+ * 可視という不変条件を持つため、日を可視にしても所属週グループが隠れたままだと描画されない）。 */
 async function openPanel() {
   await page.evaluate((d) => {
     document.querySelectorAll('.day[data-date]').forEach((p) => { p.hidden = p.getAttribute('data-date') !== d; });
+    const target = document.querySelector(`.day[data-date="${d}"]`);
+    const wk = target && target.closest('.daywk');
+    if (wk) document.querySelectorAll('.daywk[data-week]').forEach((g) => { g.hidden = g !== wk; });
   }, DATE);
   await page.evaluate(() => window.__bcsEditor.openPanel());
   await page.waitForSelector('.ed-panel .ed-row', { timeout: 5000 });
