@@ -574,6 +574,7 @@ function toTwoColDay(day, ov, dISO) {
     source: 'coach', // 描画分岐キー
     team: null, // 男女両方なので単一性別ではない
     twoCol: true, // 男女2列タイムラインで描く
+    onlyGender: ov.onlyGender, // '男子'|'女子'|undefined（未指定=男女両方・非回帰）
     rows, // 行ベースの男女2列データ
     blocks: [], // 単一blocks経路は使わない（旧スキーマ互換ガードのため空で持つ）
     parts: undefined,

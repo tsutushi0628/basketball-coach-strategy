@@ -361,10 +361,13 @@ export function dayHeader(pd, month, goals) {
   // コーチ指定の上書き日: 対象性別チップと手書きの狙いだけ出す。
   // 「コーチ指定」等の内部ラベルは配布物に出さない（コーチが見て無意味なため）。
   // 男女2列日（twoCol）は男女両方が対象なので男子・女子チップを並べ、単一性別表記はしない。
+  // ただし onlyGender（男女オンリーモード）が立っている twoCol 日は対象は単一性別なのでチップを出す。
   if (pd.source === 'coach') {
-    // twoCol 日は男女2列が下に並ぶのでヘッダの男女チップは常に両方＝選択肢ゼロ（出さない）。単一性別日だけ対象を出す。
-    const teamChip = pd.twoCol ? '' : (pd.team ? ` ${genderChip(pd.team)}` : '');
-    const aimScope = pd.twoCol ? '' : (pd.team ? `（${esc(pd.team)}）` : '');
+    const singleGenderLabel = pd.onlyGender || (!pd.twoCol ? pd.team : null);
+    // twoCol 日は男女2列が下に並ぶのでヘッダの男女チップは常に両方＝選択肢ゼロ（出さない）。
+    // オンリー時・単一性別日（旧スキーマ）だけ対象を出す。
+    const teamChip = singleGenderLabel ? ` ${genderChip(singleGenderLabel)}` : '';
+    const aimScope = singleGenderLabel ? `（${esc(singleGenderLabel)}）` : '';
     return `<div class="dayhead">
       <div class="dh-main">
         <div class="dh-t">${dateHead}${teamChip}
@@ -813,19 +816,28 @@ export function plainText(data, pd) {
   if (pd.source === 'coach') {
     // 男女2列日（twoCol）: 時間スロットごとに男女2列で出す。both は男女共通の1本。
     if (pd.twoCol) {
-      L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}・男女2列）${pd.title || '練習メニュー'}`);
+      const onlyG = (pd.onlyGender === '男子' || pd.onlyGender === '女子') ? pd.onlyGender : null;
+      const headScope = onlyG ? `・${onlyG}のみ` : '・男女2列';
+      L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}${headScope}）${pd.title || '練習メニュー'}`);
       L.push('');
       L.push(`■ この日のねらい：${pd.aim}`);
       const cellText = (cell) =>
         (cell.items || []).map((it) => `${it.name}${it.note ? `（${it.note}）` : ''}`).join('／');
+      const cellLine = (cell) => (cell ? `${cell.label}：${cellText(cell)}` : '—');
       for (const r of pd.rows) {
         L.push('');
         L.push(`■ ${r.from}〜${r.to}`);
-        if (r.both) {
+        if (onlyG) {
+          // オンリー時は対象性別の行だけ出す（幽霊の反対列を出さない・E）。
+          // 対象セルが無く r.both があれば共通(both)を出す（F と整合）。
+          const sideKey = onlyG === '男子' ? 'boys' : 'girls';
+          const cell = r[sideKey] || r.both || null;
+          L.push(`　${onlyG}｜${cellLine(cell)}`);
+        } else if (r.both) {
           L.push(`　[男女共通] ${r.both.label}：${cellText(r.both)}`);
         } else {
-          L.push(`　男子｜${r.boys ? `${r.boys.label}：${cellText(r.boys)}` : '—'}`);
-          L.push(`　女子｜${r.girls ? `${r.girls.label}：${cellText(r.girls)}` : '—'}`);
+          L.push(`　男子｜${cellLine(r.boys)}`);
+          L.push(`　女子｜${cellLine(r.girls)}`);
         }
       }
       L.push('　・終了');

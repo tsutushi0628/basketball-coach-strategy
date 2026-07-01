@@ -203,3 +203,39 @@ test('④ フォールバック: overrides が空配列/未設定なら days を
   assert.equal(applyOverrides(week, undefined, WEEK_START), week, '未設定(undefined)でも同一参照を返す');
   assert.equal(applyOverrides(week, [girlsTuesdayOverride()], undefined), week, '週起点未設定なら何も当てず同一参照を返す');
 });
+
+// ⑦ 男女オンリーモード: layout:two-col の上書きに onlyGender があれば表示日へそのまま伝わる ─────
+
+/** 火（男女2列・女子のみオンリー）の上書き1件。 */
+function onlyGenderTuesdayOverride(dateStr = '2026-06-23') {
+  return {
+    date: dateStr,
+    weekday: '火',
+    source: 'coach',
+    layout: 'two-col',
+    onlyGender: '女子',
+    rows: [
+      {
+        from: '16:00', to: '17:00', minutes: 60,
+        女子: { block: 'シュート', label: 'アラウンドシュート', items: [{ name: 'カールからゴール下' }] },
+      },
+    ],
+  };
+}
+
+test('⑦ 男女オンリーモード: onlyGender:"女子" が表示日(pd.onlyGender)へそのまま伝わる', () => {
+  const week = makeWeek();
+  const result = applyOverrides(week, [onlyGenderTuesdayOverride('2026-06-23')], WEEK_START);
+
+  const tue = result.find((d) => d.day === '火');
+  assert.equal(tue.twoCol, true, '男女2列スキーマのまま（onlyGenderは行構造を変えない）');
+  assert.equal(tue.onlyGender, '女子', 'オンリー対象の性別が表示日に伝わる');
+});
+
+test('⑦ 男女オンリーモード: onlyGender 未指定の従来上書きは pd.onlyGender が無い（既定=男女両方・非回帰）', () => {
+  const week = makeWeek();
+  const result = applyOverrides(week, [twoColTuesdayOverride('2026-06-23')], WEEK_START);
+
+  const tue = result.find((d) => d.day === '火');
+  assert.equal(tue.onlyGender, undefined, 'onlyGender未指定の日は従来どおり男女両方（キー自体を持たない）');
+});

@@ -170,6 +170,9 @@ export function sanitizeOverride(body) {
   if (body.court) out.court = str(body.court, 60);
   if (body.title) out.title = str(body.title, 120);
   if (body.aim) out.aim = str(body.aim, 400);
+  // 男女オンリーモード（女子のみ／男子のみ／男女両方）。ホワイトリスト方式なのでこの1行が
+  // 無ければ黙って落ちる。未指定/不正値は undefined のまま（=男女両方・既存挙動を壊さない）。
+  if (body.onlyGender === '男子' || body.onlyGender === '女子') out.onlyGender = body.onlyGender;
   return out;
 }
 

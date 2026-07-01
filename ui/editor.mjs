@@ -162,7 +162,9 @@ function dayToPrefill(d) {
     }
     return row;
   });
-  return { court: d.court || '', aim: d.aim || '', title: d.title || '', rows };
+  const out = { court: d.court || '', aim: d.aim || '', title: d.title || '', rows };
+  if (d.onlyGender === '男子' || d.onlyGender === '女子') out.onlyGender = d.onlyGender;
+  return out;
 }
 
 /**
@@ -329,9 +331,12 @@ export function editorScript() {
   function dayHeaderHtml(ov){
     var dateHead=dateLabelISO(ov.date,ov.weekday);
     var goalsPr=GOALS?('<div class="dh-goals" aria-hidden="true"><span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain||'—')+'</span><span class="dhg-item"><b>週</b>'+esc(GOALS.week||'—')+'</span></div>'):'';
+    // オンリー時は対象性別チップを出す（サーバ描画 dayHeader と一致・C）。
+    var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
+    var teamChip=onlyG?(' '+genderChipHtml(onlyG)):'';
     return '<div class="dayhead">'+
       '<div class="dh-main">'+
-        '<div class="dh-t">'+esc(dateHead)+
+        '<div class="dh-t">'+esc(dateHead)+teamChip+
           '<span class="dh-court">'+esc(ov.court)+'</span>'+
         '</div>'+
         '<div class="dh-aim"><span class="dh-aiml">この日のねらい</span>'+esc(ov.aim)+'</div>'+
@@ -353,20 +358,29 @@ export function editorScript() {
     return '<div class="tc2-head"><span class="tll tll-lg" style="--t:'+tint+'">'+esc(cell.label)+'</span></div>'+
       '<div class="tc2-body">'+items+'</div>';
   }
-  function rowHtml(row){
-    if(row.both){
-      var tintB=tintOf(row.both.block);
-      var bandInner='<span class="tll tll-lg" style="--t:'+tintB+'">'+esc(row.both.label)+'</span>'+
-        (row.both.items||[]).map(function(it){
+  // 全幅バンド1本（男女共通 or オンリー1列で共用）。cell から見出し＋item群を描く。
+  function bandRowHtml(cell,from,mirror){
+    var tint=cell?tintOf(cell.block):'var(--mute)';
+    var bandInner=cell
+      ?('<span class="tll tll-lg" style="--t:'+tint+'">'+esc(cell.label)+'</span>'+
+        (cell.items||[]).map(function(it){
           return '<span class="tc2-bn">'+esc(it.name)+(it.note?'（'+esc(it.note)+'）':'')+'</span>';
-        }).join('');
-      return '<div class="spine-row spine-together tc2-together" style="--t:'+tintB+'">'+
-        '<div class="spine-band left">'+bandInner+'</div>'+
-        '<div class="spine-clk"><span class="tk">'+esc(row.from)+'</span>'+
-          '<span class="spine-dot" style="background:var(--t)"></span></div>'+
-        '<div class="spine-band right">'+bandInner+'</div>'+
-      '</div>';
+        }).join(''))
+      :'<div class="tc2-empty">—</div>';
+    return '<div class="spine-row spine-together tc2-together" style="--t:'+tint+'">'+
+      '<div class="spine-band left">'+bandInner+'</div>'+
+      '<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
+        '<span class="spine-dot" style="background:var(--t)"></span></div>'+
+      (mirror?'<div class="spine-band right">'+bandInner+'</div>':'')+
+    '</div>';
+  }
+  function rowHtml(row,onlyG){
+    // オンリー時は対象性別1列（バンド）。対象セルが無く共通(both)があれば both を出す（F: '—'にしない）。
+    if(onlyG){
+      var cellOnly=cellHasContent(row[onlyG])?row[onlyG]:(row.both||row[onlyG]);
+      return bandRowHtml(cellOnly,row.from,false);
     }
+    if(row.both)return bandRowHtml(row.both,row.from,true); // 男女共通の全幅バンド（左右ミラー）
     return '<div class="spine-row spine-rotation tc2-split">'+
       '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['男子'])+'</div>'+
       '<div class="spine-clk"><span class="tk">'+esc(row.from)+'</span>'+
@@ -376,18 +390,26 @@ export function editorScript() {
   }
   function timelineHtml(ov){
     var rows=ov.rows||[];
-    var genderHeader='<div class="spine-header">'+
-      '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
-      '<div class="spine-clock-header"></div>'+
-      '<div class="spine-col-label">'+genderChipHtml('女子')+'</div>'+
-    '</div>';
-    var rowsHtml=rows.map(rowHtml).join('');
+    var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
+    // オンリー時は対象性別チップ1つ・右列ラベルは空（サーバ描画 twoColTimeline と一致・C）。
+    var genderHeader=onlyG
+      ?('<div class="spine-header">'+
+          '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
+          '<div class="spine-clock-header"></div>'+
+          '<div class="spine-col-label"></div>'+
+        '</div>')
+      :('<div class="spine-header">'+
+          '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
+          '<div class="spine-clock-header"></div>'+
+          '<div class="spine-col-label">'+genderChipHtml('女子')+'</div>'+
+        '</div>');
+    var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG);}).join('');
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
     var endRow='<div class="spine-row spine-together spine-end">'+
       '<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>'+
       '<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
         '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
-      '<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>'+
+      (onlyG?'':'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>')+
     '</div>';
     return genderHeader+'<div id="plan-top" class="spine">'+rowsHtml+endRow+'</div>';
   }
@@ -401,13 +423,19 @@ export function editorScript() {
   }
   function plainTextOf(ov){
     var L=[];
+    var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
     L.push(dateLabelISO(ov.date,ov.weekday)+(ov.court?'（'+ov.court+'）':'')+(ov.title?' '+ov.title:''));
     L.push('');
     L.push('■ この日のねらい：'+(ov.aim||''));
     (ov.rows||[]).forEach(function(r){
       L.push('');
       L.push('■ '+(r.from||'')+'〜'+(r.to||''));
-      if(r.both){
+      if(onlyG){
+        // オンリー時は対象性別の行だけ出す（幽霊の「男子｜—」を出さない・E）。
+        // 対象セルが無く共通(both)があれば both を出す（F と整合）。
+        var cellO=cellHasContent(r[onlyG])?r[onlyG]:(r.both||r[onlyG]);
+        L.push('　'+onlyG+'｜'+(cellO?cellPlain(cellO):'—'));
+      }else if(r.both){
         L.push('　[男女共通] '+cellPlain(r.both));
       }else{
         L.push('　男子｜'+(r['男子']?cellPlain(r['男子']):'—'));
@@ -434,13 +462,13 @@ export function editorScript() {
   function initModel(date,weekday){
     // サーバ由来の現状態（prefill）を初期値に。無ければ空テンプレ。
     if(PREFILL[date])return normalizeModel(deepClone(PREFILL[date]),date,weekday);
-    return {date:date,weekday:weekday,court:'',aim:'',title:'',rows:[blankRow()]};
+    return {date:date,weekday:weekday,court:'',aim:'',title:'',onlyGender:null,rows:[blankRow()]};
   }
   // 自動入力: エンジン叩き台（seedPrefill）を初期値にする。叩き台が無ければ空テンプレ。
   // コーチが確認・編集して保存すれば通常のコーチ上書きとして保存される（既定では呼ばれない）。
   function initModelFromSeed(date,weekday){
     if(SEEDPREFILL[date])return normalizeModel(deepClone(SEEDPREFILL[date]),date,weekday);
-    return {date:date,weekday:weekday,court:'',aim:'',title:'',rows:[blankRow()]};
+    return {date:date,weekday:weekday,court:'',aim:'',title:'',onlyGender:null,rows:[blankRow()]};
   }
   // store/prefill 形（rows に 男子/女子/both）を編集モデルに正規化。
   function normalizeModel(src,date,weekday){
@@ -455,7 +483,8 @@ export function editorScript() {
       };
     });
     if(rows.length===0)rows=[blankRow()];
-    return {date:date,weekday:weekday,court:src.court||'',aim:src.aim||'',title:src.title||'',rows:rows};
+    var onlyGender=(src.onlyGender==='男子'||src.onlyGender==='女子')?src.onlyGender:null;
+    return {date:date,weekday:weekday,court:src.court||'',aim:src.aim||'',title:src.title||'',onlyGender:onlyGender,rows:rows};
   }
   function cellModel(cell){
     if(!cell)return null;
@@ -550,12 +579,22 @@ export function editorScript() {
   }
   function rowHtmlForm(row,ri){
     var isBoth=!!row.both;
+    var onlyG=(model&&(model.onlyGender==='男子'||model.onlyGender==='女子'))?model.onlyGender:null;
+    var isOnly=!!onlyG;
     var cells;
-    if(isBoth){
+    if(isOnly){
+      // オンリー時: 対象性別1列だけ描く（反対列は出さない＝コーチが反対列へ入力できない）。
+      // 反対列の中身は _onlyMemo に退避済み。「男女両方」へ戻すと再描画で復元される。
+      cells='<div class="ed-cells ed-cells-both">'+cellHtml(ri,onlyG,onlyG,row[onlyG])+'</div>';
+    }else if(isBoth){
       cells='<div class="ed-cells ed-cells-both">'+cellHtml(ri,'both','男女共通',row.both)+'</div>';
     }else{
       cells='<div class="ed-cells">'+cellHtml(ri,'男子','男子',row['男子'])+cellHtml(ri,'女子','女子',row['女子'])+'</div>';
     }
+    // 反転コピー: 男女2列（共通ではない・オンリーモードでもない）行にだけ出す。both行・オンリー時は概念が衝突するため出さない。
+    var flipBtn=(!isBoth&&!isOnly)
+      ?'<button type="button" class="ed-mini" data-act="flip-copy" title="この行の男女を入れ替えた後半ブロックを直後に追加">反転コピー</button>'
+      :'';
     return '<div class="ed-row" data-ri="'+ri+'">'+
       '<div class="ed-row-top">'+
         '<button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え" title="ドラッグで並べ替え">'+gripSvg()+'</button>'+
@@ -565,15 +604,27 @@ export function editorScript() {
           '<span class="ed-sep">〜</span>'+
           '<input type="time" class="ed-time" data-k="to" value="'+esc(row.to)+'">'+
         '</span>'+
-        '<label class="ed-check"><input type="checkbox" data-act="toggle-both"'+(isBoth?' checked':'')+'>男女共通</label>'+
+        '<label class="ed-check"><input type="checkbox" data-act="toggle-both"'+(isBoth?' checked':'')+(isOnly?' disabled':'')+'>男女共通</label>'+
+        flipBtn+
         '<button type="button" class="ed-iconbtn ed-del" data-act="del-row" aria-label="この時間を削除" title="この時間を削除">'+trashSvg()+'</button>'+
       '</div>'+
       cells+
     '</div>';
   }
+  // 男女オンリーモードの3択トグル（既存 modetoggle 作法・render-shared.mjs の組違いON/OFFと同じ見た目）。
+  function onlyGenderToggleHtml(){
+    var g=model.onlyGender;
+    var opt=function(val,label){
+      return '<button class="mt'+(g===val?' on':'')+'" type="button" data-act="only-gender" data-only-gender="'+esc(val==null?'':val)+'">'+esc(label)+'</button>';
+    };
+    return '<div class="modetoggle ed-field" role="group" aria-label="男女オンリーの切り替え">'+
+      opt('女子','女子のみ')+opt('男子','男子のみ')+opt(null,'男女両方')+
+    '</div>';
+  }
   function panelHtml(){
     var rows=model.rows.map(function(r,ri){return rowHtmlForm(r,ri);}).join('');
     return '<div class="ed-h">この日を編集（'+esc(dateLabelISO(model.date,model.weekday))+'）</div>'+
+      onlyGenderToggleHtml()+
       catalogDatalist()+
       copyFromOptions()+
       '<div class="ed-field"><span class="ed-lab">この日のねらい</span>'+
@@ -669,6 +720,19 @@ export function editorScript() {
     if(act==='save'){doSave();return;}
     if(act==='cancel'){closePanel();return;}
     collectInputs(); // 構造変更の前に現在値を取り込む
+    if(act==='only-gender'){
+      var wantG=btn.getAttribute('data-only-gender')||null;
+      var target=(wantG==='男子'||wantG==='女子')?wantG:null;
+      if(target===model.onlyGender)return; // 既に選択中なら何もしない
+      // オンリーへ切替るとき、畳まれる中身（反対列 or 共通行）があれば確認を挟む（黙って壊さない）。
+      // 退避されて「男女両方」に戻せば復元されることを文言でも正しく伝える（実挙動と一致・A/B）。
+      if(target&&onlyGenderWouldHideContent(target)){
+        if(!window.confirm(target+'のみの表示に切り替えます。いま隠れる内容（反対の性別・男女共通）は退避され、「男女両方」に戻すと復元します。切り替えますか？'))return;
+      }
+      setOnlyGender(target);
+      flash(target?(target+'のみに切り替えました。確認して保存してください'):'男女両方に戻しました。確認して保存してください');
+      return;
+    }
     if(act==='add-row'){
       var newRi=model.rows.length;
       // 直前の時間帯の終了時刻を、新しい時間帯の開始時刻の既定にする（終了も開始に合わせる＝#3と同じ既定）。
@@ -694,6 +758,7 @@ export function editorScript() {
     var rowEl=btn.closest('.ed-row');
     var ri=rowEl?Number(rowEl.getAttribute('data-ri')):-1;
     if(act==='del-row'){if(ri>=0)model.rows.splice(ri,1);if(model.rows.length===0)model.rows.push(blankRow());renderPanel();return;}
+    if(act==='flip-copy'){if(ri>=0)flipCopyRow(ri);return;}
     if(act==='add-item'){
       var cellEl=btn.closest('.ed-cell');var side=cellEl.getAttribute('data-side');
       var cell=cellOf(model.rows[ri],side);
@@ -758,6 +823,62 @@ export function editorScript() {
     if(cell.label&&cell.label.trim())return true;
     return (cell.items||[]).some(function(it){return it.name&&it.name.trim();});
   }
+  // 2つの時刻区間 [aFrom,aTo) と [bFrom,bTo) が重なるか（分換算・不正時刻は重複扱いにしない）。
+  function rangesOverlap(aFrom,aTo,bFrom,bTo){
+    var a1=toMin(aFrom),a2=toMin(aTo),b1=toMin(bFrom),b2=toMin(bTo);
+    if(a1==null||a2==null||b1==null||b2==null)return false;
+    return a1<b2&&b1<a2;
+  }
+  // 反転コピー: 起点行（前半ブロック・男女とも中身がある想定）を複製し、男女の中身を入れ替えた
+  // 「後半ブロック」を直後の時間帯（開始=前半の終了・長さ=前半と同じ）へ1個だけ追加する。
+  // 前半ブロック（起点行）は一切変更しない（純粋な追加操作）。既存ブロックと時間重複するなら追加しない。
+  function flipCopyRow(unitStartRi){
+    var src=model.rows[unitStartRi];
+    if(!src){flash('反転コピーの対象行がありません');return;}
+    var boys=cellOf(src,'男子'),girls=cellOf(src,'女子');
+    if(!cellHasContent(boys)&&!cellHasContent(girls)){
+      flash('反転コピーの元になる中身がありません（男女どちらかにドリルを入れてください）');
+      return;
+    }
+    var fm=toMin(src.from),tm=toMin(src.to);
+    if(fm==null||tm==null||!(tm>fm)){
+      flash('反転コピーには前半ブロックの時刻（開始・終了）が必要です');
+      return;
+    }
+    var dur=tm-fm;
+    var newFrom=src.to;
+    var newToMin=tm+dur;
+    // 後半の終了が24:00以上に跨ぐと不正時刻（'24:20'等・<input type=time>が弾く）になるため追加しない（D）。
+    if(newToMin>=1440){
+      flash('反転コピー先が24:00を跨ぐため追加できません（前半を早い時間帯にしてください）');
+      return;
+    }
+    var newTo=minToHm(newToMin);
+    // 追加位置が既存の他ブロックと時間重複しないことを確認する（起点行自身は対象外）。
+    var overlap=model.rows.some(function(r,i){
+      if(i===unitStartRi)return false;
+      return rangesOverlap(newFrom,newTo,r.from,r.to);
+    });
+    if(overlap){
+      flash('反転コピー先の時間帯が既存のブロックと重なるため追加できません');
+      return;
+    }
+    var added={
+      from:newFrom,
+      to:newTo,
+      both:null,
+      '男子':deepClone(girls)||blankCell(),
+      '女子':deepClone(boys)||blankCell()
+    };
+    model.rows.splice(unitStartRi+1,0,added);
+    renderPanel();
+    flash('男女の中身を入れ替えた後半ブロックを追加しました。確認して保存してください');
+  }
+  // 分→'HH:MM'（反転コピーの新しい終了時刻を作るため。toMin の逆）。
+  function minToHm(min){
+    var h=Math.floor(min/60),m=min%60;
+    return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
   // 名前のある項目だけを取り出す（共通化の集約で空項目を持ち込まない）。
   function nonEmptyItems(cell){
     if(!cell)return [];
@@ -815,6 +936,66 @@ export function editorScript() {
     row._memo=null;row._mergeBase=null;row.both=null;
   }
 
+  // 1行を論理的な「男女両方」状態へ戻す（退避 _onlyMemo からの復元）。オンリー中でなければ何もしない。
+  //  退避があり、オンリー中に採用列を編集していなければ元の男女別・共通(both)を完全復元する。
+  //  編集していれば（オンリー中に手を入れた）採用列の最新内容を残す（余計な上書きをしない）。
+  function restoreRowFromOnly(row){
+    if(!row._onlyMemo){row._onlyLastGender=null;return;}
+    var lastOnly=row._onlyLastGender; // オンリー中に採用していた性別（editedチェック用）
+    var editedSinceOnly=lastOnly&&JSON.stringify(row[lastOnly])!==JSON.stringify(row._onlyMemo[lastOnly]);
+    if(editedSinceOnly){
+      // 採用列は最新（編集後）を残し、反対列と共通(both)だけ退避から戻す（採用列の編集を消さない）。
+      var other=lastOnly==='男子'?'女子':'男子';
+      row[other]=deepClone(row._onlyMemo[other])||blankCell();
+    }else{
+      row['男子']=deepClone(row._onlyMemo['男子'])||blankCell();
+      row['女子']=deepClone(row._onlyMemo['女子'])||blankCell();
+    }
+    row.both=row._onlyMemo.both?deepClone(row._onlyMemo.both):null; // 共通(both)行も復元（B）
+    row._onlyMemo=null;
+    row._onlyLastGender=null;
+  }
+  // 男女オンリーモードの切替。g='男子'|'女子' でその性別だけの日にする／g=null で男女両方へ戻す。
+  //  常にまず「男女両方」状態へ戻してから新モードを適用する（オンリー中→別オンリーの直接切替も
+  //  「両方に戻す→新オンリー」と等価にして、退避の二重化・原本消失を防ぐ＝A）。
+  //  オンリーへ入るとき: 反対列＋共通(both)を _onlyMemo に退避（B）してから対象1性別だけにする
+  //  （_memo/_mergeBase の退避復元と同型・第3章の安全策＝コーチ手入力を失わない）。
+  function setOnlyGender(g){
+    if(!model)return;
+    var target=(g==='男子'||g==='女子')?g:null;
+    // 直接切替・両方復帰いずれも、まず現オンリーを解除して論理「両方」へ戻す（Aの等価化）。
+    model.rows.forEach(function(row){restoreRowFromOnly(row);});
+    model.onlyGender=null;
+    if(target){
+      model.rows.forEach(function(row){
+        // 反対列だけでなく共通(both)も退避する（Bの root fix＝両方復帰で both が戻る）。
+        row._onlyMemo={
+          '男子':deepClone(row['男子'])||blankCell(),
+          '女子':deepClone(row['女子'])||blankCell(),
+          both:row.both?deepClone(row.both):null
+        };
+        var keep=row[target]; // このタイミングでは復元済みなので採用列は原本を指す
+        row.both=null; // オンリー日は共通行を持たない（退避済みなので両方復帰で戻る）
+        row['男子']=(target==='男子')?keep:blankCell();
+        row['女子']=(target==='女子')?keep:blankCell();
+        row._onlyLastGender=target;
+      });
+      model.onlyGender=target;
+    }
+    renderPanel();
+  }
+  // オンリー切替で失われうる中身（反対列 or 共通行）が model 内にあるか。確認ダイアログの要否判定に使う。
+  //  target へオンリー化すると「target 以外の列（反対列）」と「共通(both)行」が畳まれるため、
+  //  そこに中身があれば確認を出す（B: both行がある日をオンリー化する時も確認を出す）。
+  function onlyGenderWouldHideContent(target){
+    if(!model)return false;
+    var opposite=target==='男子'?'女子':'男子';
+    return model.rows.some(function(row){
+      if(row.both)return cellHasContent(row.both);
+      return cellHasContent(row[opposite]);
+    });
+  }
+
   // ── 保存: model→override（保存スキーマ）。空名item・空行は捨てる。minutes は from/to 算出 ──
   function cleanCell(cell){
     if(!cell)return null;
@@ -827,6 +1008,7 @@ export function editorScript() {
     return {block:cell.block||'',label:label||cell.block||'',items:items};
   }
   function buildOverride(){
+    var onlyGender=(model.onlyGender==='男子'||model.onlyGender==='女子')?model.onlyGender:null;
     var rows=[];
     model.rows.forEach(function(r){
       var from=r.from||'';var to=r.to||'';
@@ -834,7 +1016,12 @@ export function editorScript() {
       // to<from や不正時に負値を出さない。空時刻は null のまま。
       var minutes=(fm!=null&&tm!=null)?Math.max(0,tm-fm):null;
       var out={from:from,to:to,minutes:minutes};
-      if(r.both){
+      if(onlyGender){
+        // オンリー時は対象性別のセルだけを載せる（反対列・both は出さない＝退避キーも保存に含めない）。
+        var only=cleanCell(r[onlyGender]);
+        if(!only)return; // 対象性別が空なら行ごと捨てる
+        out[onlyGender]=only;
+      }else if(r.both){
         var both=cleanCell(r.both);
         if(!both)return; // 共通セルが空なら行ごと捨てる
         out.both=both;
@@ -855,6 +1042,7 @@ export function editorScript() {
       aim:(model.aim||'').trim(),
       rows:rows
     };
+    if(onlyGender)ov.onlyGender=onlyGender;
     var title=(model.title||'').trim();
     if(title)ov.title=title;
     return ov;
@@ -1038,6 +1226,6 @@ export function editorScript() {
     openPanel(b.getAttribute('data-empty-act')==='seed');
   });
 
-  window.__bcsEditor={renderDay:renderDay,exportJson:exportJson,openPanel:openPanel,model:function(){return model;}};
+  window.__bcsEditor={renderDay:renderDay,exportJson:exportJson,openPanel:openPanel,model:function(){return model;},setOnlyGender:setOnlyGender,buildOverride:buildOverride};
 })();`;
 }

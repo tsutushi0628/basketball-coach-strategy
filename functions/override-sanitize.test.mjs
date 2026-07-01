@@ -6,6 +6,8 @@
  *   - 終了=開始（0分・編集UIが未完成行で作りうる）は許容する（正当な保存を400にしない）。
  *   - HH:MM として不正な時刻は弾く。
  *   - 片方/両方が空の時刻（時間割なし行）は許容する。
+ *   - 男女オンリーモード（onlyGender）: '男子'/'女子' は通す。未指定・不正値は黙って落として
+ *     undefined（=男女両方）にする。ホワイトリスト方式のガードが新フィールドも守ることの確認。
  *
  * テスト基盤: node --test。
  */
@@ -42,4 +44,30 @@ test('片方/両方が空の時刻（時間割なし行）は許容', () => {
   const ov = sanitizeOverride(body([{ from: '', to: '', 男子: cell }]));
   assert.equal(ov.rows[0].from, '');
   assert.equal(ov.rows[0].to, '');
+});
+
+test('onlyGender:"女子" は通る（オンリーモードの保存が成立する）', () => {
+  const b = body([{ from: '16:00', to: '17:00', 女子: cell }]);
+  b.onlyGender = '女子';
+  const ov = sanitizeOverride(b);
+  assert.equal(ov.onlyGender, '女子', 'onlyGender がそのまま保存される');
+});
+
+test('onlyGender:"男子" は通る', () => {
+  const b = body([{ from: '16:00', to: '17:00', 男子: cell }]);
+  b.onlyGender = '男子';
+  const ov = sanitizeOverride(b);
+  assert.equal(ov.onlyGender, '男子');
+});
+
+test('onlyGender 未指定は undefined（=男女両方・既存挙動を壊さない）', () => {
+  const ov = sanitizeOverride(body([{ from: '16:00', to: '17:00', 男子: cell }]));
+  assert.equal(ov.onlyGender, undefined, '未指定なら onlyGender キー自体を持たない');
+});
+
+test('onlyGender の不正値は黙って落ちる（ホワイトリスト方式・不正な性別文字列を保存しない）', () => {
+  const b = body([{ from: '16:00', to: '17:00', 男子: cell }]);
+  b.onlyGender = 'unknown';
+  const ov = sanitizeOverride(b);
+  assert.equal(ov.onlyGender, undefined, '不正値は undefined に落ちる（=男女両方扱い）');
 });
