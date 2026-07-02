@@ -924,11 +924,11 @@ const PATTERN_CSS = `
 
 /* クロック（中央列共通） */
 .spine-clk{width:54px;display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:3px;flex-shrink:0}
-/* T6: spine-clk .tk は素テキスト13px（枠線・ピル・背景箱なし）。基底 .tk の背景箱(background:var(--bg))・
-   pad は打ち消し（background:none/padding:0）、代わりに数字そのものに白い縁取り（多方向 text-shadow
-   ハロー）を付け、下の連結線に重なっても読めるようにする。色は白＝var(--surface)。細めで潰さない。
-   これは spine 系タイムライン（2列=男女別 と オンリー の両モード）共通＝モードで時刻の見た目を変えない。 */
-.spine-clk .tk{font-size:13px;font-weight:700;color:var(--ink);background:none;padding:0;white-space:nowrap;text-shadow:0 0 2px var(--surface),0 0 2px var(--surface),1px 0 1px var(--surface),-1px 0 1px var(--surface),0 1px 1px var(--surface),0 -1px 1px var(--surface)}
+/* T6: spine-clk .tk は素テキスト18px（枠線・ピル・影・縁取りなし）。地色マスク（background:var(--bg)＝
+   ページ地色と同じ＝ほぼ透明）＋横pad だけで、下の連結線が数字を貫かないようにする。border・
+   border-radius・box-shadow・text-shadow は一切付けない。spine系タイムライン（2列=男女別 と オンリー
+   の両モード）共通＝モードで時刻の見た目を変えない。 */
+.spine-clk .tk{font-size:18px;font-weight:700;color:var(--ink);background:var(--bg);padding:0 4px;white-space:nowrap;text-shadow:none}
 .spine-dot{width:9px;height:9px;border-radius:50%}
 .spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
@@ -958,13 +958,14 @@ const PATTERN_CSS = `
 /* ヘッダの左端は時計列(54px)に合わせ、性別チップは内容側（右）に置く。 */
 .spine-header.tc2-only .spine-clock-header{width:54px}
 /* 時刻(.tk)は基底 .spine-clk .tk を両モード共通で使う（オンリー専用の上書きは持たない＝モードで
-   時刻の見た目を変えない）。箱・枠なし・数字に白縁取りは基底で定義済み。 */
+   時刻の見た目を変えない）。箱・枠・影・縁取りなし・地色マスクのみは基底で定義済み。 */
 
 @media (max-width:580px){
   .spine-header,.spine-rotation,.spine-together{grid-template-columns:1fr 44px 1fr}
   .spine-header.tc2-only,.spine-row.tc2-only{grid-template-columns:44px 1fr}
   .spine-clk{width:44px}
-  .spine-clk .tk{font-size:12px}
+  /* 狭幅は 44px 列に「16:25」が折り返さず収まる範囲で少し大きく（15px＝pad込みで44px内）。 */
+  .spine-clk .tk{font-size:15px}
   .spine::before{left:calc(50% - 1px)}
   .spine.spine-only::before{left:21.5px}
 }
