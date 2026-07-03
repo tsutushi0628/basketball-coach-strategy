@@ -71,3 +71,18 @@ test('onlyGender の不正値は黙って落ちる（ホワイトリスト方式
   const ov = sanitizeOverride(b);
   assert.equal(ov.onlyGender, undefined, '不正値は undefined に落ちる（=男女両方扱い）');
 });
+
+test('aim: 複数行（内部の改行 \\n）を保持したまま保存される（往復で改行が消えない）', () => {
+  const b = body([{ from: '16:00', to: '17:00', 男子: cell }]);
+  b.aim = '1行目のねらい\n2行目のねらい\n3行目のねらい';
+  const ov = sanitizeOverride(b);
+  assert.equal(ov.aim, '1行目のねらい\n2行目のねらい\n3行目のねらい', 'サニタイズを通っても内部の改行が保持される');
+  assert.equal(ov.aim.split('\n').length, 3, '3行のまま（\\nが空白に潰れない）');
+});
+
+test('aim: 400字上限で切られる（改行を含んでも上限は文字数で効く）', () => {
+  const b = body([{ from: '16:00', to: '17:00', 男子: cell }]);
+  b.aim = 'あ\n'.repeat(300); // 600文字（あ+改行×300）
+  const ov = sanitizeOverride(b);
+  assert.equal(ov.aim.length, 400, '400字で切られる');
+});

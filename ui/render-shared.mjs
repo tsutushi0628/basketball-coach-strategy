@@ -75,8 +75,8 @@ a{color:var(--orange-deep)}
 .dayhead .dh-t{font-size:22px;font-weight:700;letter-spacing:-.01em}
 /* T6: dh-court は素テキスト12px（静的メタはピル化しない） */
 .dayhead .dh-court{font-size:12px;color:var(--mute);font-weight:600;margin-left:10px;vertical-align:middle}
-/* T6: dh-aim は 14px（本文段）・面の濃淡のみ */
-.dayhead .dh-aim{margin-top:11px;font-size:14px;font-weight:600;line-height:1.5;background:var(--bg);border-radius:10px;padding:11px 15px}
+/* T6: dh-aim は 14px（本文段）・面の濃淡のみ。white-space:pre-line で入力の改行(\n)を改行表示する（escは維持＝HTML無害化） */
+.dayhead .dh-aim{margin-top:11px;font-size:14px;font-weight:600;line-height:1.5;background:var(--bg);border-radius:10px;padding:11px 15px;white-space:pre-line}
 /* T6: dh-aiml は 17px/700（H3段・見出しは本文より大きく） */
 .dayhead .dh-aiml{display:block;font-size:17px;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
 /* 印刷専用の右側目標（月/週）。画面では非表示（画面は day レベルの目標バーで見せる） */

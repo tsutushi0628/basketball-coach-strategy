@@ -40,6 +40,8 @@ export const EDITOR_CSS = `
 /* 入力部品: 角丸・1px hair・surface背景の既存トーン */
 .ed-in,.ed-sel,.ed-time{appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:9px 12px;width:100%;line-height:1.4}
 .ed-in:focus,.ed-sel:focus,.ed-time:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+/* 複数行テキスト（この日のねらい）。数行分の高さ＋縦リサイズだけ足す（見た目は .ed-in を踏襲） */
+textarea.ed-in{min-height:64px;resize:vertical}
 .ed-time{width:auto;min-width:108px;font-variant-numeric:tabular-nums}
 /* 時間行カード: bg面 + hair で囲う（全周罫線・帯にしない） */
 .ed-row{background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;margin-bottom:12px}
@@ -633,7 +635,7 @@ export function editorScript() {
       catalogDatalist()+
       copyFromOptions()+
       '<div class="ed-field"><span class="ed-lab">この日のねらい</span>'+
-        '<input class="ed-in" id="ed-aim" placeholder="この日のねらい" value="'+esc(model.aim)+'"></div>'+
+        '<textarea class="ed-in" id="ed-aim" rows="3" placeholder="この日のねらい（改行できます）">'+esc(model.aim)+'</textarea></div>'+
       '<div class="ed-field"><span class="ed-lab">コート</span>'+
         '<input class="ed-in" id="ed-court" placeholder="例：半面 / 全面 / 屋外" value="'+esc(model.court)+'"></div>'+
       '<div class="ed-rows">'+rows+'</div>'+
