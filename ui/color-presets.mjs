@@ -18,7 +18,7 @@
  * @type {Record<string, {'--orange':string,'--orange-ink':string,'--orange-soft':string,'--orange-deep':string,'--boys':string,'--girls':string}>}
  */
 export const PRESET_THEMES = {
-  orange:   { '--orange': '#ef7a32', '--orange-ink': '#fffaf2', '--orange-soft': '#ffd7b9', '--orange-deep': '#c4521b', '--boys': '#ef7a32', '--girls': '#b8623b' },
+  orange:   { '--orange': '#ef7a32', '--orange-ink': '#2a201a', '--orange-soft': '#ffd7b9', '--orange-deep': '#a8480c', '--boys': '#ef7a32', '--girls': '#b8623b' },
   red:      { '--orange': '#c63a31', '--orange-ink': '#fff5f3', '--orange-soft': '#f3c4bd', '--orange-deep': '#9a2820', '--boys': '#c63a31', '--girls': '#8f342c' },
   maroon:   { '--orange': '#9c343f', '--orange-ink': '#fbeef0', '--orange-soft': '#e6c4ca', '--orange-deep': '#6e222b', '--boys': '#9c343f', '--girls': '#6e222b' },
   rose:     { '--orange': '#bb3b6e', '--orange-ink': '#fff2f7', '--orange-soft': '#f0c6d8', '--orange-deep': '#8f2851', '--boys': '#bb3b6e', '--girls': '#8f2851' },

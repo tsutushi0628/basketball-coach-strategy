@@ -14,13 +14,14 @@
  * 残すのは: 強い区切り=--line-2（セクション外周）、弱い区切り=--hair（カード・行間）。
  */
 export const TOKENS = `
-  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#7a6a5c;
-  --orange:#ef7a32; --orange-ink:#fffaf2; --orange-soft:#ffd7b9; --orange-deep:#c4521b;
-  --terra:#b8623b; --gold:#cf9a3e; --sage:#7c8a5a;
-  --boys:#ef7a32; --girls:#b8623b;
-  --line:rgba(168,110,64,.13); --line-2:rgba(168,110,64,.22); --hair:rgba(42,32,26,.09);
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
+  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
+  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
+  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
+  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
   --scrim:rgba(42,32,26,.32);
   --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
+  --print-bg:#fff;
 `;
 
 /** 共通ベースCSS。T5: shadow廃止→border+面の濃淡2値で区切りを表現。
@@ -146,7 +147,7 @@ a{color:var(--orange-deep)}
 /* §3.3: タグは文字ラベルのみ（ピル廃止・自走は空文字で非表示）。12px/700（補助段） */
 .tag{flex:0 0 auto;font-size:12px;font-weight:700;white-space:nowrap;letter-spacing:.04em}
 .tag-coach{color:var(--orange-deep)}
-.tag-lec{color:var(--terra)}
+.tag-lec{color:var(--terra-ink)}
 /* §3.3: mode-mark は dot + テキストの横並び。dot は 6px 丸●（コーチ付き=orange） */
 .mode-mark{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto}
 .mode-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
@@ -177,10 +178,10 @@ a{color:var(--orange-deep)}
 /* 文字色はテーマ非依存の固定淡色。明色テーマ（sky/lime/gold）では --orange-ink が暗色になり、
  * 濃い --orange-deep 地の上で読めなくなるため --orange-ink から切り離す（deep は全テーマで地より
  * 十分濃いので固定淡色は必ず読める）。design §1.2.1 / §5.4 のインク反転付帯修正。 */
-.peakchip{font-size:12px;background:var(--orange-deep);color:#fffaf2;border-radius:999px;padding:2px 8px;font-weight:700;align-self:flex-start}
+.peakchip{font-size:12px;background:var(--orange-deep);color:var(--surface);border-radius:999px;padding:2px 8px;font-weight:700;align-self:flex-start}
 .nowchip{font-size:12px;border-radius:999px;padding:2px 8px;font-weight:700;white-space:nowrap}
 .nowchip.boys{background:var(--boys);color:var(--orange-ink)}
-.nowchip.girls{background:var(--girls);color:var(--orange-ink)}
+.nowchip.girls{background:var(--girls);color:var(--girls-ink)}
 .arclegend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:var(--mute)}
 .arclegend .lk{display:inline-flex;align-items:center;gap:6px}
 .arclegend .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
@@ -233,20 +234,29 @@ a{color:var(--orange-deep)}
  * その中で表示中の日だけを印刷する（hidden は印刷でも非表示のまま）。操作系は非表示・背景は #fff に。 */
 @media print{
   @page{margin:8mm}
-  body{background:#fff}
+  /* 印刷時に背景色・面色が間引かれるブラウザ既定を解除（無いと以下の色施策が全て無効化される）。 */
+  *{-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}
+  body{background:var(--print-bg)}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
   /* 1日=1ページに収めるため印刷時のみ全体を微縮小。画面用の目標バーは隠し、目標は日ヘッダ右に横並びで出す */
   .wrap{max-width:none;padding:0;zoom:.92}
   .goalbar{display:none}
-  /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める */
-  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:10px 14px;margin-bottom:8px}
+  /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める。
+   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。 */
+  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:10px 14px;margin-bottom:8px;background:var(--orange-wash)}
   .dayhead .dh-main{flex:1 1 auto;min-width:0}
+  .dayhead .dh-t{color:var(--orange-deep)}
   .dayhead .dh-aim{margin-top:5px;padding:7px 11px}
+  .dayhead .dh-aiml{color:var(--orange-deep)}
   .dayhead .dh-goals{display:flex;flex-direction:column;gap:14px;flex:0 0 34%;max-width:34%}
   .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
   .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
+  /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、
+   * side-stripeのカード左端色帯は使わない）。影（box-shadow）は印刷では使わない。 */
+  .parthead{border-bottom:2px solid var(--orange)}
+  .tccell.tc-coach{border:1.5px solid var(--orange)}
   .drill-overlay{display:none!important}
 }
 `;
