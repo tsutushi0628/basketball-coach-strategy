@@ -37,7 +37,11 @@ function teamConfig(teamId, genderLabel) {
     week_of_month: 1,
     phase: '準備（始動）＋初戦',
     shared_gym: false,
+    // 月・日は水木と同型（半面・コーチ不在・通常練習日）で追加。合同/組違いの特別フラグは付けない。
+    // coach_present:false で統一する（pickLectureDay は土の180分を候補外にしない限り確実に選ぶため、
+    // 月・日を追加してもレクチャ主催曜日は土のまま動かない）。
     schedule: [
+      { day: '月', minutes: 120, court: '半面', coach_present: false, run_minutes: 0 },
       { day: '火', minutes: 120, court: '全面', coach_present: true, parts: [
         { label: '外トレ', kind: 'outdoor', minutes: 60, court: '不問', run_minutes: 60 },
         { label: '全面', kind: 'court', minutes: 60, court: '全面', run_minutes: 0, no_funda: true },
@@ -46,6 +50,7 @@ function teamConfig(teamId, genderLabel) {
       { day: '木', minutes: 120, court: '半面', coach_present: false, run_minutes: 0 },
       { day: '金', minutes: 120, court: '全面', coach_present: true, run_minutes: 15 },
       { day: '土', minutes: 180, court: '全面', coach_present: true, run_minutes: 25 },
+      { day: '日', minutes: 120, court: '半面', coach_present: false, run_minutes: 0 },
     ],
     coach_absent_allow: [
       'ファンダメンタル基礎', 'シュート', 'ハンドリング/ドリブル',

@@ -17,8 +17,9 @@
   "_team_model_note": "男子は単独チーム。男女は別チーム別計画で、体育館共有時の組違い（ローテ/合同）は2チームを生成した後にUIのプレゼン層で噛み合わせる。エンジンへは単独チームとして渡す（shared_gym=false）。",
   "_phase_note": "新チームは男女とも7月始動扱い（current_month=7・準備始動アーク）。phase / phase_category_weights は CLI 単独実行用の静的フォールバック。UI は engine/data/annual-plan.json から性別＋暦月で解決して上書きする（resolveMonth が new_team_start_month=7 を準備始動アークに合わせる）。week_of_month は週の焦点（型づくり/反復）を割る週番号。",
   "shared_gym": false,
-  "_schedule_note": "SCHEDULE（オーナー確定）。火=2部構成(外トレ60＝走り込み・アジリティ ＋ 全面60＝アップ→走ってフィニッシュ→3on3→5on5→静的)。parts で区画(外/全面)を分け、外トレは kind:outdoor(走り込み・アジリティのみ)、全面は no_funda(火はファンダなし・走ってフィニッシュ起点)。水木=半面120分(走る系・5on5なし＝run_minutes:0・ファンダ/シュート/対人[1on1→3on3]中心)、金=全面120分(走り込み15)、土=全面180分(走り込み25＋練習試合余地)。run_minutes は走り込み(ラン)ブロックの分を曜日ごとに固定で与える。coach_present は指導者在席フラグ（火金土=在席, 水木=不在＝選手自走でUIは independent 表示）。水木の対人[1on1→3on3]は既習形（反復/実戦化）の自走として coach_absent_allow に1on1/対人カテゴリを含めて出す。固定ブロック順=アップ→ファンダ→シュート→対人→ラン(走り込み)→静的ストレッチ。",
+  "_schedule_note": "SCHEDULE（オーナー確定＋月日を通常練習日として追加・7曜日化）。火=2部構成(外トレ60＝走り込み・アジリティ ＋ 全面60＝アップ→走ってフィニッシュ→3on3→5on5→静的)。parts で区画(外/全面)を分け、外トレは kind:outdoor(走り込み・アジリティのみ)、全面は no_funda(火はファンダなし・走ってフィニッシュ起点)。月水木日=半面120分(走る系・5on5なし＝run_minutes:0・ファンダ/シュート/対人[1on1→3on3]中心)、金=全面120分(走り込み15)、土=全面180分(走り込み25＋練習試合余地)。run_minutes は走り込み(ラン)ブロックの分を曜日ごとに固定で与える。coach_present は指導者在席フラグ（火金土=在席, 月水木日=不在＝選手自走でUIは independent 表示）。月水木日の対人[1on1→3on3]は既習形（反復/実戦化）の自走として coach_absent_allow に1on1/対人カテゴリを含めて出す。固定ブロック順=アップ→ファンダ→シュート→対人→ラン(走り込み)→静的ストレッチ。月・日は既存の水木と同型で追加した通常練習日（合同/組違いの特別扱いなし）。",
   "schedule": [
+    { "day": "月", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "火", "minutes": 120, "court": "全面", "coach_present": true, "parts": [
       { "label": "外トレ", "kind": "outdoor", "minutes": 60, "court": "不問", "run_minutes": 60 },
       { "label": "全面", "kind": "court", "minutes": 60, "court": "全面", "run_minutes": 0, "no_funda": true }
@@ -26,7 +27,8 @@
     { "day": "水", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "木", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "金", "minutes": 120, "court": "全面", "coach_present": true, "run_minutes": 15 },
-    { "day": "土", "minutes": 180, "court": "全面", "coach_present": true, "run_minutes": 25 }
+    { "day": "土", "minutes": 180, "court": "全面", "coach_present": true, "run_minutes": 25 },
+    { "day": "日", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 }
   ],
   "coach_absent_allow": [
     "ファンダメンタル基礎",

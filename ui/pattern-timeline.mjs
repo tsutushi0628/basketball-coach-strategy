@@ -599,22 +599,29 @@ const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${S
 /** 週レベル: Googleカレンダー型の時間グリッド。days と focus を渡せば任意の週を描ける（複数週の実切替用）。
  * weekKey（その週の週起点ISO）を渡すと「今週の焦点」を目標編集導線の対象にする。週起点が無ければ編集属性なし。 */
 function weekLevel(data, days = data.days, focus = '', weekKey = '') {
-  const axis = buildWeekAxis(days);
+  const realAxis = buildWeekAxis(days);
+  // 実日付のある曜日が1つでもあれば、その日ヘッダ・空セルが「その日の入力へ飛ぶ」導線になる。
+  // 実日付が1つも無い（週起点未設定テナント）週だけは押せる導線を作れないので文言に留める。
+  const hasDatedDay = days.some((d) => d.date);
   const focusAttr = weekKey ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(focus || '')}"` : '';
   // 今週の焦点: コーチ入力があればそれ／無ければ「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
   const focusNote = focus
     ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>`
     : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline">未入力</span></p>` : '');
-  if (!axis) {
+  if (!realAxis && !hasDatedDay) {
     return `<h3 class="lvh">この週の練習</h3>${focusNote}${emptyState({ text: 'この週はまだ入力がありません。各曜日の入力は「日」タブから、自動の叩き台もそこから入れられます。' })}`;
   }
+  // 空週（実ブロックなし）でも、入力できる空グリッドを出すための既定時間軸（平日夕方の練習窓）。
+  // 中身が入れば realAxis がその日の実時刻に置き換わる（この既定は空セルだけの週の枠取りに使う）。
+  const isEmptyWeek = !realAxis;
+  const axis = realAxis || { axisStart: 16 * 60, axisEnd: 18 * 60, used: [[16 * 60, 18 * 60]], collapse: null };
 
   // グリッド全体の高さ
   const totalH = axisY(axis.axisEnd, axis) + 8;
 
   // 曜日ヘッダ
-  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: 'コーチ指定' };
-  const SHARE_NOTE  = { rotation: '（左右の段取りは日タブ）', together: '', independent: '', authored: '' };
+  const SHARE_LABEL = { rotation: '組違いローテ', together: '男女合同', independent: 'コーチ不在（各自）', authored: 'コーチ指定', empty: '未入力' };
+  const SHARE_NOTE  = { rotation: '（左右の段取りは日タブ）', together: '', independent: '', authored: '', empty: '' };
 
   const dayHeads = days.map((d, i) => {
     const colIdx = i + 2;
@@ -663,6 +670,13 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
     const colIdx = i + 2;
     const blocks = dayBlocks(d);
     if (!blocks) {
+      // 空曜日: 実日付があれば列ごとその日の入力へ飛ぶクリック要素にする（空セルがそのまま入力導線）。
+      // 実日付の無い空曜日は従来どおり非クリックの「—」（emダッシュ）で出す。
+      if (d.date) {
+        return `<button type="button" class="wg-col wg-col-empty" data-jumpdate="${esc(d.date)}" style="grid-column:${colIdx};height:${Math.round(totalH)}px" aria-label="${esc(d.day)}曜の練習を入力">
+          <span class="wg-noday wg-noday-go">＋ 入力</span>
+        </button>`;
+      }
       // §5.1: 空曜日は「—」（emダッシュ）
       return `<div class="wg-col" style="grid-column:${colIdx};height:${Math.round(totalH)}px">
         <div class="wg-noday">—</div>
@@ -693,9 +707,12 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
     </div>`;
   }).join('');
 
-  return `<h3 class="lvh">この週の練習（火・水・木・金・土）</h3>
+  // 見出しの曜日列挙は days の実内容から動的に組む（曜日を直書きしない＝schedule 変更やテナント差に
+  // 追従する。全7曜日入力可能化で月・日も候補に入るため固定文言では実態とズレる）。
+  const weekdayList = days.map((d) => d.day).filter(Boolean).join('・');
+  return `<h3 class="lvh">この週の練習${weekdayList ? `（${esc(weekdayList)}）` : ''}</h3>
     ${focusNote}
-    <div class="weekgrid">
+    <div class="weekgrid" style="--wg-cols:${days.length}">
       <div class="wg-corner"></div>
       ${dayHeads}
       <div class="wg-gutter" style="height:${Math.round(totalH)}px">
@@ -711,7 +728,9 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
       <span class="lk"><span class="sw coach"></span>コーチ付き／合同</span>
       <span class="lk"><span class="sw self"></span>自走</span>
     </div>
-    <p class="note"><b>共通の縦時刻軸1本</b>を全曜日で共有し、同じ「1分＝px」尺で揃えています。土の午前帯と平日の夕帯の間にある長い空き時間は、1本の「空き」ブレイクに畳んでいます。組違い日（火・金）の男女の左右内訳は「日」タブで見られます。</p>`;
+    ${isEmptyWeek
+      ? `<p class="note">この週はまだ入力がありません。各曜日の見出し（またはその列）をタップすると、その日の入力に進めます。自動の叩き台もそこから入れられます。</p>`
+      : `<p class="note"><b>共通の縦時刻軸1本</b>を全曜日で共有し、同じ「1分＝px」尺で揃えています。土の午前帯と平日の夕帯の間にある長い空き時間は、1本の「空き」ブレイクに畳んでいます。組違い日（火・金）の男女の左右内訳は「日」タブで見られます。</p>`}`;
 }
 
 /** 1つのセッション（単一日 or 区画）のタイムライン本体（rotation か共通メニュー）を描く。 */
@@ -816,9 +835,10 @@ const PATTERN_CSS = `
 
 /* ── 週カレンダーグリッド CSS（Googleカレンダー型・Hallmark準拠） ── */
 /* T5: weekgrid は surface+line-2罫線（shadow廃止）*/
+/* 列数は --wg-cols（呼び出し側が days.length を注入）駆動。全7曜日入力可能化で5列固定を撤去。 */
 .weekgrid{
   display:grid;
-  grid-template-columns:52px repeat(5,1fr);
+  grid-template-columns:52px repeat(var(--wg-cols,5),1fr);
   background:var(--surface);
   border-radius:14px;
   border:1px solid var(--line-2);
@@ -844,8 +864,16 @@ const PATTERN_CSS = `
 /* T5: wg-tick は 12px（補助段） */
 .wg-tick{position:absolute;right:8px;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;transform:translateY(-50%);white-space:nowrap}
 .wg-col{grid-row:2;position:relative;z-index:1;border-left:1px solid var(--hair);padding:0 5px}
+/* 空曜日列をその日の入力へ飛ばすクリック要素（button）。既定外観を消し div版と揃える。
+ * 押せる手がかりは .wg-dayhead-go と同じ作法（cursor・淡いhover面・色シフト）。色帯・emoji・gradientなし。 */
+.wg-col-empty{appearance:none;background:transparent;border:none;border-left:1px solid var(--hair);cursor:pointer;font:inherit;width:100%;display:flex;align-items:flex-start;justify-content:center;transition:background .14s ease}
+.wg-col-empty:hover{background:var(--bg)}
+.wg-col-empty:hover .wg-noday-go{color:var(--orange-deep)}
+.wg-col-empty:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}
 /* T5: wg-noday は 12px（補助段） */
 .wg-noday{font-size:12px;color:var(--mute);padding:8px 4px;text-align:center}
+/* 空セルの入力ヒント。淡色（mute）で控えめに。hover でorange-deepに寄る（押せる合図）。 */
+.wg-noday-go{color:var(--mute);font-weight:700;transition:color .14s ease}
 .wg-rules{grid-column:2 / -1;grid-row:2;position:relative;z-index:0;pointer-events:none}
 .wg-rule{position:absolute;left:0;right:0;height:1px;background:var(--hair)}
 /* §5.1: ブレイク帯は「・・・」のみ */
@@ -874,7 +902,7 @@ const PATTERN_CSS = `
 .wg-legend .sw.coach{background:var(--surface);border:2px solid var(--line-2)}
 .wg-legend .sw.self{background:var(--bg);border:2px solid var(--line-2)}
 @media (max-width:680px){
-  .weekgrid{overflow-x:auto;grid-template-columns:46px repeat(5,minmax(108px,1fr))}
+  .weekgrid{overflow-x:auto;grid-template-columns:46px repeat(var(--wg-cols,5),minmax(108px,1fr))}
 }
 
 /* ── 中央スパイン3列タイムライン ── */

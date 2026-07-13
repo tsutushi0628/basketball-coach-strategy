@@ -24,7 +24,7 @@ import {
   applyOverridesWithEmpty,
   applyGoalOverridesWithEmpty,
 } from './plan-data.mjs';
-import { localStorages } from './build.mjs';
+import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 import { editorDataIsland } from './editor.mjs';
 import { render } from './pattern-timeline.mjs';
 
@@ -36,7 +36,7 @@ function islandJson(data) {
 
 // ① 既定空白: コーチ上書きの無い日は空状態（叩き台を自動表示しない）─────────────────
 test('① 既定空白: コーチ上書きの無い日は source:empty で叩き台メニューを出さない', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const w0 = data.weeks[0];
   const fri = w0.days.find((d) => d.day === '金'); // 上書き無し
   assert.equal(fri.source, 'empty', '上書き無しの金は空状態日');
@@ -51,7 +51,7 @@ test('① 既定空白: コーチ上書きの無い日は source:empty で叩き
 
 // ② 叩き台は隠し持ち（捨てない）─────────────────────────────────────────────────
 test('② 叩き台は隠し持ち: 各週 seedDays にエンジン叩き台（中身あり）が温存される', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   for (const w of data.weeks) {
     assert.ok(Array.isArray(w.seedDays) && w.seedDays.length > 0, `週${w.key}に seedDays がある`);
   }
@@ -62,7 +62,7 @@ test('② 叩き台は隠し持ち: 各週 seedDays にエンジン叩き台（�
 
 // ③ コーチ上書きはこれまでどおり出る ───────────────────────────────────────────
 test('③ コーチ上書き日はこれまでどおり source:coach で中身が出る', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const tue = data.weeks[0].days.find((d) => d.day === '火'); // 06/23 上書きあり
   assert.equal(tue.source, 'coach', '上書きのある火はコーチ日');
   assert.equal(tue.twoCol, true, '男女2列の上書き日として出る');
@@ -71,7 +71,7 @@ test('③ コーチ上書き日はこれまでどおり source:coach で中身�
 
 // ④ 目標の既定空白（叩き台は seed に温存）────────────────────────────────────────
 test('④ 目標の既定空白: コーチ未入力の週/月目標は空・叩き台は seed* に温存', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   assert.equal(data.weeks[0].focus, '', '週の焦点はコーチ未入力なら空（叩き台を出さない）');
   assert.ok(data.weeks[0].seedFocus, '週の焦点の叩き台は seedFocus に温存');
   assert.equal(data.months[0].month.headline, '', '月の見出しはコーチ未入力なら空');
@@ -99,7 +99,7 @@ test('④b applyGoalOverridesWithEmpty: コーチ上書きのある目標だけ�
 
 // ⑤ オプトイン自動入力ソース（editor データ島の seedPrefill）─────────────────────
 test('⑤ オプトイン自動入力: editor データ島に叩き台 prefill が日付キーで載る', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const island = islandJson(data);
   assert.ok(island.seedPrefill && typeof island.seedPrefill === 'object', 'seedPrefill がデータ島にある');
   // 空状態の金（06/26）の叩き台が prefill 形（rows に時間行・男女共通 both・ドリル名）で載る。
@@ -111,7 +111,7 @@ test('⑤ オプトイン自動入力: editor データ島に叩き台 prefill �
 
 // ⑥⑦ 空状態UIと「叩き台が自動表示されない」をレンダラ出力で固定 ──────────────────
 test('⑥ 空状態UI: 未入力の日に空状態と2導線（入力する／自動で叩き台を入れる）が出る', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   assert.match(body, /class="emptystate"/, '空状態ブロックが描かれる');
   assert.match(body, /まだ入力がありません/, '空状態の文言が出る');
@@ -120,7 +120,7 @@ test('⑥ 空状態UI: 未入力の日に空状態と2導線（入力する／�
 });
 
 test('⑦ 叩き台が自動表示されない: 空状態日には叩き台ドリル要素（drill-trig/spine）が出ない', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   // 空状態日の article を1つ抜き出し、その中に叩き台ドリル描画が無いことを確認。
   const m = body.match(/<article class="day pageb"[^>]*data-date="2026-06-26"[^>]*>([\s\S]*?)<\/article>/);
@@ -159,7 +159,7 @@ function emptyArticleWith(body, attrFragment) {
 }
 
 test('⑨ 実日付のある空状態日: 2導線（入力する／自動で叩き台を入れる）が出て押せる', async () => {
-  const data = await buildPlanData(localStorages()); // 週起点あり＝空状態日も実日付を持つ
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY }); // 週起点あり＝空状態日も実日付を持つ
   const { body } = render(data);
   // 金(06/26)は空状態かつ実日付あり。
   const friArticle = emptyArticleWith(body, 'data-date="2026-06-26"');
@@ -185,7 +185,7 @@ test('⑨b 実日付の無い空状態日（週起点未設定）: 押せない�
 // 背景: goalsBar・monthSection はコーチ未入力時に「未入力」淡色で守るが、月タブの目標パネル（goalsSection）の
 // 今月/今週は空欄になり「壊れて見える」。質行が || '—' で守られているのと同じ非対称を解消する。
 test('⑩ 月タブの目標パネル: 未入力の今月/今週は「未入力」表示で空欄にしない', async () => {
-  const data = await buildPlanData(localStorages()); // 種データの月/週目標はコーチ未入力＝空
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY }); // 種データの月/週目標はコーチ未入力＝空
   const { body } = render(data);
   // 月タブ（data-level="month"）区画を切り出し、目標パネル（.goals）に「未入力」淡色が出ることを確認。
   const start = body.indexOf('data-level="month"');

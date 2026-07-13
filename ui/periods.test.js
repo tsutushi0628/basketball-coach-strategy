@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeWeekPeriods, computeMonthPeriods, buildPlanData } from './plan-data.mjs';
-import { localStorages } from './build.mjs';
+import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 
 test('週ピッカー: 現アーク月の4週を暦日+7日・週番号+1で並べる', () => {
   const weeks = computeWeekPeriods({ currentMonth: 7, weekOfMonth: 1, weekStartDate: '2026-06-22' });
@@ -44,7 +44,7 @@ test('月ピッカー: 年跨ぎでラベルの年が繰り上がる', () => {
 });
 
 test('buildPlanData: 後方互換（top-level days/session）を保ったまま weeks[]/months[] を足す', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   assert.equal(data.weeks.length, 4, '週は4つ');
   assert.equal(data.months.length, 6, '月は6つ');
   // 後方互換: top-level days は先頭週（アンカー）の days と同一。
@@ -53,14 +53,14 @@ test('buildPlanData: 後方互換（top-level days/session）を保ったまま 
 });
 
 test('buildPlanData: 既定空白＝表示の今週の焦点はコーチ未入力なら空（叩き台を自動表示しない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   // オーナー方針「未入力は空白」: ローカル種データに週の目標上書きは無いので、表示用 focus は空。
   assert.equal(data.weeks[0].focus, '', '週1の表示焦点は空（叩き台を出さない）');
   assert.equal(data.weeks[1].focus, '', '週2の表示焦点も空');
 });
 
 test('buildPlanData: 自動入力ソース（叩き台）は週ごとに変わる（週1=型づくり ≠ 週2=反復）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   // 叩き台（seedFocus）は捨てずに温存され、「自動で叩き台を入れる」で呼べる。週送りで中身が進む。
   assert.notEqual(data.weeks[0].seedFocus, data.weeks[1].seedFocus, '週1と週2で叩き台の焦点が変わる');
   assert.match(data.weeks[0].seedFocus, /型づくり/, '週1の叩き台は型づくり');
@@ -68,7 +68,7 @@ test('buildPlanData: 自動入力ソース（叩き台）は週ごとに変わ�
 });
 
 test('buildPlanData: 既定空白＝表示の今月やることはコーチ未入力なら空（叩き台を自動表示しない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const displayMonths = data.months.map((m) => m.displayMonth);
   assert.equal(new Set(displayMonths).size, 6, '6つの別々の暦月を並べる');
   // 表示用 headline はコーチ未入力なら空。叩き台は seedHeadline に温存される。
@@ -77,7 +77,7 @@ test('buildPlanData: 既定空白＝表示の今月やることはコーチ未�
 });
 
 test('buildPlanData: 月の自動入力ソース（叩き台）は別の暦月で変わる（実切替の中身差を温存）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   assert.notEqual(
     data.months[0].month.seedHeadline,
     data.months[2].month.seedHeadline,
@@ -86,7 +86,7 @@ test('buildPlanData: 月の自動入力ソース（叩き台）は別の暦月�
 });
 
 test('buildPlanData: コーチ上書きは各週の実日付にだけ当たる（別週へ漏れない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const wk1Tue = data.weeks[0].days.find((d) => d.day === '火');
   const wk2Tue = data.weeks[1].days.find((d) => d.day === '火');
   assert.equal(wk1Tue.source, 'coach', '週1の火（06/23）はコーチ上書き');

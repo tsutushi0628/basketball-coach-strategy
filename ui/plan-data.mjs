@@ -90,6 +90,21 @@ const dateLabelYMD = (iso) => {
   const [y, m, d] = iso.split('-');
   return `${y}/${m}/${d}`;
 };
+/** ISO日付2つの日数差（b - a、UTC固定・addDaysISOと同じ土台）。既存の同等ユーティリティは
+ * 無いことを確認済み（engine/ui 全体を grep 済み）。 */
+const diffDaysISO = (a, b) => {
+  const da = new Date(`${a}T00:00:00Z`);
+  const db = new Date(`${b}T00:00:00Z`);
+  return Math.round((db - da) / 86400000);
+};
+/** ISO日付が属する週の月曜ISO（週開始=月曜・UTC固定）。 */
+const mondayOfISO = (iso) => {
+  const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); // 0=日,1=月,...6=土
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  return addDaysISO(iso, diffToMonday);
+};
+/** 週の全7曜日（月始まり）の正規順。dayPicker・週グリッドの並び順の単一真実源。 */
+const FULL_WEEK_DAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
 // ── 期間モデル（週/月ピッカーの実切替＝複数期間生成）─────────────────────────────
 // 設計: 1回の generation は「1期間（1週＋その月のフェーズ）」を作る純粋な単位のまま。
@@ -525,6 +540,45 @@ function buildDays(session) {
 }
 
 /**
+ * schedule に無い曜日（既定は月・日）も入力できるよう、buildDays の結果を月始まり7曜日ぶんに
+ * 埋める（表示専用の読み取り補完・保存済み schedule 自体は変更しない）。
+ *
+ * 背景: schedule.map() ベースのエンジンパイプラインは schedule に無い曜日の日を一件も生成しない
+ * （engine/src/planWeek.js:78）。既存チームの schedule 更新APIは存在しないため、schedule を
+ * 増やさない限り月・日は「表示に出てこない」ままになる。この関数は欠けている曜日ぶんだけ
+ * 「空状態専用」のプレースホルダ日（叩き台メニューを持たない・source は下流の
+ * applyOverridesWithEmpty が 'empty' へ確定する）を挿入し、既存の schedule 日はそのまま通す。
+ * 実日付はプレースホルダ側でも週起点から算出するので、コーチが入力すればその日付キーで
+ * 上書きがちゃんと当たる（applyOverridesWithEmpty の実日付一致）。
+ *
+ * @param {Array} days buildDays の結果（schedule にある曜日ぶんのみ）
+ * @param {?string} weekStartDate 週起点ISO（月曜）。未設定なら実日付を持たないプレースホルダになる
+ *   （週起点未設定テナントの既存挙動＝date:null と同型）。
+ * @returns {Array} 月始まり7曜日ぶんに整列した days（既存日はそのまま・欠けている曜日だけ挿入）
+ */
+function padToFullWeek(days, weekStartDate) {
+  const byDay = new Map(days.map((d) => [d.day, d]));
+  return FULL_WEEK_DAYS.map((w) => {
+    const existing = byDay.get(w);
+    if (existing) return existing;
+    const dISO = dayDateISO(weekStartDate, w);
+    return {
+      day: w,
+      dayLabel: fullDayLabel(w),
+      date: dISO,
+      dateLabel: dISO ? dateLabelYMD(dISO) : '',
+      court: null, // schedule に無い曜日＝コート未確定（バッジは court 有無で出し分け）
+      coachPresent: null,
+      isSaturday: false,
+      blocks: [],
+      parts: undefined,
+      sharedKind: 'empty',
+      rotation: null,
+    };
+  });
+}
+
+/**
  * 上書き手書きセル（男子/女子/both の片側）を描画セル形に正規化する。
  * 見出し(label)＋itemリスト（name＋手書きnote）を持つ。手書きは段取り不要なので mode:self 固定。
  * @param {object|undefined} cell ov.rows[].男子 / .女子 / .both のいずれか
@@ -841,6 +895,50 @@ export function applyGoalOverridesWithEmpty(parts, goalOverrides) {
   return parts;
 }
 
+/** サーバ時計から今日のISOを得る（UTC固定）。buildPlanData の today 省略時の既定。 */
+function serverTodayISO() {
+  const n = new Date();
+  return `${n.getUTCFullYear()}-${String(n.getUTCMonth() + 1).padStart(2, '0')}-${String(n.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 表示アンカー（今日を含む週/月から開く）を解決する。保存アンカー（config.week_start_date 等）は
+ * 一切書き換えない——週起点・アーク月・週番号を「今日を含む月曜」に向けて丸ごと何ブロックか
+ * 進めた「表示専用」の値を返すだけ。呼び出し側はこの返り値を computeWeekPeriods /
+ * computeMonthPeriods の入力に使う（保存値は config 側にそのまま残る）。
+ *
+ * 週起点未設定テナント（週の実日付を持たない）は「今日」と紐付けようがないため素通し。
+ * 解決結果が原典（annual-plan）に存在しない月に落ちた場合は保存アンカーへフォールバックし、
+ * warnings に1件残す（今日が計画の定義範囲外だったことの記録）。
+ *
+ * @param {{currentMonth:number, weekOfMonth:number, weekStartDate:?string}} anchor 保存アンカー
+ * @param {string} todayIso 今日のISO
+ * @param {object} annual loadAnnualPlan() の結果（解決可否の判定にのみ使う）
+ * @returns {{currentMonth:number, weekOfMonth:number, weekStartDate:?string, warnings:string[]}}
+ */
+function resolveDisplayAnchor(anchor, todayIso, annual) {
+  if (!anchor.weekStartDate) return { ...anchor, warnings: [] };
+  const todayMonday = mondayOfISO(todayIso);
+  if (todayMonday === anchor.weekStartDate) return { ...anchor, warnings: [] };
+  // アンカー週起点から「今日を含む月曜」までの週数ぶん、アーク月・週番号を同じ歩幅で進める
+  // （4週=1アーク月の境界をまたぐぶんだけ currentMonth を繰り上げ/繰り下げる）。
+  const weeksDiff = Math.round(diffDaysISO(anchor.weekStartDate, todayMonday) / 7);
+  const anchorIdx0 = (anchor.weekOfMonth ?? 1) - 1;
+  const globalIdx0 = anchorIdx0 + weeksDiff;
+  const monthsDiff = Math.floor(globalIdx0 / WEEKS_PER_ARC_MONTH);
+  const weekOfMonth = (((globalIdx0 % WEEKS_PER_ARC_MONTH) + WEEKS_PER_ARC_MONTH) % WEEKS_PER_ARC_MONTH) + 1;
+  const currentMonth = wrapMonth(anchor.currentMonth + monthsDiff);
+  try {
+    resolveMonth(annual, '男子', currentMonth); // 解決可能性チェック（未定義月なら throw）
+  } catch (e) {
+    return {
+      ...anchor,
+      warnings: [`今日(${todayIso})を含む週の表示位置解決に失敗したため、保存アンカーの週を表示しています（${e.message}）。`],
+    };
+  }
+  return { currentMonth, weekOfMonth, weekStartDate: todayMonday, warnings: [] };
+}
+
 /**
  * 練習計画UIの単一データを組み立てる（決定論・LLM不使用）。
  *
@@ -849,14 +947,17 @@ export function applyGoalOverridesWithEmpty(parts, goalOverrides) {
  * （getDrills/getConfig/getTeamInput/getOverrides/getAnnualPlan）を満たす。
  * 男子メニュー本体は storage から、女子は指標(KPI)のみ girlsStorage から引く。
  *
+ * 初期表示は「今日を含む週/月」から開く（保存アンカーは不変・表示位置だけ今日へ寄せる）。
+ *
  * @param {Object} deps
  * @param {import('../engine/src/storage.js').Storage} deps.storage      男子（共通メニュー本体＋年間計画＋上書き）
  * @param {import('../engine/src/storage.js').Storage} deps.girlsStorage 女子（指標のみ）
  * @param {string} [deps.school] テナント表示名（マルチテナント解決後の tenant.name）。
  *                               未指定なら従来の現行校名にフォールバック（ローカル静的ビルド互換）。
+ * @param {string} [deps.today] 今日のISO（省略時はサーバ時計）。テストで固定日を注入する用途。
  * @returns {Promise<object>} pattern-*.mjs の render() に渡す表示データ
  */
-export async function buildPlanData({ storage, girlsStorage, school }) {
+export async function buildPlanData({ storage, girlsStorage, school, today }) {
   if (!storage || !girlsStorage) {
     throw new Error('buildPlanData: storage と girlsStorage の注入が必須です');
   }
@@ -878,6 +979,10 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     weekOfMonth: config.week_of_month ?? 1,
     weekStartDate: config.week_start_date || null,
   };
+  // 表示アンカー＝今日を含む週/月から開く（保存アンカー anchor 自体は不変）。週ピッカー・月ピッカー・
+  // 年リボンの生成はすべてこちらを使う。解決に失敗した場合は displayAnchor が保存アンカーへ
+  // フォールバックしつつ warnings を1件持つ（下で anchorWeek.warnings に合流する）。
+  const displayAnchor = resolveDisplayAnchor(anchor, today || serverTodayISO(), annual);
 
   // 1期間（1週）を生成する単位。period を変えて反復することで複数週を作る（案B）。
   // 既定空白方針: エンジン叩き台（buildDays）は seedDays として温存し、表示用 days は
@@ -885,16 +990,18 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
   // 叩き台を捨てないので「自動で叩き台を入れる」で editor に呼び戻せる。
   const buildOneWeek = (period) => {
     const s = buildSession({ annual, drills, config, teamInput, period });
-    const seedDays = buildDays(s); // エンジン叩き台（自動入力ソース・表示しない）
+    // エンジン叩き台（自動入力ソース・表示しない）。schedule に無い曜日（既定は月・日）も
+    // 保存済みデータを変えずに入力可能にするため、月始まり7曜日ぶんへ表示専用で埋める。
+    const seedDays = padToFullWeek(buildDays(s), period.weekStartDate);
     // コーチ上書きは各週の週起点で実日付一致＝別週へ漏れない（applyOverrides 既存設計を踏襲）。
     const weekDays = applyOverridesWithEmpty(seedDays, overrides, period.weekStartDate);
     return { session: s, days: weekDays, seedDays };
   };
 
-  // ── 週ピッカー用の複数週（現アーク月の週1..N。焦点が型→反復で変わる）──────────────
-  const weekDefs = anchor.weekStartDate
-    ? computeWeekPeriods(anchor)
-    : [{ key: 'w0', label: '今週', currentMonth: anchor.currentMonth, weekOfMonth: anchor.weekOfMonth, weekStartDate: null }];
+  // ── 週ピッカー用の複数週（今日を含むアーク月の週1..N。焦点が型→反復で変わる）──────────
+  const weekDefs = displayAnchor.weekStartDate
+    ? computeWeekPeriods(displayAnchor)
+    : [{ key: 'w0', label: '今週', currentMonth: displayAnchor.currentMonth, weekOfMonth: displayAnchor.weekOfMonth, weekStartDate: null }];
   // 既習レクチャ・ロスターを週送りで連鎖（週Nの更新後を週N+1の入力へ）。土曜レクチャが週ごとに進む。
   let introducedSoFar = Array.isArray(config.introduced) ? config.introduced : [];
   const weeks = weekDefs.map((wp) => {
@@ -919,16 +1026,16 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
   const days = anchorWeek.days;
   const seedDays = anchorWeek.seedDays; // アンカー週の叩き台（表示しない・自動入力ソース）
 
-  // 表示する暦月: 週起点の暦月（例 2026-06-22 → 6月）。フェーズ位置（current_month=7）とは別軸で、
+  // 表示する暦月: 表示アンカーの週起点の暦月（例 2026-07-13週 → 7月）。フェーズ位置とは別軸で、
   // ヘッダ・index・配布テキストの「N月」表示に使う。週起点未設定時は従来どおり current_month。
-  const displayCalendarMonth = anchor.weekStartDate
-    ? Number(anchor.weekStartDate.split('-')[1])
+  const displayCalendarMonth = displayAnchor.weekStartDate
+    ? Number(displayAnchor.weekStartDate.split('-')[1])
     : wrapMonth(currentMonth);
 
-  // ── 月ピッカー用の複数月（現月から半年。各月は年間計画のアーク内容＝週生成不要で軽量）──
-  const anchorYear = anchor.weekStartDate ? Number(anchor.weekStartDate.split('-')[0]) : null;
+  // ── 月ピッカー用の複数月（今日を含む月から半年。各月は年間計画のアーク内容＝週生成不要で軽量）──
+  const anchorYear = displayAnchor.weekStartDate ? Number(displayAnchor.weekStartDate.split('-')[0]) : null;
   const monthDefs = anchorYear
-    ? computeMonthPeriods({ currentMonth: anchor.currentMonth, displayMonth: displayCalendarMonth, year: anchorYear })
+    ? computeMonthPeriods({ currentMonth: displayAnchor.currentMonth, displayMonth: displayCalendarMonth, year: anchorYear })
     : [];
   const months = monthDefs.map((mp) => {
     const r = resolveMonth(annual, '男子', mp.currentMonth);
@@ -951,7 +1058,8 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
 
   // 年リボン: 新チーム12ヶ月アーク（8→7月）。フェーズは共通（男子基準の1本arc）。
   // 男女の「いま」は両方とも暦月に固定する（男女は同じ時間に生きているので現在位置はずれない）。
-  const arc = yearArc(annual, '男子', currentMonth).map((e) => ({
+  // 「いま」は表示アンカー（今日を含む位置）基準——日/週タブの見出しと同じ位置感で揃える。
+  const arc = yearArc(annual, '男子', displayAnchor.currentMonth).map((e) => ({
     month: e.month,
     phase: e.phase,
     headline: e.headline,
@@ -962,8 +1070,8 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
     arc,
     // 年の「いま」は男女とも同じ暦月。女子先行offset（_gender_offset）は arc 構造の遠因であり、
     // 「いま」の位置には効かせない（男女は同じ時間に生きているので現在位置はずれない）。
-    currentBoys: currentMonth,
-    currentGirls: currentMonth,
+    currentBoys: displayAnchor.currentMonth,
+    currentGirls: displayAnchor.currentMonth,
     peaks: annualPeaks(annual),
   };
 
@@ -1012,6 +1120,6 @@ export async function buildPlanData({ storage, girlsStorage, school }) {
       '今は男女とも同じ年間の流れにいる。大会の時期に男女差があるかは未確定（コーチ確認）。確認が取れるまで男女差は表示に出さない。',
       '選手の指標は合成値（実選手データは個人情報のため未接続）。',
     ],
-    warnings: anchorWeek.warnings,
+    warnings: [...(displayAnchor.warnings || []), ...(anchorWeek.warnings || [])],
   };
 }

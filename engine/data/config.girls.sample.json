@@ -18,6 +18,7 @@
   "shared_gym": false,
   "_schedule_note": "SCHEDULE（オーナー確定・男女共通の枠）。火=2部構成(外トレ60＝走り込み・アジリティ ＋ 全面60＝アップ→走ってフィニッシュ→3on3→5on5→静的)。水木=半面120分(走る系・5on5なし)、金=全面120分(走り込み15)、土=全面180分(走り込み25)。固定ブロック順=アップ→ファンダ→シュート→対人→ラン→静的。UIの共通メニューは男子configから生成し、女子configは指標(KPI)用。",
   "schedule": [
+    { "day": "月", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "火", "minutes": 120, "court": "全面", "coach_present": true, "parts": [
       { "label": "外トレ", "kind": "outdoor", "minutes": 60, "court": "不問", "run_minutes": 60 },
       { "label": "全面", "kind": "court", "minutes": 60, "court": "全面", "run_minutes": 0, "no_funda": true }
@@ -25,7 +26,8 @@
     { "day": "水", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "木", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 },
     { "day": "金", "minutes": 120, "court": "全面", "coach_present": true, "run_minutes": 15 },
-    { "day": "土", "minutes": 180, "court": "全面", "coach_present": true, "run_minutes": 25 }
+    { "day": "土", "minutes": 180, "court": "全面", "coach_present": true, "run_minutes": 25 },
+    { "day": "日", "minutes": 120, "court": "半面", "coach_present": false, "run_minutes": 0 }
   ],
   "coach_absent_allow": [
     "ファンダメンタル基礎",

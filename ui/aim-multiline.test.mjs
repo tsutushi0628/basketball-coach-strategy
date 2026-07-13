@@ -14,26 +14,40 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { chromium } from 'playwright';
 
+import { buildPlanData } from './plan-data.mjs';
+import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
+import { render } from './pattern-timeline.mjs';
+import { renderPage } from './render-shared.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const HTML = resolve(__dirname, 'pattern-timeline.html');
+// このテスト専用の使い捨てビルド（他テストファイルと共有しない・並列実行での競合を避ける）。
+// buildPlanData の today を種データのアンカー週に固定するので、実行時刻に関わらず
+// overrides.json の上書き日（2026-06-23等）が必ず表示範囲に入る（既定空白のPart C今日基準
+// シフトは実運用のみが対象・テストの決定論とは別軸）。ui/*.html は .gitignore 対象。
+const HTML = resolve(__dirname, 'pattern-timeline.aim-multiline.tmp.html');
 const DATE = '2026-06-23';
 
 let browser;
 let page;
 
 before(async () => {
-  assert.ok(existsSync(HTML), 'pattern-timeline.html がビルド済みであること（node ui/build.mjs を先に実行）');
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
+  const { css, body } = render(data);
+  writeFileSync(HTML, renderPage({ title: 'aim-multiline fixture', css, body }), 'utf8');
   browser = await chromium.launch();
   page = await browser.newPage();
   await page.goto(pathToFileURL(HTML).href);
 });
 
-after(async () => { if (browser) await browser.close(); });
+after(async () => {
+  if (browser) await browser.close();
+  if (existsSync(HTML)) unlinkSync(HTML);
+});
 
 async function openPanel() {
   await page.evaluate((d) => {

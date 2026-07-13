@@ -20,21 +20,22 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { chromium } from 'playwright';
 
 import { buildPlanData } from './plan-data.mjs';
-import { localStorages } from './build.mjs';
+import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 import { render } from './pattern-timeline.mjs';
+import { renderPage } from './render-shared.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── (a)(b) 描画: buildPlanData実データを onlyGender で加工し render() の出力を検証 ──────────
 
 test('(a) onlyGender:"女子" の日は男子列を描かず、女子1列で描かれる', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const tue = data.weeks[0].days.find((d) => d.day === '火'); // 06/23・twoCol上書きあり
   assert.equal(tue.twoCol, true, '前提: twoCol上書き日である');
   tue.onlyGender = '女子';
@@ -48,7 +49,7 @@ test('(a) onlyGender:"女子" の日は男子列を描かず、女子1列で描�
 });
 
 test('(b) onlyGender 未指定の日は従来どおり男女2列（非回帰）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const m = body.match(/<article class="day pageb"[^>]*data-date="2026-06-23"[^>]*>([\s\S]*?)<\/article>/);
   assert.ok(m, '火(06/23)の article が存在する');
@@ -58,20 +59,28 @@ test('(b) onlyGender 未指定の日は従来どおり男女2列（非回帰）'
 
 // ── (c)(d)(e) 編集・保存: 実ブラウザでのドラフト操作 ──────────────────────────────────
 
-const HTML = resolve(__dirname, 'pattern-timeline.html');
+// このテスト専用の使い捨てビルド（他テストファイルと共有しない・並列実行での競合を避ける）。
+// today を種データのアンカー週に固定し、実行時刻に関わらず overrides.json の上書き日
+// （2026-06-23等）が表示範囲に入るようにする（Part C の今日基準シフトは実運用のみが対象）。
+const HTML = resolve(__dirname, 'pattern-timeline.only-gender-render.tmp.html');
 const DATE = '2026-06-23';
 
 let browser;
 let page;
 
 before(async () => {
-  assert.ok(existsSync(HTML), 'pattern-timeline.html がビルド済みであること（node ui/build.mjs を先に実行）');
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
+  const { css, body } = render(data);
+  writeFileSync(HTML, renderPage({ title: 'only-gender-render fixture', css, body }), 'utf8');
   browser = await chromium.launch();
   page = await browser.newPage();
   await page.goto(pathToFileURL(HTML).href);
 });
 
-after(async () => { if (browser) await browser.close(); });
+after(async () => {
+  if (browser) await browser.close();
+  if (existsSync(HTML)) unlinkSync(HTML);
+});
 
 /** 対象日の編集パネルを開く（所属 .daywk 週グループも可視にする）。 */
 async function openPanel() {
@@ -280,7 +289,7 @@ test('(E-client) コピー用テキスト: 女子のみは「男子｜」の幽�
 // ── 【E-server】【F】 render()側（サーバ描画・コピー用テキスト）を buildPlanData実データで検証 ──
 
 test('(E-server) コピー用テキスト（サーバ）: 女子のみの日に「男子｜」行が出ない', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const tue = data.weeks[0].days.find((d) => d.day === '火');
   tue.onlyGender = '女子';
   const { body } = render(data);
@@ -294,7 +303,7 @@ test('(E-server) コピー用テキスト（サーバ）: 女子のみの日に�
 });
 
 test('(F) both＋onlyGender の日: 共通(both)内容が1列(spine)に出る（"—"にならない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const tue = data.weeks[0].days.find((d) => d.day === '火');
   // 手書き/旧データ相当: 対象性別セルが無く both を持つ行を1つ作る（both＋onlyGender 共存）。
   tue.rows = [{
@@ -319,7 +328,7 @@ test('(F) both＋onlyGender の日: 共通(both)内容が1列(spine)に出る（
 // 業務意図: 1性別だけの日は、時計が左・内容が右フル幅・点をつなぐ縦線が左レールに出る本物の1列で出る
 //（右半分空白の崩れでも、右レールでもない）。
 test('(layout) オンリー日は左レール1列レイアウト（時計が先・内容フル幅・線あり）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const tue = data.weeks[0].days.find((d) => d.day === '火');
   tue.onlyGender = '女子';
   const { body } = render(data);
@@ -346,7 +355,7 @@ test('(layout) オンリー日は左レール1列レイアウト（時計が先�
 // 業務意図: 18px・枠/角丸/影/縁取り(text-shadow)なし・地色マスク(background:var(--bg))＋横padだけで、
 // 連結線が数字を貫かず読める。オンリー専用の .tk 上書きは持たない（オンリーと2列で完全に同一の見た目）。
 test('(tk-parity) 時刻(.tk)は18px・text-shadowなし・地色マスクのみの基底スタイルを両モード共通で使う', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { css } = render(data);
   // オンリー専用の .tk 上書きセレクタが CSS に存在しない＝基底 .spine-clk .tk をそのまま使う（モード間で同一）。
   assert.doesNotMatch(css, /\.spine-row\.tc2-only\s+\.spine-clk\s+\.tk\s*\{/, 'オンリー専用の .tk 上書きが無い（モードで時刻の見た目を変えない）');

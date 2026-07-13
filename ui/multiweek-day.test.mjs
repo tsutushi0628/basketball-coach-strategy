@@ -20,7 +20,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildPlanData } from './plan-data.mjs';
-import { localStorages } from './build.mjs';
+import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 import { render } from './pattern-timeline.mjs';
 import { clientScript } from './render-shared.mjs';
 
@@ -68,7 +68,7 @@ function dayDatesIn(region) {
 }
 
 test('日レベルが全週ぶんに広がり、翌週（先頭週の次週）の編集可能 .day[data-date] が存在する', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   assert.ok(data.weeks.length >= 2, '前提: 複数週が生成されている');
 
   const { body } = render(data);
@@ -87,7 +87,7 @@ test('日レベルが全週ぶんに広がり、翌週（先頭週の次週）�
 });
 
 test('日レベルの .daywk 週グループ数が data.weeks.length と一致する', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
   const groups = [...region.matchAll(/class="daywk" data-week="([^"]*)"/g)].map((x) => x[1]);
@@ -97,7 +97,7 @@ test('日レベルの .daywk 週グループ数が data.weeks.length と一致�
 });
 
 test('cal-go の各日ボタンが実ISO(data-date)を持つ（別週の同曜日と衝突しない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
   const calgoDates = [...region.matchAll(/class="pk cal-go[^"]*"[^>]*data-date="([^"]*)"/g)].map((x) => x[1]);
@@ -112,7 +112,7 @@ test('cal-go の各日ボタンが実ISO(data-date)を持つ（別週の同曜�
 });
 
 test('単一可視日の不変条件: markup 上で hidden でない .day は全週通して常に1つだけ', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
   const articles = [...region.matchAll(/<article class="day pageb"[^>]*>/g)].map((x) => x[0]);
@@ -122,7 +122,7 @@ test('単一可視日の不変条件: markup 上で hidden でない .day は全
 });
 
 test('週グリッドの曜日ヘッダ: 実日付のある日は button[data-jumpdate=実ISO]、空日はクリック不可', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = weekRegionOf(body);
 
@@ -139,7 +139,7 @@ test('週グリッドの曜日ヘッダ: 実日付のある日は button[data-ju
 });
 
 test('週グリッド: 実日付の無い日（空日）はジャンプ button にしない（クリック不可の div のまま）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   // 先頭週の2日目の実日付を消して、空日が非クリック div になることを確認。
   const w0 = data.weeks[0];
   const daysCopy = w0.days.map((d, i) => (i === 1 ? { ...d, date: null, dateLabel: '' } : d));
@@ -173,7 +173,7 @@ test('clientScript: 日付起点の単一制御・週グリッド遷移・日レ
 });
 
 test('日レベルの週目標 data-goal-key が data.weeks の各週起点ISOぶん存在する（週0固定でない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   assert.ok(data.weeks.length >= 2, '前提: 複数週が生成されている');
   // 前提: 各週は別々の週起点ISOを持つ（編集キーが週ごとに異なる根拠）。
   const weekStarts = data.weeks.map((w) => w.weekStartDate).filter(Boolean);
@@ -193,7 +193,7 @@ test('日レベルの週目標 data-goal-key が data.weeks の各週起点ISO�
 });
 
 test('日レベルの各 .daywk グループの週目標バーが、その週の焦点(focus)と週起点ISOを指す', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
 
@@ -214,7 +214,7 @@ test('日レベルの各 .daywk グループの週目標バーが、その週の
 });
 
 test('日レベルの月目標は全週グループで不変（同一アーク月内は月キーが追従しない＝月を週切替で誤上書きしない）', async () => {
-  const data = await buildPlanData(localStorages());
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
 

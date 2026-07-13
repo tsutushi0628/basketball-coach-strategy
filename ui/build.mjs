@@ -23,6 +23,15 @@ const engineRoot = resolve(__dirname, '../engine');
 const repoRoot = resolve(__dirname, '..');
 
 /**
+ * ローカルJSON種データ（config.sample.json）の week_start_date と同じ日（月曜）。
+ * buildPlanData は「今日を含む週」へ表示位置を自動で寄せる（表示アンカーの今日基準シフト）ため、
+ * 種データの上書き日（06/23等）を検証するテストは today をこの値へ固定して「今日が種データの
+ * 週の中」という前提を保つ（実行時刻に依存させない）。本番の静的ビルド（main()）はこれを使わず
+ * サーバ時計のまま＝毎回「今日を含む週」を出す。
+ */
+export const LOCAL_FIXTURE_TODAY = '2026-06-22';
+
+/**
  * 静的ビルド用のローカル storage を組む（ドリル台帳は docs 配下・config は男女別）。
  * Cloud Function は同じ buildPlanData を Firestore storage で呼ぶ（build.mjs はローカルJSON固定）。
  * @returns {{storage: import('../engine/src/storage.js').Storage, girlsStorage: import('../engine/src/storage.js').Storage}}

@@ -701,12 +701,24 @@ export function clientScript() {
   document.querySelectorAll('[data-jumpdate]').forEach(function(b){b.addEventListener('click',function(){
     jumpToDate(b.getAttribute('data-jumpdate'));
   });});
-  // 既定表示日=今日（多週対応）: 今日のISOに一致する日があればそれを出す。無ければ先頭週の先頭日。
+  // 既定表示日=今日に最も近い練習日（多週対応）: data-date が空でない全候補から今日との暦日差が
+  // 最小の日を選ぶ。今日がちょうど練習日ならその日。今日が休養日（谷間）のときは直近の未来の
+  // 練習日を優先し、範囲内に未来が無ければ直近の過去の練習日にフォールバックする。
+  // 実日付を1件も持たないテナント（週起点未設定）は候補ゼロのまま静的初期表示に委ねる（従来動作維持）。
   (function(){
     var iso=todayISO();
-    if(document.querySelector('.day[data-date="'+iso+'"]')){showDayByDate(iso);return;}
-    var first=document.querySelector('.daywk .day[data-date]')||document.querySelector('.day[data-date]');
-    if(first)showDayByDate(first.getAttribute('data-date'));
+    var nodes=document.querySelectorAll('.day[data-date]');
+    var candidates=[];
+    for(var i=0;i<nodes.length;i++){
+      var v=nodes[i].getAttribute('data-date');
+      if(v)candidates.push(v);
+    }
+    if(candidates.length===0)return;
+    if(candidates.indexOf(iso)!==-1){showDayByDate(iso);return;}
+    var future=candidates.filter(function(d){return d>iso;}).sort();
+    if(future.length){showDayByDate(future[0]);return;}
+    var past=candidates.filter(function(d){return d<iso;}).sort();
+    showDayByDate(past.length?past[past.length-1]:candidates.sort()[0]);
   })();
   // 週ピッカー実切替: 押下した週の wkpanel だけ出す（日切替と同型）。
   var wts=document.querySelectorAll('.cal-go-week');
