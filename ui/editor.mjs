@@ -97,6 +97,8 @@ textarea.ed-in{min-height:64px;resize:vertical}
 .ed-export-area[hidden]{display:none}
 /* 他の日からコピーの行（セレクタ＋取り込みボタン） */
 .ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* コピー元が1件も無いときの案内文（border帯にせず既存 mute トーンの地の文で出す） */
+.ed-hint{font-size:12px;color:var(--mute);line-height:1.5;margin:0}
 /* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */
 .cal-go:disabled,.cal-go-week:disabled,.cal-go-dayweek:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 `;
@@ -218,18 +220,19 @@ function engineDayToPrefill(d) {
  */
 export function editorDataIsland(data) {
   // 編集できる「日」画面は全週ぶん描かれる（pattern-timeline.render の多週化）。だから prefill も
-  // 全週のコーチ上書き日（twoCol）から作る。先頭週だけだと翌週のコーチ編集日が空テンプレで開く。
+  // 表示中4週間に縛らず、テナント内の全コーチ上書き日（twoCol）から作る（buildPlanData の
+  // allCoachDays＝表示範囲外・先月/来月に保存済みの日も「他の日からコピー」で選べるようにする）。
   // 実日付(date)キーなので週をまたいで一意（別週の同曜日と衝突しない）。
-  const weekDayLists = (data.weeks && data.weeks.length)
-    ? data.weeks.map((w) => w.days)
-    : [data.days || []];
+  // allCoachDays が無い呼び出し（buildPlanData を経ない手組みフィクスチャ等）には、従来どおり
+  // 表示中の週だけから作る経路へ後方互換フォールバックする。
+  const coachDaySource = Array.isArray(data.allCoachDays)
+    ? data.allCoachDays
+    : ((data.weeks && data.weeks.length) ? data.weeks.map((w) => w.days) : [data.days || []]).flat();
 
   const prefill = {};
-  for (const days of weekDayLists) {
-    for (const d of (days || [])) {
-      if (d.source === 'coach' && d.twoCol && d.date) {
-        prefill[d.date] = dayToPrefill(d);
-      }
+  for (const d of coachDaySource) {
+    if (d && d.source === 'coach' && d.twoCol && d.date) {
+      prefill[d.date] = dayToPrefill(d);
     }
   }
 
@@ -523,10 +526,21 @@ export function editorScript() {
     });
     return html;
   }
-  // 他の日（既存のコーチ上書き日）からこの日へ内容を丸ごと取り込むセレクタ。コピー元が無ければ何も出さない。
+  // 他の日（既存のコーチ上書き日）からこの日へ内容を丸ごと取り込むセレクタ。
+  // PREFILL はテナント内の全コーチ上書き日（表示中の週に限らない）。候補が0件のときの扱い:
+  //  - 保存済みの日が本当に1つも無い（テナント全体でPREFILLが空）→ ボタンを消さず案内文を出す。
+  //  - 保存済みの日はあるが、それが「今編集中のこの日」だけ→ 選べる他日が無いので何も出さない
+  //    （自分自身をコピー元にする意味が無いため。従来どおり沈黙）。
   function copyFromOptions(){
-    var dates=Object.keys(PREFILL).filter(function(k){return k!==model.date;}).sort();
-    if(!dates.length)return '';
+    var allDates=Object.keys(PREFILL);
+    var dates=allDates.filter(function(k){return k!==model.date;}).sort();
+    if(!dates.length){
+      if(!allDates.length){
+        return '<div class="ed-field"><span class="ed-lab">他の日からコピー</span>'+
+          '<p class="ed-hint">コピーできる保存済みの日がまだありません。他の日を保存すると、ここから選べるようになります。</p></div>';
+      }
+      return '';
+    }
     var opts='<option value="">選んでください…</option>'+dates.map(function(k){
       var p=PREFILL[k]||{};
       var lab=dateLabelISO(k,p.weekday)+(p.title?'：'+p.title:(p.aim?'：'+p.aim:''));

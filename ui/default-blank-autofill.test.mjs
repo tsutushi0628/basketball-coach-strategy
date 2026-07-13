@@ -225,3 +225,37 @@ test('⑧ applyOverridesWithEmpty: 上書き日は手書き化・非上書き日
   assert.equal(wed.date, '2026-06-24', '空状態日も実日付を保つ');
   assert.equal(wed.court, '半面', '空状態日もコートを保つ');
 });
+
+// ⑪ 回帰: ねらい未保存日の編集/コピーの中身がカレンダー表示と一致する（空欄にしない）──────────
+// 背景（実データ）: engine/data/overrides.json の 2026-06-24/25 はコーチが「この日のねらい」を明示保存して
+// いない（aim 未設定）。カレンダー表示は曜日テンプレの既定ねらい文（applyOverridesWithEmpty→toAuthoredDay が
+// エンジン日を土台に aim=ov.aim||day.aim で解決）を出す。編集フォーム/コピーの土台（editorDataIsland の prefill
+// ＝buildPlanData の allCoachDays）も同じテンプレを土台にしないと、表示にはねらい文が出るのにフォーム/コピーは
+// 空欄になり食い違う（コピーで空欄が複製される）。
+// 検証する業務意図: フォーム/コピーの中身（prefill）＝カレンダー表示の中身。ねらい未保存日でも既定ねらい文が入り、
+// ねらいを明示保存した日はその明示値が入る（テンプレ既定にコーチ上書きをマージした結果が表示と一致する）。
+test('⑪ 回帰: ねらい未保存日でも編集/コピーの中身が表示と一致（空欄にしない）', async () => {
+  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
+  const prefill = islandJson(data).prefill;
+  // カレンダー表示が出すコーチ日の中身（同じ data から）。
+  const displayByDate = {};
+  for (const d of data.weeks[0].days) if (d.source === 'coach') displayByDate[d.date] = d;
+
+  // 06/24・06/25: ねらい未保存日。表示は既定ねらい文が出る＝フォーム/コピーも同じ非空の文言で一致する。
+  for (const date of ['2026-06-24', '2026-06-25']) {
+    const disp = displayByDate[date];
+    const pf = prefill[date];
+    assert.ok(disp && disp.aim && disp.aim.trim(), `${date} はカレンダー表示に既定ねらい文が出る（前提）`);
+    assert.ok(pf, `${date} の編集/コピー prefill が存在する`);
+    assert.ok(pf.aim && pf.aim.trim(), `${date} の編集/コピーのねらいが空欄でない（regression: 空オブジェクト土台だと空欄）`);
+    assert.equal(pf.aim, disp.aim, `${date} の編集/コピーのねらいがカレンダー表示と一致する`);
+    // 開始/終了時刻フォールバックもテンプレ既定から埋まる（Low・同根）。
+    assert.equal(pf.rows[0].from, disp.rows[0].from, `${date} の最初の時間帯の開始が表示と一致する`);
+  }
+
+  // 06/23: ねらいを明示保存した日。テンプレ既定でなくコーチの明示値が入り、表示とも一致する（マージが上書きを勝たせる）。
+  const disp23 = displayByDate['2026-06-23'];
+  const pf23 = prefill['2026-06-23'];
+  assert.equal(pf23.aim, disp23.aim, '明示保存したねらいはその値が入り表示と一致する');
+  assert.equal(pf23.aim, '既存の練習を正しく整理して、より上手くなれるようにする', '明示保存値がテンプレ既定に上書きされていない');
+});

@@ -1098,6 +1098,35 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
   // エンジンと同じ正規化済みドリル集合（drills）から作るので、手編集の候補が自動生成の枠分けと揃う。
   const blockCandidates = buildBlockCandidates(drills);
 
+  // ── editor「他の日からコピー」用: 表示中4週間に縛られないテナント全件のコーチ上書き日 ──────
+  // weeks[].days は表示アーク月の4週間分だけ（WEEKS_PER_ARC_MONTH）。コピー元候補をそれに限定すると、
+  // 表示範囲外（先月・来月等）に保存済みの日が到達不能になる。overrides は既にテナント全件を持つ
+  // （storage.getOverrides() の契約）ので、layout:"two-col" の保存日を全部 toTwoColDay で表示日形へ変換する。
+  //
+  // 土台(day)は「曜日ごとの既定値テンプレ」を必ず使う（空オブジェクト土台は禁止）。理由: toTwoColDay は
+  // ねらい・場所・開始/終了を `ov.値 || day.値` で解決するため、コーチが明示保存していない項目（例: ねらい未入力の
+  // 水木）は土台 day の既定値で埋まる。空オブジェクト土台だと未入力項目が空欄になり、カレンダー表示
+  // （applyOverridesWithEmpty→toAuthoredDay がエンジン日を土台にする）と食い違う（表示にはねらい文が出るのに
+  // フォーム/コピーは空欄になる）。seedDays は各週 padToFullWeek(buildDays(...)) ＝表示が土台に使うのと同じ
+  // エンジン日なので、その曜日別テンプレを土台に使えば表示と一致する。
+  const templateByWeekday = {};
+  for (const w of weeks) {
+    for (const sd of (w.seedDays || [])) {
+      if (sd && sd.day && !(sd.day in templateByWeekday)) templateByWeekday[sd.day] = sd;
+    }
+  }
+  // 表示中の週に既にある coach 日は、その週のエンジン日を土台に正しく構築済み＝カレンダー表示と完全一致。
+  // 表示範囲外の保存日だけ曜日テンプレを土台に同じ変換で作る（テンプレが無い曜日は最小限の空土台へフォールバック）。
+  const coachDayByDate = {};
+  for (const w of weeks) {
+    for (const d of (w.days || [])) {
+      if (d && d.source === 'coach' && d.twoCol && d.date) coachDayByDate[d.date] = d;
+    }
+  }
+  const allCoachDays = overrides
+    .filter((ov) => ov && ov.source === 'coach' && ov.layout === 'two-col' && typeof ov.date === 'string')
+    .map((ov) => coachDayByDate[ov.date] || toTwoColDay(templateByWeekday[ov.weekday] || {}, ov, ov.date));
+
   return {
     // テナント名（解決後の tenant.name）。マルチテナント前のローカル静的ビルドは従来の現行校名にフォールバック。
     school: school ?? '南中野中',
@@ -1109,6 +1138,7 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
     days, // アンカー週（先頭期間）の days。日レベルはこれを使う（後方互換）。
     seedDays, // アンカー週のエンジン叩き台（表示しない・「自動で叩き台を入れる」の自動入力ソース）。
     weeks, // 週ピッカー実切替用の複数週（先頭=アンカー）。
+    allCoachDays, // editor「他の日からコピー」候補源: 表示週に縛られないテナント全件のコーチ上書き日（twoCol）。
     months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,
     goalKeys, // 目標編集導線が目標保存APIへ渡す scope/key の単一真実源（weekKey/monthArcKey）
