@@ -179,7 +179,8 @@ export function goalEditorScript() {
         });
     }
     save.addEventListener('click',doSave);
-    input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();doSave();}});
+    // Enterでは確定・保存しない（日本語IME変換確定のEnterで誤保存されるのを防ぐ）。
+    // 保存は常に明示の「保存」ボタン経由に統一する（単一行入力なのでEnterは何もしない）。
   }
   document.querySelectorAll('[data-goal-edit]').forEach(attach);
 })();`;
