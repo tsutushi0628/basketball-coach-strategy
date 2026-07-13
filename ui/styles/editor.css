@@ -1,0 +1,73 @@
+
+/* 編集パネル外殻: surface面 + line-2 で囲う（border帯ではなく全周罫線） */
+.ed-panel{background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.ed-panel[hidden]{display:none}
+/* パネル見出し: H3段(17px) */
+.ed-h{font-size:17px;font-weight:700;color:var(--orange-deep);letter-spacing:-.01em;margin-bottom:12px}
+/* フィールド行 */
+.ed-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.ed-lab{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em}
+/* 入力部品: 角丸・1px hair・surface背景の既存トーン */
+.ed-in,.ed-sel,.ed-time{appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:9px 12px;width:100%;line-height:1.4}
+.ed-in:focus,.ed-sel:focus,.ed-time:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+/* 複数行テキスト（この日のねらい）。数行分の高さ＋縦リサイズだけ足す（見た目は .ed-in を踏襲） */
+textarea.ed-in{min-height:64px;resize:vertical}
+.ed-time{width:auto;min-width:108px;font-variant-numeric:tabular-nums}
+/* 時間行カード: bg面 + hair で囲う（全周罫線・帯にしない） */
+.ed-row{background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;margin-bottom:12px}
+.ed-row-top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:10px}
+.ed-times{display:inline-flex;align-items:center;gap:6px}
+.ed-times .ed-sep{color:var(--mute);font-size:14px}
+.ed-rownum{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em}
+.ed-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;user-select:none}
+.ed-check input{width:16px;height:16px;accent-color:var(--orange);cursor:pointer}
+/* セル束（男女2列 or 共通1列） */
+.ed-cells{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ed-cells.ed-cells-both{grid-template-columns:1fr}
+@media (max-width:580px){.ed-cells{grid-template-columns:1fr}}
+.ed-cell{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px}
+.ed-cell-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ed-cell-team{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--mute);white-space:nowrap}
+/* 1ドリル=1行（グリップ｜ドリル名｜メモ｜ゴミ箱）。改行させず横一列に収める */
+.ed-item{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-bottom:6px}
+.ed-item .ed-name{flex:2 1 0;min-width:0}
+.ed-item .ed-note{flex:1 1 0;min-width:0}
+/* 小ボタン群（追加・削除）: btn と同じ surface+hair トーン（pill）。色帯にしない */
+.ed-mini{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:5px 11px;white-space:nowrap;transition:transform .14s ease,color .14s ease}
+.ed-mini:hover{transform:translateY(-1px);color:var(--orange)}
+.ed-mini:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* アイコンのみボタン（行右端のゴミ箱）。背景なし・色帯にしない */
+.ed-iconbtn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;margin-left:auto;flex:0 0 auto;background:transparent;border:1px solid transparent;border-radius:8px;color:var(--mute);transition:color .14s ease,background .14s ease}
+.ed-iconbtn:hover{background:var(--bg);color:var(--orange)}
+.ed-iconbtn:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+.ed-iconbtn svg{display:block;width:16px;height:16px}
+/* 並べ替えグリップ（掴む所）。行に入力欄があるので行全体ではなくハンドルで掴む */
+.ed-grip{appearance:none;cursor:grab;display:inline-flex;align-items:center;justify-content:center;padding:2px;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--mute);flex:0 0 auto;touch-action:none}
+.ed-grip:hover{color:var(--ink);background:var(--bg)}
+.ed-grip:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+.ed-grip:active{cursor:grabbing}
+.ed-grip svg{display:block;width:16px;height:16px}
+.ed-grip-row{margin-right:2px}
+.ed-grip-item{width:24px;height:28px}
+.ed-grip-item svg{width:14px;height:14px}
+/* ドラッグ中のプレースホルダ（着地位置）= SortableJS の ghost。点線で落ちる場所を示す */
+.ed-row.sortable-ghost,.ed-item.sortable-ghost{opacity:.45;background:var(--bg);outline:2px dashed var(--orange);outline-offset:-2px}
+.ed-row.sortable-chosen,.ed-item.sortable-chosen{background:var(--surface)}
+.ed-row.sortable-drag,.ed-item.sortable-drag{opacity:.9}
+.ed-del{color:var(--terra)}
+.ed-del:hover{color:var(--orange-deep)}
+.ed-cell-actions{margin-top:4px}
+/* パネル操作（保存・キャンセル・行追加） */
+.ed-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:6px;padding-top:14px;border-top:1px solid var(--line)}
+/* 確認の小テキスト（書き出しコピー後など） */
+.ed-msg{font-size:12px;color:var(--orange-deep);font-weight:700;margin-left:4px;align-self:center}
+.ed-msg:empty{display:none}
+/* 書き出しフォールバック用 textarea（クリップボード不可時のみ表示） */
+.ed-export-area{width:100%;min-height:160px;font:inherit;font-size:12px;line-height:1.5;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px;margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre}
+.ed-export-area[hidden]{display:none}
+/* 他の日からコピーの行（セレクタ＋取り込みボタン） */
+.ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* コピー元が1件も無いときの案内文（border帯にせず既存 mute トーンの地の文で出す） */
+.ed-hint{font-size:12px;color:var(--mute);line-height:1.5;margin:0}
+/* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */
+.cal-go:disabled,.cal-go-week:disabled,.cal-go-dayweek:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}

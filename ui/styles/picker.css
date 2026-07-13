@@ -1,0 +1,33 @@
+
+/* Hallmark · macrostructure: index-first-list · genre: modern-minimal
+   · pre-emit critique: P5 H5 E5 S5 R5 V5
+   · tokens: render-shared.mjs (no inline color/font) · nav: none · footer: Ft2 inline single-line
+   · contrast: pass (46-50) · slop: pass (51-55) · mobile: pass (36,59,61-69) */
+:root{/*TOKENS*/}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);overflow-x:clip}
+body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;min-height:100dvh;display:flex;flex-direction:column}
+a{color:var(--orange-deep)}
+.pk-main{flex:1 1 auto;width:100%;max-width:760px;margin:0 auto;padding:72px 22px 40px}
+@media (max-width:560px){.pk-main{padding:44px 18px 32px}}
+.pk-kicker{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--orange-deep);margin-bottom:10px}
+.pk-title{font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.25;overflow-wrap:anywhere;min-width:0}
+.pk-lede{font-size:14px;color:var(--mute);line-height:1.7;margin-top:12px;max-width:46ch}
+/* 選択リスト: 縦積み・押せる行（surface面 + 全周hairline）。3等分グリッドにしない。 */
+.pk-list{display:flex;flex-direction:column;gap:10px;margin-top:24px;max-width:520px}
+.pk-row{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:16px 18px;text-decoration:none;color:var(--ink);transition:transform .16s ease,border-color .16s ease}
+.pk-row:hover{transform:translateY(-2px);border-color:var(--orange-soft)}
+.pk-row:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
+.pk-row:active{transform:translateY(0)}
+.pk-body{flex:1 1 auto;min-width:0}
+.pk-name{font-size:17px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.pk-role{font-size:12px;color:var(--mute);margin-top:3px}
+/* 行末の進む矢印（>）はSVG線画（emoji不使用）。 */
+.pk-go{flex:0 0 auto;color:var(--orange-deep);display:inline-flex;align-items:center}
+.pk-go svg{display:block;width:18px;height:18px}
+.pk-empty{margin-top:24px;font-size:14px;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:18px 20px;max-width:520px;line-height:1.7}
+.pk-foot{flex:0 0 auto;width:100%;max-width:760px;margin:0 auto;padding:24px 22px 32px;color:var(--mute);font-size:11px;letter-spacing:.04em}
+@media (prefers-reduced-motion:reduce){
+  .pk-row{transition:none}
+  .pk-row:hover{transform:none}
+}

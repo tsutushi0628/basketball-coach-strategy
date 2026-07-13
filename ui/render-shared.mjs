@@ -9,273 +9,34 @@
  * gradient見出し・全幅centered hero・定型AIナビ）は基盤から排除している。
  */
 
-/** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。
+import { loadCss } from './styles/load-css.mjs';
+
+/** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。実体は styles/tokens.css。
  * T5: --shadow/--shadow-soft/--inset を削除し、border+面の濃淡2値で区切りを表現する。
  * 残すのは: 強い区切り=--line-2（セクション外周）、弱い区切り=--hair（カード・行間）。
  */
-export const TOKENS = `
-  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
-  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
-  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
-  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
-  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
-  --scrim:rgba(42,32,26,.32);
-  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
-  --print-bg:#fff;
-`;
+export const TOKENS = loadCss(import.meta.url, 'styles/tokens.css');
 
-/** 共通ベースCSS。T5: shadow廃止→border+面の濃淡2値で区切りを表現。
+/** styles/*.css 側で TOKENS の挿入位置を示す共通マーカー（auth-page.css・picker.css も同じ印を使う）。 */
+const TOKENS_MARKER = '/*' + 'TOKENS' + '*/';
+
+/**
+ * .css を読み、中の TOKENS マーカーへ実際のトークン値を差し込んで返す（base.css・auth-page.css・
+ * picker.css の3箇所で共通利用。呼び出し元自身の import.meta.url を渡すこと＝loadCss と同じ規約）。
+ * @param {string} callerUrl 呼び出し元モジュールの import.meta.url
+ * @param {string} relPath 呼び出し元ディレクトリからの相対パス
+ * @returns {string}
+ */
+export function loadCssWithTokens(callerUrl, relPath) {
+  return loadCss(callerUrl, relPath).replace(TOKENS_MARKER, () => TOKENS);
+}
+
+/** 共通ベースCSS。実体は styles/base.css（トークン挿入用コメントの位置に TOKENS を差し込む）。
+ * T5: shadow廃止→border+面の濃淡2値で区切りを表現。
  * T6 タイポ5段（27/22/17/14/12・約1.25比率）: H1=27 / H2=22 / H3=17 / 本文=14 / 補助=12。
  * 見出しは必ず本文(14px)よりサイズ上位に置く（10px見出しラベル禁止）。
  * 枠線は「押せるもの（ボタン・タブ）」と「カード面」のみ。静的メタ情報はピル化しない。 */
-export const BASE_CSS = `
-:root{${TOKENS}}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--ink)}
-body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
-.wrap{max-width:840px;margin:0 auto;padding:32px 18px 80px}
-a{color:var(--orange-deep)}
-
-/* レベル切替＆配布ツールバー */
-.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
-/* T5: btn は surface+hair（shadow廃止）・14px（本文段） */
-.btn{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--ink);border-radius:999px;padding:10px 18px;font:inherit;font-size:14px;letter-spacing:.02em;white-space:nowrap;transition:transform .16s ease,color .16s ease}
-.btn:hover{transform:translateY(-2px);color:var(--orange)}
-.btn:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
-.btn-primary:hover{color:var(--orange-ink)}
-.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-width:320px;margin-bottom:16px}
-/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。タブは4等分の等幅。 */
-.lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 0;font:inherit;font-size:17px;font-weight:600;text-align:center;transition:transform .16s ease}
-.lvtab:hover{transform:translateY(-2px)}
-.lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
-.lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.daytabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
-/* T5: daytab は surface+hair・15px（H3段相当） */
-.daytab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:52px;transition:transform .16s ease}
-/* T6: small は 12px（補助段） */
-.daytab small{font-weight:400;font-size:12px;opacity:.82}
-.daytab:hover{transform:translateY(-2px)}
-.daytab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
-
-/* T5: modetoggle は bg+hair（inset廃止） */
-.modetoggle{display:inline-flex;gap:6px;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:4px}
-.modetoggle .mt{appearance:none;border:none;cursor:pointer;background:transparent;color:var(--mute);border-radius:999px;padding:7px 15px;font:inherit;font-size:14px;font-weight:600;white-space:nowrap;transition:color .16s ease}
-/* T5: mt.on は surface+hair */
-.modetoggle .mt.on{background:var(--surface);color:var(--orange-deep);border:1px solid var(--hair)}
-.modetoggle .mt:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-
-/* 男女チップ */
-.gchip{display:inline-flex;align-items:center;gap:6px;font-weight:700}
-.gchip::before{content:"";width:12px;height:12px;border-radius:4px;flex:0 0 auto}
-.gchip.boys::before{background:var(--boys)}
-.gchip.girls::before{background:var(--girls)}
-
-/* T6: 日ヘッダ は surface+line-2。dh-t は 22px（H2段） */
-.dayhead{background:var(--surface);border-radius:14px;border:1px solid var(--line-2);padding:16px 20px;margin-bottom:14px}
-.dayhead .dh-t{font-size:22px;font-weight:700;letter-spacing:-.01em}
-/* T6: dh-court は素テキスト12px（静的メタはピル化しない） */
-.dayhead .dh-court{font-size:12px;color:var(--mute);font-weight:600;margin-left:10px;vertical-align:middle}
-/* T6: dh-aim は 14px（本文段）・面の濃淡のみ。white-space:pre-line で入力の改行(\n)を改行表示する（escは維持＝HTML無害化） */
-.dayhead .dh-aim{margin-top:11px;font-size:14px;font-weight:600;line-height:1.5;background:var(--bg);border-radius:10px;padding:11px 15px;white-space:pre-line}
-/* T6: dh-aiml は 17px/700（H3段・見出しは本文より大きく） */
-.dayhead .dh-aiml{display:block;font-size:17px;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
-/* 印刷専用の右側目標（月/週）。画面では非表示（画面は day レベルの目標バーで見せる） */
-.dayhead .dh-goals{display:none}
-.inote{font-size:14px;line-height:1.6}
-.inote b{color:var(--orange-deep);font-weight:700}
-
-/* 区画（2部構成の日＝火）の部ヘッダ。日ヘッダの下に各部の見出しとして並べる。 */
-.parthead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:18px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line-2)}
-/* T6: ph-no は 12px/700（補助段・アイブロウ） */
-.parthead .ph-no{font-size:12px;font-weight:700;color:var(--orange-ink);background:var(--orange);border-radius:999px;padding:2px 10px;letter-spacing:.04em}
-/* T6: ph-label は 17px/700（H3段・部見出し） */
-.parthead .ph-label{font-size:17px;font-weight:700;letter-spacing:-.01em}
-/* T6: ph-meta は 12px（補助段） */
-.parthead .ph-meta{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
-
-/* 2列グリッド（board/handout用・timeline は中央スパイン版を使用） */
-.twocol{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
-.twocol-header{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px}
-.tcrow{display:contents}
-/* T5: tccell は border（shadow廃止） */
-.tccell{background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:9px 12px;font-size:14px}
-.tccell.tc-coach{background:var(--surface);border:1px solid var(--line-2)}
-.tccell.tc-self{background:var(--bg);border:1px solid var(--hair)}
-.tc-shared{grid-column:1/-1;background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:8px 13px;font-size:14px;color:var(--mute)}
-/* T6: tc-from は 12px/700（補助段） */
-.tc-from{font-size:12px;color:var(--orange-deep);font-weight:700;margin-bottom:3px}
-.tc-name{font-size:14px;font-weight:700;line-height:1.4}
-/* T6: tc-half は 12px（補助段） */
-.tc-half{font-size:12px;letter-spacing:.04em;color:var(--mute);margin-bottom:3px}
-.tc-comp{display:block;font-size:12px;color:var(--mute);margin-top:3px;line-height:1.5}
-@media (max-width:580px){
-  .twocol,.twocol-header{grid-template-columns:1fr}
-  .tc-shared{grid-column:1}
-}
-@media print{
-  .twocol,.twocol-header{grid-template-columns:1fr 1fr}
-  .tc-shared{grid-column:1/-1}
-}
-
-/* 目標（共通の今月/今週/定性 ＋ 男女別KPI） */
-/* T5: goals は surface+hair（shadow廃止） */
-.goals{background:var(--surface);border-radius:14px;border:1px solid var(--hair);padding:18px 20px}
-/* T6: goals h3 は 22px/700（H2段・セクション見出し） */
-.goals h3{font-size:22px;margin-bottom:12px;color:var(--orange-deep);letter-spacing:-.01em;font-weight:700}
-.gline{display:flex;gap:13px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
-.gline:last-child{border-bottom:none}
-/* T6: .lab は 17px/700（H3段・行見出しは本文より大きく） */
-.gline .lab{flex:0 0 64px;font-size:17px;color:var(--orange-deep);font-weight:700}
-/* T5: .txt は 14px（本文段） */
-.gline .txt{font-size:14px;line-height:1.55}
-.kgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
-/* T5: kteam は bg+hair（inset廃止） */
-.kteam{background:var(--bg);border-radius:10px;border:1px solid var(--hair);padding:13px 15px}
-/* T5: kth は 17px（H2段） */
-.kteam .kth{font-size:17px;font-weight:700;margin-bottom:9px}
-.kpis{display:grid;grid-template-columns:1fr;gap:8px}
-/* T5: kpi.name は 12px（補助段） */
-.kpi .name{font-size:12px;color:var(--mute);margin-bottom:5px}
-/* T6: kpi.val は 17px/700（データ強調） */
-.kpi .val{font-size:17px;font-weight:700}
-.kpi .val .arrow{color:var(--mute);font-weight:400;font-size:12px;margin:0 4px}
-.kpi .val .tgt{color:var(--orange-deep)}
-.kpi .bar{height:6px;border-radius:999px;background:var(--orange-soft);margin-top:6px;overflow:hidden}
-.kpi .bar>span{display:block;height:100%;border-radius:999px;background:var(--orange)}
-
-/* §3.3: タグは文字ラベルのみ（ピル廃止・自走は空文字で非表示）。12px/700（補助段） */
-.tag{flex:0 0 auto;font-size:12px;font-weight:700;white-space:nowrap;letter-spacing:.04em}
-.tag-coach{color:var(--orange-deep)}
-.tag-lec{color:var(--terra-ink)}
-/* §3.3: mode-mark は dot + テキストの横並び。dot は 6px 丸●（コーチ付き=orange） */
-.mode-mark{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto}
-.mode-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.coach-dot{background:var(--orange)}
-.alt{color:var(--mute);font-size:12px;margin-top:3px}
-.alt b{color:var(--orange-deep);font-weight:700;font-style:normal}
-/* drill-trig: ドリル名タップ要素（ハッシュ駆動詳細を開く）。インライン・border なし */
-.drill-trig{background:none;border:none;padding:0;cursor:pointer;font:inherit;color:var(--ink);text-decoration:none;text-align:left}
-.drill-trig:hover{color:var(--orange-deep);text-decoration:underline}
-/* T5: vid は bg+hair（inset廃止）・12px */
-.vid{display:inline-flex;align-items:center;gap:3px;color:var(--orange-deep);text-decoration:none;font-size:12px;background:var(--bg);padding:2px 9px;border-radius:999px;border:1px solid var(--hair)}
-.vid:hover{text-decoration:underline}
-
-/* 年の流れ（男子行・女子行の2段） */
-.arcrows{display:flex;flex-direction:column;gap:10px}
-.arcrow-label{font-size:12px;font-weight:700;margin-bottom:-4px}
-.arcwrap{display:flex;gap:5px;align-items:stretch;flex-wrap:nowrap;overflow-x:auto}
-/* T5: arccell は surface+hair（shadow廃止）・10px */
-.arccell{flex:1 1 0;min-width:58px;background:var(--surface);border-radius:10px;border:1px solid var(--hair);padding:9px;display:flex;flex-direction:column;gap:4px}
-.arccell.peak2{background:var(--orange-soft);border-color:var(--orange-soft)}
-/* T5: peak1 は bg+hair（inset廃止） */
-.arccell.peak1{background:var(--bg);border:1px solid var(--hair)}
-.arccell.arccell-now{outline:2px solid var(--orange);outline-offset:1px}
-/* T5: arccell .am は 12px（補助段） */
-.arccell .am{font-size:12px;font-weight:700}
-/* T6: arccell .ap は 12px（補助段） */
-.arccell .ap{font-size:12px;color:var(--mute);line-height:1.4;min-height:34px}
-/* 文字色はテーマ非依存の固定淡色。明色テーマ（sky/lime/gold）では --orange-ink が暗色になり、
- * 濃い --orange-deep 地の上で読めなくなるため --orange-ink から切り離す（deep は全テーマで地より
- * 十分濃いので固定淡色は必ず読める）。design §1.2.1 / §5.4 のインク反転付帯修正。 */
-.peakchip{font-size:12px;background:var(--orange-deep);color:var(--surface);border-radius:999px;padding:2px 8px;font-weight:700;align-self:flex-start}
-.nowchip{font-size:12px;border-radius:999px;padding:2px 8px;font-weight:700;white-space:nowrap}
-.nowchip.boys{background:var(--boys);color:var(--orange-ink)}
-.nowchip.girls{background:var(--girls);color:var(--girls-ink)}
-.arclegend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:var(--mute)}
-.arclegend .lk{display:inline-flex;align-items:center;gap:6px}
-.arclegend .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
-@media (max-width:680px){.arcwrap{flex-wrap:wrap}.arccell{flex-basis:30%;min-width:58px}}
-
-/* 月（原典フェーズ＋主眼＋KPI・共通） */
-/* T5: monthcard は surface+hair（shadow廃止） */
-.monthcard{background:var(--surface);border-radius:14px;border:1px solid var(--hair);padding:18px 20px}
-.monthcard .mc-h{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
-/* T6: mc-phase は素テキスト12px/700（静的メタはピル化しない） */
-.monthcard .mc-phase{font-size:12px;color:var(--orange-deep);font-weight:700;letter-spacing:.04em}
-/* T6: mc-mon は 17px/700（H3段） */
-.monthcard .mc-mon{font-size:17px;font-weight:700}
-/* T5: mc-aim は 14px（本文段） */
-.monthcard .mc-aim{font-size:14px;line-height:1.6}
-.monthcard .mc-peak{font-size:12px;color:var(--orange-deep);font-weight:700;margin-top:10px}
-.monthcard .mc-kpi{margin-top:11px}
-/* T6: .kk は 17px/700（H3段・見出しは本文より大きく） */
-.monthcard .mc-kpi .kk{font-size:17px;color:var(--orange-deep);font-weight:700;margin-bottom:5px}
-/* T5: .kv は 12px（補助段） */
-.monthcard .mc-kpi .kv{font-size:12px;color:var(--mute);line-height:1.6}
-
-/* T6: lvh は 22px/700（H2段） */
-.lvh{font-size:22px;color:var(--orange-deep);font-weight:700;letter-spacing:-.01em;margin:6px 2px 14px}
-/* T5: note は surface+hair（shadow廃止）・12px */
-.note{font-size:12px;color:var(--mute);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 15px;margin:14px 0;line-height:1.6}
-.assume{font-size:12px;color:var(--mute);line-height:1.7;margin-top:6px}
-.assume li{margin-left:18px}
-/* 空状態（未入力の日/週/月/年）: surface面＋hair全周罫線（border帯にしない）。文言は本文段14px・
- * 導線は既存 .btn を流用。emoji・色帯・gradient・偽chrome なし（design-hallmark準拠）。 */
-.emptystate{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:26px 22px;text-align:center}
-.emptystate .es-text{font-size:14px;color:var(--mute);line-height:1.6}
-.emptystate .es-actions{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:14px}
-.es-inline{font-size:12px;color:var(--mute)}
-/* フッター: タイトルを小さく置くだけ（主役は計画本体） */
-.foot{margin-top:26px;color:var(--mute);font-size:11px;text-align:center;letter-spacing:.04em}
-/* 月/週の目標バー（この日の狙いの上・横2分割） */
-.goalbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.gb-cell{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:11px 14px}
-.gb-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:3px}
-.gb-val{font-size:14px;font-weight:600;line-height:1.5}
-.gpr b{color:var(--orange-deep);font-weight:700;margin-right:5px}
-@media (max-width:580px){.goalbar{grid-template-columns:1fr}}
-
-@media (max-width:680px){
-  .kgrid{grid-template-columns:1fr}
-  .arccell{flex-basis:30%}
-}
-/* T5: print規則 — 画面と印刷が同一構造（罫線ベース）。いま選んでいるタブ（日/週/月/年）と
- * その中で表示中の日だけを印刷する（hidden は印刷でも非表示のまま）。操作系は非表示・背景は #fff に。 */
-@media print{
-  /* 紙面の余白は印刷可能な最小域まで詰める（1ページ収容の分母を稼ぐ）。 */
-  @page{margin:6mm}
-  /* 印刷時に背景色・面色が間引かれるブラウザ既定を解除（無いと以下の色施策が全て無効化される）。 */
-  *{-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}
-  body{background:var(--print-bg)}
-  /* ページ背景（html/body）の地色を印刷限定で透明化する。html は元々 --bg（薄いピーチ）を持ち、
-   * body だけを print-bg で上書きしても html 側の地色が縮小後の余白・最下部にはみ出して見える
-   * ため、html/body 両方の背景を明示的に消す（背景画像も含め除去）。画面表示は不変。 */
-  html,body{background:transparent!important;background-color:transparent!important;background-image:none!important}
-  .toolbar,.levels,.daytabs,.modetoggle{display:none}
-  [data-print-hide]{display:none!important}
-  .interact[hidden]{display:none!important}
-  /* 1日=1ページに収めるため印刷時のみ全体を縮小。ブロック数・注記が多い日でも1ページに収まる縮小率まで
-   * 実測（Playwright実PDF出力でのページ数計測）した値に引き下げ済み（.92→.84）。画面用の目標バーは隠し、
-   * 目標は日ヘッダ右に横並びで出す。 */
-  .wrap{max-width:none;padding:0;zoom:.84}
-  .goalbar{display:none}
-  /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める。
-   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。パディング・余白は
-   * 1ページ収容のため詰め気味にする（10px 14px→6px 12px 等）。 */
-  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:6px 12px;margin-bottom:4px;background:var(--orange-wash)}
-  .dayhead .dh-main{flex:1 1 auto;min-width:0}
-  .dayhead .dh-t{color:var(--orange-deep)}
-  .dayhead .dh-aim{margin-top:3px;padding:4px 9px}
-  .dayhead .dh-aiml{color:var(--orange-deep)}
-  .dayhead .dh-goals{display:flex;flex-direction:column;gap:8px;flex:0 0 34%;max-width:34%}
-  .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
-  .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
-  /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、
-   * side-stripeのカード左端色帯は使わない）。影（box-shadow）は印刷では使わない。太らせる強調は残しつつ、
-   * 色はオレンジでなく既存の中立罫線色（line-2）にする（印刷でオレンジを増やさない）。 */
-  .parthead{border-bottom:2px solid var(--line-2)}
-  .tccell.tc-coach{border:1.5px solid var(--line-2)}
-  /* 印刷時: 時刻マーカー以外にも、ドリル行ごとの「コーチ付き」丸ドット・区画見出しの「第N部」バッジ・
-   * 男女ラベル横の色見本（gchip::before）がオレンジ背景を持つ。これらは時刻マーカーと同じ理由（色の意味は
-   * 文字側に残る＝●ドットの代わりにテキスト「コーチ」、バッジの代わりに「第N部」の文字、色見本の代わりに
-   * 「男子」「女子」の文字が既に付いている）で、背景だけを透明化しても情報は失われない。除外を作らず全部消す。 */
-  .coach-dot{background:transparent!important}
-  .ph-no{background:transparent!important}
-  .gchip.boys::before,.gchip.girls::before{background:transparent!important}
-  .drill-overlay{display:none!important}
-}
-`;
+export const BASE_CSS = loadCssWithTokens(import.meta.url, 'styles/base.css');
 
 /**
  * ブロック種別の色（warm系で統一・虹色にしない）。固定6ブロック骨格に対応。

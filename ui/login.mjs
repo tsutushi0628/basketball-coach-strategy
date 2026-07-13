@@ -12,62 +12,12 @@
  * 状態: 待機（ボタン表示）／処理中（ログイン中…）／失敗（再試行可・エラー文言）。
  */
 
-import { TOKENS } from './render-shared.mjs';
+import { loadCssWithTokens } from './render-shared.mjs';
 
 const FB_VERSION = '12.0.0';
 
-/** 認証画面3種で共有する外殻CSS（render-shared のトークンだけで色・書体を当てる）。 */
-export const AUTH_PAGE_CSS = `
-/* Hallmark · macrostructure: focused-task-panel · genre: modern-minimal
-   · pre-emit critique: P5 H5 E5 S5 R5 V5
-   · tokens: render-shared.mjs (no inline color/font) · nav: none · footer: Ft2 inline single-line
-   · contrast: pass (46-50) · slop: pass (51-55) · mobile: pass (36,59,61-69) */
-:root{${TOKENS}}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--ink);overflow-x:clip}
-body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;min-height:100dvh;display:flex;flex-direction:column}
-a{color:var(--orange-deep)}
-/* 中央寄せではなく、上方バイアスで左揃えのカードを置く（全幅centered hero回避）。 */
-.auth-main{flex:1 1 auto;width:100%;max-width:760px;margin:0 auto;padding:80px 22px 40px}
-@media (max-width:560px){.auth-main{padding:48px 18px 32px}}
-/* 認証カード: surface面 + 全周hairline（border帯にしない）。下padを上padより厚くして紙面に沈める。 */
-.auth-card{background:var(--surface);border:1px solid var(--hair);border-radius:18px;padding:34px 34px 44px;max-width:440px}
-@media (max-width:560px){.auth-card{padding:26px 22px 34px}}
-/* かぶせラベル（プロダクト名の上に置く小見出し）。アイブロウの装飾濫用ではなく出自表示の1行のみ。 */
-.auth-kicker{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--orange-deep);margin-bottom:10px}
-.auth-title{font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.25;overflow-wrap:anywhere;min-width:0}
-.auth-lede{font-size:14px;color:var(--mute);line-height:1.7;margin-top:12px;max-width:46ch}
-.auth-cta{margin-top:26px}
-/* ボタンは render-shared の .btn と同型（surface+hair・pill・14px・shadow無し）。8状態を満たす。 */
-.btn{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--ink);border-radius:999px;padding:12px 22px;font:inherit;font-size:14px;font-weight:600;letter-spacing:.02em;white-space:nowrap;transition:transform .16s ease,color .16s ease,background-color .16s ease}
-.btn:hover{transform:translateY(-2px);color:var(--orange)}
-.btn:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.btn:active{transform:translateY(0)}
-.btn:disabled{opacity:.55;cursor:not-allowed;transform:none;color:var(--mute)}
-.btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
-.btn-primary:hover{color:var(--orange-ink)}
-.btn-primary:disabled{background:var(--orange-soft);border-color:var(--orange-soft);color:var(--orange-ink)}
-/* Googleマーク（公式4色SVG・emoji不使用）。ボタン左にインラインで置く。 */
-.btn-g{display:inline-flex;align-items:center;gap:10px;line-height:1}
-.btn-g svg{display:block;width:18px;height:18px;flex:0 0 auto}
-/* 状態メッセージ: 処理中（mute）・失敗（terra）。空のとき高さを予約して検証時のガタつきを防ぐ。 */
-.auth-status{min-height:1.5lh;margin-top:16px;font-size:13px;line-height:1.6}
-.auth-status:empty{min-height:1.5lh}
-.auth-status[data-kind="working"]{color:var(--mute)}
-.auth-status[data-kind="error"]{color:var(--terra);font-weight:600}
-.auth-status[data-kind="ok"]{color:var(--orange-deep);font-weight:600}
-/* 補助ノート（カード内・本文より弱い情報）。 */
-.auth-note{font-size:12px;color:var(--mute);line-height:1.7;margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
-/* フッタ: 1行インライン（Ft2）。4カラムリンク群＋social＋copyright の定型footerにしない。 */
-.auth-foot{flex:0 0 auto;width:100%;max-width:760px;margin:0 auto;padding:24px 22px 32px;color:var(--mute);font-size:11px;letter-spacing:.04em}
-.spin{display:inline-block;width:14px;height:14px;margin-right:7px;vertical-align:-2px;border:2px solid var(--orange-soft);border-top-color:var(--orange);border-radius:50%;animation:auth-spin .7s linear infinite}
-@media (prefers-reduced-motion:reduce){
-  .btn{transition:none}
-  .btn:hover{transform:none}
-  .spin{animation:none}
-}
-@keyframes auth-spin{to{transform:rotate(360deg)}}
-`;
+/** 認証画面3種で共有する外殻CSS（render-shared のトークンだけで色・書体を当てる）。実体は styles/auth-page.css。 */
+export const AUTH_PAGE_CSS = loadCssWithTokens(import.meta.url, 'styles/auth-page.css');
 
 /** Google公式4色マーク（SVG・emoji不使用・1ライブラリ内）。 */
 export const GOOGLE_MARK_SVG =

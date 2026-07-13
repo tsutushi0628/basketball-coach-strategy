@@ -25,6 +25,7 @@
 
 import { PRESET_SWATCHES, THEME_KEYS, DEFAULT_THEME_KEY } from './color-presets.mjs';
 import { esc } from './render-shared.mjs';
+import { loadCss } from './styles/load-css.mjs';
 
 const FB_VERSION = '12.0.0';
 
@@ -332,69 +333,4 @@ window.__getIdToken = async function(){
 }
 
 /** ログインUIのCSS（本番のみ注入。右上固定・印刷非表示・既存トークンのみ）。 */
-export const AUTH_CSS = `
-.ed-authbox{position:fixed;top:12px;right:14px;z-index:50;display:inline-flex;align-items:center;gap:8px}
-.ed-authbox .ed-authlabel{font-size:12px;font-weight:700;color:var(--orange-deep);background:var(--surface);border:1px solid var(--hair);border-radius:999px;padding:5px 11px}
-/* 歯車ボタン（SVG線画・emoji不可）。surface+hair の円形・押せるものなので枠線あり。 */
-.ed-gear{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:transform .16s ease,color .16s ease}
-.ed-gear:hover{transform:translateY(-2px);color:var(--orange)}
-.ed-gear:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.ed-gear[aria-expanded="true"]{color:var(--orange-deep);border-color:var(--line-2)}
-.ed-gear svg{width:18px;height:18px;display:block}
-/* プリセット選択パネル（歯車直下のポップオーバー・16色4列）。 */
-.theme-panel{position:fixed;top:54px;right:14px;z-index:51;width:272px;background:var(--surface);border:1px solid var(--line-2);border-radius:16px;padding:16px 16px 14px}
-.theme-panel[hidden]{display:none}
-.tp-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:3px}
-.tp-title{font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
-.tp-close{appearance:none;border:none;background:none;cursor:pointer;color:var(--mute);padding:2px;line-height:1;border-radius:8px}
-.tp-close:hover{color:var(--orange-deep)}
-.tp-close:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.tp-close svg{width:16px;height:16px;display:block}
-.tp-lede{font-size:12px;color:var(--mute);line-height:1.55;margin-bottom:13px}
-/* 学校・チーム名セクション（スウォッチ格子の上）。tp-* と同トーン・既存トークンのみ。 */
-.ed-name-sec{margin-bottom:14px;padding-bottom:13px;border-bottom:1px solid var(--line)}
-.ed-name-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:6px}
-.ed-name-row{display:flex;gap:7px;align-items:center}
-.ed-name-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:8px 11px;line-height:1.4}
-.ed-name-in:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
-.ed-name-in:disabled{opacity:.6}
-.ed-name-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--orange);color:var(--orange-ink);border:1px solid var(--orange);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
-.ed-name-save:hover{transform:translateY(-1px)}
-.ed-name-save:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.ed-name-save:disabled{opacity:.55;cursor:default;transform:none}
-.ed-name-foot{font-size:12px;line-height:1.5;color:var(--ink);margin-top:6px}
-.ed-name-foot:empty{display:none}
-.ed-name-foot[data-kind="saving"]{color:var(--mute)}
-.ed-name-foot[data-kind="error"]{color:var(--terra);font-weight:600}
-/* 16スウォッチの格子＝4列×4行。押せるものなので各セルは border を持つ。 */
-.tp-swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-.tp-swatches .sw{position:relative;appearance:none;cursor:pointer;background:var(--surface);border:1px solid var(--hair);border-radius:11px;padding:7px 3px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font:inherit;transition:transform .16s ease,border-color .16s ease}
-.tp-swatches .sw:hover{transform:translateY(-2px);border-color:var(--line-2)}
-.tp-swatches .sw:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-/* 選択中: 主色の太縁＋面の濃淡で示す（テーマ非依存に効くよう var(--sw-main)）。 */
-.tp-swatches .sw[aria-pressed="true"]{border-color:var(--sw-main);border-width:2px;padding:6px 2px 5px;background:var(--bg)}
-.sw-dot{width:28px;height:28px;border-radius:50%;overflow:hidden;display:flex;flex:0 0 auto;border:1px solid var(--hair)}
-.sw-dot i{display:block;width:50%;height:100%}
-.sw-dot .a{background:var(--sw-main)}
-.sw-dot .b{background:var(--sw-2nd)}
-.sw-name{font-size:11px;font-weight:700;color:var(--ink);letter-spacing:0;white-space:nowrap;line-height:1.2}
-.sw-check{position:absolute;top:5px;right:5px;width:12px;height:12px;display:none;color:var(--sw-main)}
-.tp-swatches .sw[aria-pressed="true"] .sw-check{display:block}
-/* フッタ状態行（保存中・保存エラー）。 */
-.tp-foot{min-height:1.4lh;margin-top:13px;padding-top:11px;border-top:1px solid var(--line);font-size:12px;line-height:1.55;color:var(--ink)}
-.tp-foot:empty{min-height:0;border-top:none;padding-top:0;margin-top:0}
-.tp-foot[data-kind="saving"]{color:var(--mute)}
-.tp-foot[data-kind="error"]{color:var(--terra);font-weight:600}
-.tp-retry{appearance:none;border:1px solid var(--hair);background:var(--surface);color:var(--orange-deep);cursor:pointer;border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;font-weight:700;margin-left:8px}
-.tp-retry:hover{color:var(--orange);transform:translateY(-1px)}
-.tp-retry:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.spin{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px;border:2px solid var(--orange-soft);border-top-color:var(--orange);border-radius:50%;animation:tp-spin .7s linear infinite}
-@keyframes tp-spin{to{transform:rotate(360deg)}}
-/* 保存中は再選択を抑止する見た目（操作は JS 側で無効化） */
-.tp-swatches[data-busy="true"] .sw{opacity:.6;pointer-events:none}
-@media (max-width:560px){
-  /* 狭幅ではパネルを左右マージン内いっぱいに広げる（100vw はスクロールバー幅で溢れるため使わない）。 */
-  .theme-panel{left:14px;right:14px;width:auto}
-}
-@media print{.ed-authbox,.ed-gear,.theme-panel{display:none}}
-`;
+export const AUTH_CSS = loadCss(import.meta.url, 'styles/auth-client.css');

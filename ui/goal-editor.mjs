@@ -14,6 +14,8 @@
  * 色は既存デザイントークン（var(--orange) 等）だけで当てる。
  */
 
+import { loadCss } from './styles/load-css.mjs';
+
 /**
  * 目標保存失敗時の利用者向け文言を status から決める純関数（themeSaveErrorText と同型）。
  * サーバが返した本文 error があればそれを最優先（出し分けの真実源をサーバへ寄せる）。
@@ -35,36 +37,7 @@ export function goalSaveErrorText(status, serverError) {
 }
 
 /** 目標編集UIのCSS（既存トークンのみ・新規クラスは ge-* に限定。border帯・gradient・emoji・汎用書体なし）。 */
-export const GOAL_EDITOR_CSS = `
-/* 編集導線の小ボタン（既存 ed-mini と同じ surface+hair の pill トーン）。色帯にしない。 */
-.ge-edit{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:3px 11px;margin-left:8px;white-space:nowrap;vertical-align:middle;transition:transform .14s ease,color .14s ease}
-.ge-edit:hover{transform:translateY(-1px);color:var(--orange)}
-.ge-edit:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-/* インライン編集ボックス（保存・取消・状態行）。全周罫線で囲う（帯にしない）。 */
-.ge-box{display:block;margin-top:8px;background:var(--bg);border:1px solid var(--hair);border-radius:10px;padding:10px 12px}
-.ge-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
-.ge-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:8px 11px;line-height:1.4}
-.ge-in:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
-.ge-in:disabled{opacity:.6}
-.ge-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--orange);color:var(--orange-ink);border:1px solid var(--orange);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
-.ge-save:hover{transform:translateY(-1px)}
-.ge-save:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.ge-save:disabled{opacity:.55;cursor:default;transform:none}
-.ge-cancel{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:8px 13px;white-space:nowrap}
-.ge-cancel:hover{color:var(--orange)}
-.ge-cancel:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.ge-foot{font-size:12px;line-height:1.5;color:var(--ink);margin-top:6px}
-.ge-foot:empty{display:none}
-.ge-foot[data-kind="saving"]{color:var(--mute)}
-.ge-foot[data-kind="error"]{color:var(--terra);font-weight:600}
-/* 年タブの狭い arc月セル用: トリガは絶対配置（高さに影響させない）、編集ボックスは画面下中央のオーバーレイ。 */
-.arccell[data-goal-edit]{position:relative}
-.ge-edit-abs{position:absolute;top:4px;right:4px;margin-left:0;padding:2px 7px;font-size:11px}
-.ge-scrim{position:fixed;inset:0;background:var(--scrim);z-index:59}
-.ge-box-overlay{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;width:min(92vw,420px);margin-top:0;background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:14px 16px}
-.ge-ov-title{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:9px}
-@media print{.ge-edit,.ge-box,.ge-box-overlay,.ge-scrim{display:none!important}}
-`;
+export const GOAL_EDITOR_CSS = loadCss(import.meta.url, 'styles/goal-editor.css');
 
 /**
  * 目標編集UIのクライアントJS（IIFE文字列）。pattern-timeline の render() で <script> に差し込む。
