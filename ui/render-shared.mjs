@@ -233,24 +233,28 @@ a{color:var(--orange-deep)}
 /* T5: print規則 — 画面と印刷が同一構造（罫線ベース）。いま選んでいるタブ（日/週/月/年）と
  * その中で表示中の日だけを印刷する（hidden は印刷でも非表示のまま）。操作系は非表示・背景は #fff に。 */
 @media print{
-  @page{margin:8mm}
+  /* 紙面の余白は印刷可能な最小域まで詰める（1ページ収容の分母を稼ぐ）。 */
+  @page{margin:6mm}
   /* 印刷時に背景色・面色が間引かれるブラウザ既定を解除（無いと以下の色施策が全て無効化される）。 */
   *{-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}
   body{background:var(--print-bg)}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
-  /* 1日=1ページに収めるため印刷時のみ全体を微縮小。画面用の目標バーは隠し、目標は日ヘッダ右に横並びで出す */
-  .wrap{max-width:none;padding:0;zoom:.92}
+  /* 1日=1ページに収めるため印刷時のみ全体を縮小。ブロック数・注記が多い日でも1ページに収まる縮小率まで
+   * 実測（Playwright実PDF出力でのページ数計測）した値に引き下げ済み（.92→.84）。画面用の目標バーは隠し、
+   * 目標は日ヘッダ右に横並びで出す。 */
+  .wrap{max-width:none;padding:0;zoom:.84}
   .goalbar{display:none}
   /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める。
-   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。 */
-  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:10px 14px;margin-bottom:8px;background:var(--orange-wash)}
+   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。パディング・余白は
+   * 1ページ収容のため詰め気味にする（10px 14px→6px 12px 等）。 */
+  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:6px 12px;margin-bottom:4px;background:var(--orange-wash)}
   .dayhead .dh-main{flex:1 1 auto;min-width:0}
   .dayhead .dh-t{color:var(--orange-deep)}
-  .dayhead .dh-aim{margin-top:5px;padding:7px 11px}
+  .dayhead .dh-aim{margin-top:3px;padding:4px 9px}
   .dayhead .dh-aiml{color:var(--orange-deep)}
-  .dayhead .dh-goals{display:flex;flex-direction:column;gap:14px;flex:0 0 34%;max-width:34%}
+  .dayhead .dh-goals{display:flex;flex-direction:column;gap:8px;flex:0 0 34%;max-width:34%}
   .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
   .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
   /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、

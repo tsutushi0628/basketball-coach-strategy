@@ -958,12 +958,25 @@ const PATTERN_CSS = `
    の両モード）共通＝モードで時刻の見た目を変えない。 */
 .spine-clk .tk{font-size:18px;font-weight:700;color:var(--ink);background:var(--bg);padding:0 4px;white-space:nowrap;text-shadow:none}
 .spine-dot{width:9px;height:9px;border-radius:50%}
+.spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 /* 印刷時: 時刻直後のクロックドットは構造マーカーに留め、画面用の色分け（ブロックtint／分岐点オレンジ）は
    中和する（色の意味＝ブロック種別はカード見出し側の tll/tll-lg 文字色で残るため、ドットでの重複表示だけを
    落とす＝情報は失わない）。画面の見た目は変えない（@media print限定）。背景を透明化して消す（グレー丸へ
-   の置換ではなく、マーカー自体を見せない）。border/box-shadow は本要素に元々存在しないため上書き不要。 */
-@media print{.spine-dot{background:transparent!important}}
-.spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
+   の置換ではなく、マーカー自体を見せない）。border/box-shadow は本要素に元々存在しないため上書き不要。
+   .tlclock::after（単日タイムライン・menuTimelineの時刻ドット）も同じ理由で対象に含める。既定は
+   var(--t,var(--orange)) で --t 未指定時にオレンジへフォールバックするため（.tlclock は .tlcard と兄弟関係
+   で --t を継承しない＝常時オレンジ実測済み）。tlrow-end側の --mute 上書き（本ファイル828行目付近）より
+   詳細度が低いため !important で統一的に透明化する（終了行を含め全ドットを消し、色の意味はカード見出し
+   文字色側に残す）。 */
+@media print{.spine-dot,.tlclock::after{background:transparent!important}}
+/* 印刷時: 1日=1ページに収めるため、行間・カード内パディングを詰めて縦の余白を削る（画面表示は不変）。
+   ブロック数・注記が多い日は既定余白のままだと2ページに溢れるため、可読性を保てる範囲で圧縮する。 */
+@media print{
+  .tlrow{margin-bottom:2px}
+  .tlcard{padding:4px 12px}
+  .tlh{margin-bottom:1px}
+  .tlbody{gap:2px}
+}
 
 /* ── 上書き日の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */
 /* 各セルは見出し(tll-lg=16px)を上、itemリスト(tdn=14px)を下に積む縦構成 */
