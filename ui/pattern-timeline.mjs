@@ -976,6 +976,9 @@ const PATTERN_CSS = `
   .tlcard{padding:4px 12px}
   .tlh{margin-bottom:1px}
   .tlbody{gap:2px}
+  /* 時刻セル(.tk)の地色マスク背景（var(--bg)＝薄いピーチ）は画面用のトリック（連結線を隠すため）で、
+     印刷では body 側の地色を透明化するため塗り自体が不要かつ浮いて見える。印刷限定で背景を消す。 */
+  .tk,.spine-clk .tk{background:transparent!important;background-color:transparent!important;background-image:none!important}
 }
 
 /* ── 上書き日の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */

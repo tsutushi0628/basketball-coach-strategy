@@ -238,6 +238,10 @@ a{color:var(--orange-deep)}
   /* 印刷時に背景色・面色が間引かれるブラウザ既定を解除（無いと以下の色施策が全て無効化される）。 */
   *{-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}
   body{background:var(--print-bg)}
+  /* ページ背景（html/body）の地色を印刷限定で透明化する。html は元々 --bg（薄いピーチ）を持ち、
+   * body だけを print-bg で上書きしても html 側の地色が縮小後の余白・最下部にはみ出して見える
+   * ため、html/body 両方の背景を明示的に消す（背景画像も含め除去）。画面表示は不変。 */
+  html,body{background:transparent!important;background-color:transparent!important;background-image:none!important}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
