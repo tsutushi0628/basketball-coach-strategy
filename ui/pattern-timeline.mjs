@@ -960,9 +960,9 @@ const PATTERN_CSS = `
 .spine-dot{width:9px;height:9px;border-radius:50%}
 /* 印刷時: 時刻直後のクロックドットは構造マーカーに留め、画面用の色分け（ブロックtint／分岐点オレンジ）は
    中和する（色の意味＝ブロック種別はカード見出し側の tll/tll-lg 文字色で残るため、ドットでの重複表示だけを
-   落とす＝情報は失わない）。画面の見た目は変えない（@media print限定）。値は本ファイル内の終了行ドットと
-   同じ var(--mute) を再利用（新規トークンなし）。 */
-@media print{.spine-dot{background:var(--mute)!important}}
+   落とす＝情報は失わない）。画面の見た目は変えない（@media print限定）。背景を透明化して消す（グレー丸へ
+   の置換ではなく、マーカー自体を見せない）。border/box-shadow は本要素に元々存在しないため上書き不要。 */
+@media print{.spine-dot{background:transparent!important}}
 .spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
 /* ── 上書き日の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */
