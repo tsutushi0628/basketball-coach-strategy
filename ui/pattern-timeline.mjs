@@ -958,6 +958,11 @@ const PATTERN_CSS = `
    の両モード）共通＝モードで時刻の見た目を変えない。 */
 .spine-clk .tk{font-size:18px;font-weight:700;color:var(--ink);background:var(--bg);padding:0 4px;white-space:nowrap;text-shadow:none}
 .spine-dot{width:9px;height:9px;border-radius:50%}
+/* 印刷時: 時刻直後のクロックドットは構造マーカーに留め、画面用の色分け（ブロックtint／分岐点オレンジ）は
+   中和する（色の意味＝ブロック種別はカード見出し側の tll/tll-lg 文字色で残るため、ドットでの重複表示だけを
+   落とす＝情報は失わない）。画面の見た目は変えない（@media print限定）。値は本ファイル内の終了行ドットと
+   同じ var(--mute) を再利用（新規トークンなし）。 */
+@media print{.spine-dot{background:var(--mute)!important}}
 .spine-half{font-size:12px;color:var(--mute);letter-spacing:.04em;text-align:center}
 
 /* ── 上書き日の男女2列タイムライン（twoCol）── 既存spineトークン再利用・新規色/emoji/色帯なし ── */
