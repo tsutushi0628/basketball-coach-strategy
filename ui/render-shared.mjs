@@ -258,9 +258,17 @@ a{color:var(--orange-deep)}
   .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
   .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
   /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、
-   * side-stripeのカード左端色帯は使わない）。影（box-shadow）は印刷では使わない。 */
-  .parthead{border-bottom:2px solid var(--orange)}
-  .tccell.tc-coach{border:1.5px solid var(--orange)}
+   * side-stripeのカード左端色帯は使わない）。影（box-shadow）は印刷では使わない。太らせる強調は残しつつ、
+   * 色はオレンジでなく既存の中立罫線色（line-2）にする（印刷でオレンジを増やさない）。 */
+  .parthead{border-bottom:2px solid var(--line-2)}
+  .tccell.tc-coach{border:1.5px solid var(--line-2)}
+  /* 印刷時: 時刻マーカー以外にも、ドリル行ごとの「コーチ付き」丸ドット・区画見出しの「第N部」バッジ・
+   * 男女ラベル横の色見本（gchip::before）がオレンジ背景を持つ。これらは時刻マーカーと同じ理由（色の意味は
+   * 文字側に残る＝●ドットの代わりにテキスト「コーチ」、バッジの代わりに「第N部」の文字、色見本の代わりに
+   * 「男子」「女子」の文字が既に付いている）で、背景だけを透明化しても情報は失われない。除外を作らず全部消す。 */
+  .coach-dot{background:transparent!important}
+  .ph-no{background:transparent!important}
+  .gchip.boys::before,.gchip.girls::before{background:transparent!important}
   .drill-overlay{display:none!important}
 }
 `;
