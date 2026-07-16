@@ -393,6 +393,55 @@ export function assumptionsNote(data) {
   return `<div class="note"><b style="color:var(--orange-deep)">前提（コーチ確認で確定）</b><ul class="assume">${items}</ul></div>`;
 }
 
+/**
+ * 印刷/PDF保存時のタイトル用日付文字列を決める純関数（ブラウザのPDF保存既定ファイル名は <title> 由来）。
+ * 選択中日付(window.__curDate、ISO yyyy-mm-dd)から yyyymmdd を組み立てる。未設定・不正形式・
+ * 実在しない日（2/30等・Date往復で成分一致を確認）のときは null を返す＝呼び出し側は現行タイトル維持
+ * （フォールバック・throwしない）。
+ * クライアント IIFE はこの純関数の本体を埋め込んで使う（node 側でテストした規則と実行時を一致＝ドリフト防止）。
+ * @param {string|null|undefined} iso 選択中日付のISO(yyyy-mm-dd)。window.__curDate 由来
+ * @returns {string|null} yyyymmdd。差替不可（未設定・不正・非実在日）なら null
+ */
+export function pdfPrintTitle(iso) {
+  if (!iso) return null;
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  var y = Number(m[1]);
+  var mo = Number(m[2]);
+  var d = Number(m[3]);
+  var dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null; // 2/30等は繰り上がり＝非実在日
+  return m[1] + m[2] + m[3];
+}
+
+/**
+ * 印刷前後のタイトル差替・復元の状態遷移（純: DOMはアダプタ host 経由・node:test で実行時挙動を検証）。
+ * クライアント IIFE は pdfPrintTitle とペアで本体を埋め込んで使う（自由変数 pdfPrintTitle は埋め込み先スコープで解決）。
+ * - beforeprint: 未差替のときだけ元タイトルを保存し、選択中日付が妥当なら日付タイトルへ差替。
+ *   差替中の再入（連打・多重発火）と日付なし・不正時は何もしない（現行タイトル維持）。
+ * - restore: 差替済みのときだけ元タイトルへ復元し状態をクリア。未差替・復元済みなら何もしない（冪等）。
+ *   afterprint と focus（afterprint不発環境の保険）の両方から呼んでも安全。
+ * @param {{getTitle:()=>string, setTitle:(t:string)=>void, getCurDate:()=>(string|null|undefined)}} host
+ * @returns {{beforeprint:()=>void, restore:()=>void}}
+ */
+export function createPrintTitleSwap(host) {
+  var savedTitle = null; // null＝未差替（差替中だけ元タイトルを保持）
+  return {
+    beforeprint: function () {
+      if (savedTitle !== null) return; // 差替中の再入（連打・beforeprint多重発火）は無視
+      var next = pdfPrintTitle(host.getCurDate());
+      if (next === null) return; // 日付未選択・不正 → 差替しない（現行タイトルのまま印刷）
+      savedTitle = host.getTitle();
+      host.setTitle(next);
+    },
+    restore: function () {
+      if (savedTitle === null) return; // 未差替・復元済み → 何もしない（冪等）
+      host.setTitle(savedTitle);
+      savedTitle = null;
+    },
+  };
+}
+
 /** タブ切替＋印刷＋テキストコピー＋組違いON/OFF の共通スクリプト。 */
 export function clientScript() {
   return `(function(){
@@ -514,6 +563,20 @@ export function clientScript() {
   }
   document.querySelectorAll('.modetoggle .mt').forEach(function(b){b.addEventListener('click',function(){setMode(b.getAttribute('data-mode-go'));});});
   setMode('on');
+  // ── 印刷/PDF保存の既定ファイル名を選択中日付(yyyymmdd)にする ──
+  // タイトル差替は window の beforeprint/afterprint に初期化時1回だけ登録する（ボタン経由も
+  // Ctrl+P・ブラウザメニュー印刷も同じ経路で対象になり、連打・リスナー多重登録の穴が構造ごと消える）。
+  // 差替・復元の状態遷移は node 側でテスト済みの純関数を埋め込む（規則と実行時を一致＝ドリフト防止）。
+  var pdfPrintTitle=${pdfPrintTitle.toString()};
+  var createPrintTitleSwap=${createPrintTitleSwap.toString()};
+  var titleSwap=createPrintTitleSwap({
+    getTitle:function(){return document.title;},
+    setTitle:function(t){document.title=t;},
+    getCurDate:function(){return window.__curDate;}
+  });
+  window.addEventListener('beforeprint',titleSwap.beforeprint);
+  window.addEventListener('afterprint',titleSwap.restore);
+  window.addEventListener('focus',titleSwap.restore); // afterprint不発環境の保険（restoreは冪等＝多重発火無害）
   var p=document.getElementById('printBtn'); if(p)p.addEventListener('click',function(){window.print();});
   var c=document.getElementById('copyBtn'); if(c)c.addEventListener('click',function(){
     // 現在表示中の日（単一可視日＝__curDate）の .plain を拾う。多週で曜日名は衝突するので実ISOで引く。
