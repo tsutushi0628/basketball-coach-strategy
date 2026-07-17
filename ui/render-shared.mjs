@@ -142,8 +142,10 @@ export function dayHeader(pd, month, goals) {
   // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
   const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${month}月 ${esc(pd.dayLabel)}`;
   // 印刷専用: 月/週の目標（画面では day レベルの目標バーで見せ、ここは display:none）。
-  const goalsPr = goals
-    ? `<div class="dh-goals" aria-hidden="true"><span class="dhg-item"><b>月</b>${esc(goals.monthMain || '—')}</span><span class="dhg-item"><b>週</b>${esc(goals.week || '—')}</span></div>`
+  // 未設定の側は項目ごと出さず、月週とも未設定ならペイン自体を出さない（'—'の幽霊行を配布紙に刷らない。
+  // 静的紙面なのでレイアウトシフトの概念はなく、ペイン省略時は .dh-main が flex:1 で全幅を使う）。
+  const goalsPr = goals && (goals.monthMain || goals.week)
+    ? `<div class="dh-goals" aria-hidden="true">${goals.monthMain ? `<span class="dhg-item"><b>月</b>${esc(goals.monthMain)}</span>` : ''}${goals.week ? `<span class="dhg-item"><b>週</b>${esc(goals.week)}</span>` : ''}</div>`
     : '';
   // コーチ指定の上書き日: 対象性別チップと手書きの狙いだけ出す。
   // 「コーチ指定」等の内部ラベルは配布物に出さない（コーチが見て無意味なため）。

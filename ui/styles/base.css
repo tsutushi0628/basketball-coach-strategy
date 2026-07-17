@@ -204,8 +204,11 @@ a{color:var(--orange-deep)}
 /* T5: print規則 — 画面と印刷が同一構造（罫線ベース）。いま選んでいるタブ（日/週/月/年）と
  * その中で表示中の日だけを印刷する（hidden は印刷でも非表示のまま）。操作系は非表示・背景は #fff に。 */
 @media print{
-  /* 紙面の余白は印刷可能な最小域まで詰める（1ページ収容の分母を稼ぐ）。 */
-  @page{margin:6mm}
+  /* 紙面の余白: 家庭用インクジェットの非印字域は左右3〜3.4mm程度だが、レーザー機・AirPrint経由は
+   * 左右・下6.35mm級が普通にある。現行一律6mmはこの下限を下回り左右が先に欠けるため、左右・下は
+   * 主要機種の非印字域＋安全余裕を確保する10mmへ拡げる。上は物理余白が最も小さい辺なので8mmに
+   * 留めて縦の分母を稼ぐ（実測: Playwright実PDF出力でのページ数計測、ui/e2e/_print-check.mjs）。 */
+  @page{margin:8mm 10mm 10mm}
   /* 印刷時に背景色・面色が間引かれるブラウザ既定を解除（無いと以下の色施策が全て無効化される）。 */
   *{-webkit-print-color-adjust:exact;color-adjust:exact;print-color-adjust:exact}
   body{background:var(--print-bg)}
@@ -216,22 +219,26 @@ a{color:var(--orange-deep)}
   .toolbar,.levels,.daytabs,.modetoggle{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
-  /* 1日=1ページに収めるため印刷時のみ全体を縮小。ブロック数・注記が多い日でも1ページに収まる縮小率まで
-   * 実測（Playwright実PDF出力でのページ数計測）した値に引き下げ済み（.92→.84）。画面用の目標バーは隠し、
-   * 目標は日ヘッダ右に横並びで出す。 */
-  .wrap{max-width:none;padding:0;zoom:.84}
+  /* 1日=1ページに収めるため印刷時のみ全体を縮小。左右余白拡大（6mm→10mm）分の横幅減を吸収しつつ
+   * 1ページに収まる縮小率まで実測（Playwright実PDF出力でのページ数計測）した値（.84→.82）。
+   * 画面用の目標バーは隠し、目標は日ヘッダ右ペインに出す。 */
+  .wrap{max-width:none;padding:0;zoom:.82}
   .goalbar{display:none}
-  /* 印刷時: 日ヘッダを「左=日付＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。日付↔狙いの間も詰める。
-   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。パディング・余白は
-   * 1ページ収容のため詰め気味にする（10px 14px→6px 12px 等）。 */
-  .dayhead{display:flex;align-items:flex-start;gap:16px;padding:6px 12px;margin-bottom:4px;background:var(--orange-wash)}
+  /* 印刷時: 日ヘッダを「左=日付＋会場＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。
+   * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。
+   * 右ペインは align-items:stretch でヘッダ全高を使い、ねらい箱と同じ「沈み面」(var(--bg))にして
+   * 区切り罫線なしで領域を立たせる（オーナー指示: 右ペインを幅40%・全高で使う）。 */
+  .dayhead{display:flex;align-items:stretch;gap:14px;padding:7px 12px;margin-bottom:4px;background:var(--orange-wash)}
   .dayhead .dh-main{flex:1 1 auto;min-width:0}
   .dayhead .dh-t{color:var(--orange-deep)}
-  .dayhead .dh-aim{margin-top:3px;padding:4px 9px}
-  .dayhead .dh-aiml{color:var(--orange-deep)}
-  .dayhead .dh-goals{display:flex;flex-direction:column;gap:8px;flex:0 0 34%;max-width:34%}
-  .dayhead .dh-goals .dhg-item{font-size:10px;line-height:1.35;color:var(--ink)}
-  .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:4px}
+  /* 会場・住所: 画面はinlineのまま（画面レイアウト不変）、印刷限定でblock化し長い住所を自然折返しする
+   * （紙端の欠けは配布物として致命的＝会場住所が切れると集合できないため）。 */
+  .dayhead .dh-court{display:block;margin-left:0;margin-top:1px;font-size:12px;line-height:1.4;white-space:normal}
+  .dayhead .dh-aim{margin-top:4px;padding:5px 9px;font-size:13px;line-height:1.5}
+  .dayhead .dh-aiml{color:var(--orange-deep);font-size:15px;margin-bottom:2px}
+  .dayhead .dh-goals{display:flex;flex-direction:column;gap:6px;flex:0 0 40%;max-width:40%;background:var(--bg);border-radius:8px;padding:6px 10px}
+  .dayhead .dh-goals .dhg-item{font-size:13px;line-height:1.45;color:var(--ink)}
+  .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:5px}
   /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、
    * side-stripeのカード左端色帯は使わない）。影（box-shadow）は印刷では使わない。太らせる強調は残しつつ、
    * 色はオレンジでなく既存の中立罫線色（line-2）にする（印刷でオレンジを増やさない）。 */
@@ -245,4 +252,8 @@ a{color:var(--orange-deep)}
   .ph-no{background:transparent!important}
   .gchip.boys::before,.gchip.girls::before{background:transparent!important}
   .drill-overlay{display:none!important}
+  /* onlyGender日（対象が単一性別）のタイムライン直上チップは、日ヘッダのteamChipと同一情報の
+   * 二重表示（列ラベルとしての位置情報も持たない＝1列しかない）。印刷限定で消し対象表記をヘッダへ
+   * 一本化する。男女同居日の3列spine-header（左右どちらの列かを示す位置ラベル）は対象外で維持する。 */
+  .spine-header.tc2-only{display:none}
 }

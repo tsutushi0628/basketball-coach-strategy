@@ -263,7 +263,9 @@ export function editorScript() {
   // ── 再描画: twoColTimeline / dayHeader(コーチ分岐) の移植（同一クラス・同一構造）──
   function dayHeaderHtml(ov){
     var dateHead=dateLabelISO(ov.date,ov.weekday);
-    var goalsPr=GOALS?('<div class="dh-goals" aria-hidden="true"><span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain||'—')+'</span><span class="dhg-item"><b>週</b>'+esc(GOALS.week||'—')+'</span></div>'):'';
+    // サーバ描画 dayHeader（render-shared.mjs）と同じ空フォールバック: 未設定の側は項目ごと省略、
+    // 両方未設定ならペイン自体を出さない（'—'の幽霊行を刷らない）。
+    var goalsPr=(GOALS&&(GOALS.monthMain||GOALS.week))?('<div class="dh-goals" aria-hidden="true">'+(GOALS.monthMain?('<span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain)+'</span>'):'')+(GOALS.week?('<span class="dhg-item"><b>週</b>'+esc(GOALS.week)+'</span>'):'')+'</div>'):'';
     // オンリー時は対象性別チップを出す（サーバ描画 dayHeader と一致・C）。
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
     var teamChip=onlyG?(' '+genderChipHtml(onlyG)):'';
