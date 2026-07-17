@@ -174,13 +174,19 @@
    詳細度が低いため !important で統一的に透明化する（終了行を含め全ドットを消し、色の意味はカード見出し
    文字色側に残す）。 */
 @media print{.spine-dot,.tlclock::after{background:transparent!important}}
-/* 印刷時: 1日=1ページに収めるため、行間・カード内パディングを詰めて縦の余白を削る（画面表示は不変）。
-   ブロック数・注記が多い日は既定余白のままだと2ページに溢れるため、可読性を保てる範囲で圧縮する。 */
+/* 印刷時: 1日=1ページ収容のための行間・パディング調整（画面表示は不変）。
+   余白4段スケール（base.css @media print 参照）のL3=5px（反復単位間＝行と行）に単列日・男女同居日とも統一。
+   旧値（行間2px）は詰めすぎで差し戻しを受けたため撤回し、代わりに従来未圧縮だった男女同居日のspine行
+   （.spine/.spine-band/.spine-side＝画面値のまま印刷されていた）を新たに圧縮してヘッダ余白増を相殺する。
+   inline styleの比例min-height（--sh等）には触れない＝時間比例尺は不変。 */
 @media print{
-  .tlrow{margin-bottom:2px}
-  .tlcard{padding:4px 12px}
-  .tlh{margin-bottom:1px}
-  .tlbody{gap:2px}
+  .tlrow{margin-bottom:5px}
+  .tlcard{padding:6px 12px}
+  .tlh{margin-bottom:2px}
+  .tlbody{gap:4px}
+  .spine{gap:5px}
+  .spine-band{padding:7px 12px}
+  .spine-side{padding:7px 11px}
   /* 時刻セル(.tk)の地色マスク背景（var(--bg)＝薄いピーチ）は画面用のトリック（連結線を隠すため）で、
      印刷では body 側の地色を透明化するため塗り自体が不要かつ浮いて見える。印刷限定で背景を消す。 */
   .tk,.spine-clk .tk{background:transparent!important;background-color:transparent!important;background-image:none!important}

@@ -227,16 +227,18 @@ a{color:var(--orange-deep)}
   /* 印刷時: 日ヘッダを「左=日付＋会場＋この日の狙い／右=月週の目標」の横2分割にして縦の行を稼ぐ。
    * マストヘッド化: washの面で日ヘッダを強調し、日付・見出し文字はorange-deepで締める。
    * 右ペインは align-items:stretch でヘッダ全高を使い、ねらい箱と同じ「沈み面」(var(--bg))にして
-   * 区切り罫線なしで領域を立たせる（オーナー指示: 右ペインを幅40%・全高で使う）。 */
-  .dayhead{display:flex;align-items:stretch;gap:14px;padding:7px 12px;margin-bottom:4px;background:var(--orange-wash)}
+   * 区切り罫線なしで領域を立たせる（オーナー指示: 右ペインを幅40%・全高で使う）。
+   * 余白は4段スケール（L1=16px セクション間／L2=8px ブロック内要素間・箱の内側縦／L3=5px 反復単位間／
+   * L4=3px 見出しと直下の従属行）で階層をつける（詰めすぎ差し戻しの根治。増分はspine行の印刷圧縮で相殺）。 */
+  .dayhead{display:flex;align-items:stretch;gap:14px;padding:10px 14px;margin-bottom:16px;background:var(--orange-wash)}
   .dayhead .dh-main{flex:1 1 auto;min-width:0}
   .dayhead .dh-t{color:var(--orange-deep)}
   /* 会場・住所: 画面はinlineのまま（画面レイアウト不変）、印刷限定でblock化し長い住所を自然折返しする
-   * （紙端の欠けは配布物として致命的＝会場住所が切れると集合できないため）。 */
-  .dayhead .dh-court{display:block;margin-left:0;margin-top:1px;font-size:12px;line-height:1.4;white-space:normal}
-  .dayhead .dh-aim{margin-top:4px;padding:5px 9px;font-size:13px;line-height:1.5}
-  .dayhead .dh-aiml{color:var(--orange-deep);font-size:15px;margin-bottom:2px}
-  .dayhead .dh-goals{display:flex;flex-direction:column;gap:6px;flex:0 0 40%;max-width:40%;background:var(--bg);border-radius:8px;padding:6px 10px}
+   * （紙端の欠けは配布物として致命的＝会場住所が切れると集合できないため）。margin-topはL4。 */
+  .dayhead .dh-court{display:block;margin-left:0;margin-top:3px;font-size:12px;line-height:1.4;white-space:normal}
+  .dayhead .dh-aim{margin-top:8px;padding:8px 12px;font-size:13px;line-height:1.5}
+  .dayhead .dh-aiml{color:var(--orange-deep);font-size:15px;margin-bottom:3px}
+  .dayhead .dh-goals{display:flex;flex-direction:column;gap:8px;flex:0 0 40%;max-width:40%;background:var(--bg);border-radius:8px;padding:8px 12px}
   .dayhead .dh-goals .dhg-item{font-size:13px;line-height:1.45;color:var(--ink)}
   .dayhead .dh-goals .dhg-item b{color:var(--orange-deep);font-weight:700;margin-right:5px}
   /* 区画見出しの下罫線・コーチ付きセル枠は印刷限定で太らせ紙面の区切り・希少性を強調する（全幅の罫線・全周枠のみ、
