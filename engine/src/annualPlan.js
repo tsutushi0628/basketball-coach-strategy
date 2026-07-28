@@ -1,5 +1,5 @@
 /**
- * @file 年間計画（原典 docs/practice-knowledge/sessions/年間計画.md）の月別構造を
+ * @file 年間計画（原典 docs/sessions/年間計画.md）の月別構造を
  * エンジン入力へ解決する純関数群。年/月/フェーズ・カテゴリ重みを「でっち上げ」ではなく
  * 原典 (engine/data/annual-plan.json) から決定論的に引く。
  *
