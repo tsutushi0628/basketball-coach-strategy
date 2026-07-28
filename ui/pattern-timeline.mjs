@@ -13,6 +13,7 @@ import {
   genderChip, VIDEO_SVG, emptyState, emptyDayActions,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
+import { isAllTogetherTwoColRows } from './two-col-together.mjs';
 import { GOAL_EDITOR_CSS, goalEditorScript } from './goal-editor.mjs';
 import { loadCss } from './styles/load-css.mjs';
 // 並べ替え（D&D）ライブラリは firebase-kit 共有vendorが正本。ページにインライン注入して window.Sortable を生やす。
@@ -105,6 +106,7 @@ function rotationTimeline(pd, drillIndex) {
   const rot = pd.rotation;
   if (!rot || !rot.rows || rot.rows.length === 0) return '';
 
+  // rotation は findRotationViolations が左右ドリル名の不一致を保証する中核仕様なので、同一化して畳まない。
   const genderHeader = `<div class="spine-header">
     <div class="spine-col-label">${genderChip('男子')}</div>
     <div class="spine-clock-header"></div>
@@ -230,17 +232,21 @@ function twoColTimeline(pd) {
       <div class="tc2-body">${items}</div>`;
   };
 
-  // オンリーモード: 対象性別の1列のみ（体育館独占）。左レール(時計)＋内容フル幅の本物の1列レイアウト。
-  if (pd.onlyGender === '男子' || pd.onlyGender === '女子') {
+  const onlyGender = pd.onlyGender === '男子' || pd.onlyGender === '女子';
+  // 男女共通だけの日も既存 onlyGender の1列構造に畳む。男女別セルが1行でもあれば2列のままにする。
+  const allTogether = isAllTogetherTwoColRows(rows);
+
+  // オンリーモード、または全行が男女共通の日: 左レール(時計)＋内容フル幅の本物の1列レイアウト。
+  if (onlyGender || allTogether) {
     const side = pd.onlyGender === '男子' ? 'boys' : 'girls';
     // 左=時計列（空ヘッダ）／右=性別チップ（内容側）の順（グリッド 54px 1fr に合わせる）。
-    const genderHeader = `<div class="spine-header tc2-only">
+    const genderHeader = onlyGender ? `<div class="spine-header tc2-only">
       <div class="spine-clock-header"></div>
       <div class="spine-col-label">${genderChip(pd.onlyGender)}</div>
-    </div>`;
+    </div>` : '';
     const rowsHtml = rows.map((row) => {
       // 対象性別セルを優先。無く row.both があれば共通(both)を1列に出す（F: '—'幽霊を避ける）。
-      const cell = row[side] || row.both || null;
+      const cell = onlyGender ? (row[side] || row.both || null) : (row.both || row.boys || row['男子'] || null);
       const tint = cell ? (BLOCK_TINT[cell.block] || 'var(--mute)') : 'var(--mute)';
       const bandInner = cell
         ? `<span class="tll tll-lg" style="--t:${tint}">${esc(cell.label)}</span>

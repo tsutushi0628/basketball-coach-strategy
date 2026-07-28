@@ -15,6 +15,7 @@
 
 import { BLOCK_TINT } from './render-shared.mjs';
 import { loadCss } from './styles/load-css.mjs';
+import { isAllTogetherTwoColRows } from './two-col-together.mjs';
 
 /** 編集に出すブロック種別（BLOCK_TINT のブロックキー側）。 */
 const BLOCK_KEYS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
@@ -208,6 +209,7 @@ export function editorDataIsland(data) {
  */
 export function editorScript() {
   return `(function(){
+  var isAllTogetherTwoColRows=${isAllTogetherTwoColRows.toString()};
   var island=document.getElementById('${ISLAND_ID}');
   if(!island)return;
   var ED=JSON.parse(island.textContent||'{}');
@@ -313,10 +315,10 @@ export function editorScript() {
       inner+
     '</div>';
   }
-  function rowHtml(row,onlyG){
+  function rowHtml(row,onlyG,allTogether){
     // オンリー時は対象性別1列（バンド）。対象セルが無く共通(both)があれば both を出す（F: '—'にしない）。
-    if(onlyG){
-      var cellOnly=cellHasContent(row[onlyG])?row[onlyG]:(row.both||row[onlyG]);
+    if(onlyG||allTogether){
+      var cellOnly=onlyG?(cellHasContent(row[onlyG])?row[onlyG]:(row.both||row[onlyG])):(row.both||row['男子']);
       return bandRowHtml(cellOnly,row.from,false,true);
     }
     if(row.both)return bandRowHtml(row.both,row.from,true,false); // 男女共通の全幅バンド（左右ミラー）
@@ -330,28 +332,31 @@ export function editorScript() {
   function timelineHtml(ov){
     var rows=ov.rows||[];
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
+    // 男女共通だけの日も既存 onlyGender の1列構造を使う。男女別セルが残る日は混在させず従来の2列に保つ。
+    var allTogether=isAllTogetherTwoColRows(rows);
+    var oneColumn=!!onlyG||allTogether;
     // オンリー時は 左=時計列（空ヘッダ）／右=性別チップ の順・左レール時計＋内容フル幅の1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
     var genderHeader=onlyG
       ?('<div class="spine-header tc2-only">'+
           '<div class="spine-clock-header"></div>'+
           '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
         '</div>')
-      :('<div class="spine-header">'+
+      :(!allTogether?('<div class="spine-header">'+
           '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
           '<div class="spine-clock-header"></div>'+
           '<div class="spine-col-label">'+genderChipHtml('女子')+'</div>'+
-        '</div>');
-    var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG);}).join('');
+        '</div>'):'');
+    var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG,allTogether);}).join('');
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
     // 終了行: オンリー時は 左=時計→右=終了バンド の順。共通/2列時は従来どおり 左バンド｜clk｜右バンド。
     var endClk='<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
       '<span class="spine-dot" style="background:var(--mute)"></span></div>';
     var endBand='<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>';
-    var endInner=onlyG?(endClk+endBand):(endBand+endClk+'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>');
-    var endRow='<div class="spine-row spine-together spine-end'+(onlyG?' tc2-only':'')+'">'+
+    var endInner=oneColumn?(endClk+endBand):(endBand+endClk+'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>');
+    var endRow='<div class="spine-row spine-together spine-end'+(oneColumn?' tc2-only':'')+'">'+
       endInner+
     '</div>';
-    return genderHeader+'<div id="plan-top" class="spine'+(onlyG?' spine-only':'')+'">'+rowsHtml+endRow+'</div>';
+    return genderHeader+'<div id="plan-top" class="spine'+(oneColumn?' spine-only':'')+'">'+rowsHtml+endRow+'</div>';
   }
   // 既存「テキストでコピー」用のプレーンテキスト（編集中 override から組む）。
   // 既存 plainText(twoCol分岐) と同趣旨: 日付（曜日）／狙い／各行 from-to ＋ 男女別 or 男女共通。
@@ -375,6 +380,9 @@ export function editorScript() {
         // 対象セルが無く共通(both)があれば both を出す（F と整合）。
         var cellO=cellHasContent(r[onlyG])?r[onlyG]:(r.both||r[onlyG]);
         L.push('　'+onlyG+'｜'+(cellO?cellPlain(cellO):'—'));
+      }else if(isAllTogetherTwoColRows(ov.rows||[])){
+        var common=r.both||r['男子'];
+        L.push('　[男女共通] '+cellPlain(common));
       }else if(r.both){
         L.push('　[男女共通] '+cellPlain(r.both));
       }else{

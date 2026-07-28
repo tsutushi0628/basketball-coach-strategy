@@ -606,14 +606,20 @@ function toAuthoredCell(cell) {
  * @returns {object} twoCol:true・rows を持つ source:'coach' の表示日
  */
 function toTwoColDay(day, ov, dISO) {
-  const rows = (ov.rows || []).map((r) => ({
-    from: r.from || '',
-    to: r.to || '',
-    minutes: Number.isFinite(r.minutes) ? r.minutes : null,
-    both: toAuthoredCell(r.both), // 全幅1本（男女共通）。無ければ null。
-    boys: toAuthoredCell(r['男子']),
-    girls: toAuthoredCell(r['女子']),
-  }));
+  const rows = (ov.rows || []).map((r) => {
+    const both = toAuthoredCell(r.both);
+    const boys = toAuthoredCell(r['男子']);
+    const girls = toAuthoredCell(r['女子']);
+    return {
+      from: r.from || '',
+      to: r.to || '',
+      minutes: Number.isFinite(r.minutes) ? r.minutes : null,
+      // 行単位の both 化はしない。日単位の判定でのみ1列表示にする。
+      both,
+      boys,
+      girls,
+    };
+  });
   const firstFrom = rows.length ? rows[0].from : day.start;
   const lastTo = rows.length ? rows[rows.length - 1].to : day.end;
   return {

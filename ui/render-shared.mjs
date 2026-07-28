@@ -10,6 +10,7 @@
  */
 
 import { loadCss } from './styles/load-css.mjs';
+import { isAllTogetherTwoColRows } from './two-col-together.mjs';
 
 /** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。実体は styles/tokens.css。
  * T5: --shadow/--shadow-soft/--inset を削除し、border+面の濃淡2値で区切りを表現する。
@@ -688,6 +689,7 @@ export function plainText(data, pd) {
       const cellText = (cell) =>
         (cell.items || []).map((it) => `${it.name}${it.note ? `（${it.note}）` : ''}`).join('／');
       const cellLine = (cell) => (cell ? `${cell.label}：${cellText(cell)}` : '—');
+      const allTogether = isAllTogetherTwoColRows(pd.rows);
       for (const r of pd.rows) {
         L.push('');
         L.push(`■ ${r.from}〜${r.to}`);
@@ -697,6 +699,9 @@ export function plainText(data, pd) {
           const sideKey = onlyG === '男子' ? 'boys' : 'girls';
           const cell = r[sideKey] || r.both || null;
           L.push(`　${onlyG}｜${cellLine(cell)}`);
+        } else if (allTogether) {
+          const cell = r.both || r.boys || r['男子'] || null;
+          L.push(`　[男女共通] ${cellLine(cell)}`);
         } else if (r.both) {
           L.push(`　[男女共通] ${r.both.label}：${cellText(r.both)}`);
         } else {
