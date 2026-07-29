@@ -292,7 +292,8 @@
 .daytoolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:14px 0 18px}
 .daytoolbar-picker{min-width:0}
 .daytoolbar-picker .picker{margin-bottom:0}
-.daytoolbar-ops{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}
+.daytoolbar-ops{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto}
+.daytoolbar-ops .ed-msg{min-width:0}
 /* 操作3ボタンの連結グループ。共通デザイン基盤の副次ボタン（透明背景＋細い1本罫）の考え方に合わせ、
  * 面塗り（背景の塗りつぶし）は使わない。境界の重なりは連結ボタン群の作法（-1pxで1本に畳む）。 */
 .op-group{display:inline-flex;align-items:stretch}
