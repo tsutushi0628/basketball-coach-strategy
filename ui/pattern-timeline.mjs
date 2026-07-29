@@ -8,9 +8,10 @@
 
 import {
   esc, modeTag, modeMark, altLine, videoLink, plainText, BLOCK_TINT,
-  modeToggle, dayHeader, partHeader,
+  dayHeader, partHeader,
   goalsSection, monthSection, yearSection, assumptionsNote, goalsBar,
   genderChip, VIDEO_SVG, emptyState, emptyDayActions,
+  PRINT_SVG, COPY_SVG,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
 import { isTogetherRow } from './two-col-together.mjs';
@@ -100,7 +101,8 @@ function menuTimeline(pd, drillIndex) {
  * - rotation 行: 左右にドリルカード、中央に時刻＋dot（コーチ付き側にコーチタグ）
  * - 比例高さ（segH）は各ドリルカードの min-height で維持
  *
- * ON/OFF トグル: data-interact="on" = 中央スパイン3列、data-interact="off" = 共通メニュー1列注記。
+ * 組違いON/OFFの手動トグルは撤去済み（2026-07-29）: 組違いかどうかは曜日とコーチ配置から機械的に
+ * 決まる（手入力フラグではない）ため、常に中央スパイン3列（組違い時の唯一の表示）を出す。
  */
 function rotationTimeline(pd, drillIndex) {
   const rot = pd.rotation;
@@ -191,14 +193,7 @@ function rotationTimeline(pd, drillIndex) {
     </div>
   </div>`;
 
-  const onContent = `${genderHeader}<div id="plan-top" class="spine">${rowsHtml}${endRow}</div>`;
-
-  const offNote = `<div class="inote" data-interact="off" hidden>
-    <b>組違いOFF</b>：男女が別時間に同じメニューを各自フル（コーチが全段に付く）。<br>
-    メニューは下の共通メニューを男女それぞれが順番に実施。
-  </div>`;
-
-  return `<div data-interact="on">${onContent}</div>${offNote}`;
+  return `${genderHeader}<div id="plan-top" class="spine">${rowsHtml}${endRow}</div>`;
 }
 
 /**
@@ -855,13 +850,20 @@ export function render(data) {
   // 週の目標バーは各 .daywk グループ内に1つずつ置き、その週の焦点・週起点ISOキーを指す（週レベルの
   // per-week 焦点と同型）。表示中の週グループだけが見えるので、追従用の追加JSなしで「表示中の週の目標」
   // だけが見え、編集導線も当該週キーをPOSTする（週0固定の誤上書きを根治）。月/定性/KPIは不変（アンカー値）。
+  // 2段目ツールバー左側=7曜日ピッカー（週ごと・可視は表示中の週の1つだけ）。goalsBar/timelineとは別の
+  // グループに分け、右側の操作ボタン（印刷/編集/コピー）と横1段に並べる。表示中週の切替は既存の
+  // showDayByDate 側の `.daywk[data-week]` トグルにこのグループも相乗りさせる（render-shared.mjs 側で
+  // セレクタへ `.daywk-picker[data-week]` を追加済み）。
+  const dayPickerGroups = dayWeeks.map((w, wi) =>
+    `<div class="daywk-picker" data-week="${esc(w.key)}"${wi === 0 ? '' : ' hidden'}>${dayPicker(w.days)}</div>`
+  ).join('\n');
+
   const dayGroups = dayWeeks.map((w, wi) => {
     const timelines = w.days
       .map((d, di) => dayTimeline(data, d, wi === 0 && di === 0))
       .join('\n');
     // 先頭週以外の日グループは hidden（クライアントが週セレクタ・既定日で切替）。
     return `<div class="daywk" data-week="${esc(w.key)}"${wi === 0 ? '' : ' hidden'}>
-      ${dayPicker(w.days)}
       ${goalsBar(data, { text: w.focus || '', key: w.weekStartDate || '' })}
       ${timelines}
     </div>`;
@@ -878,11 +880,16 @@ export function render(data) {
     </div>
 
     <div class="level" data-level="day">
-      <div class="toolbar" data-print-hide>
-        ${modeToggle()}
-        <button class="btn btn-primary" id="printBtn" type="button">印刷 / PDFで保存</button>
-        <button class="btn" id="copyBtn" type="button">テキストでコピー</button>
-        ${editorToolbar()}
+      <div class="daytoolbar">
+        <div class="daytoolbar-picker">${dayPickerGroups}</div>
+        <div class="daytoolbar-ops" data-print-hide>
+          <div class="op-group" role="group" aria-label="日ビューの操作">
+            <button class="op-btn" id="printBtn" type="button">${PRINT_SVG}<span>印刷</span></button>
+            ${editorToolbar()}
+            <button class="op-btn op-btn--icon" id="copyBtn" type="button" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span>${COPY_SVG}</button>
+          </div>
+          <span class="ed-msg" id="ed-msg" data-print-hide></span>
+        </div>
       </div>
       ${dayWeekSelector(dayWeeks)}
       ${dayGroups}

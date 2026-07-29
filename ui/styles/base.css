@@ -6,8 +6,6 @@ body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-fo
 .wrap{max-width:840px;margin:0 auto;padding:32px 18px 80px}
 a{color:var(--orange-deep)}
 
-/* レベル切替＆配布ツールバー */
-.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
 /* T5: btn は surface+hair（shadow廃止）・14px（本文段） */
 .btn{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--ink);border-radius:999px;padding:10px 18px;font:inherit;font-size:14px;letter-spacing:.02em;white-space:nowrap;transition:transform .16s ease,color .16s ease}
 .btn:hover{transform:translateY(-2px);color:var(--orange)}
@@ -15,10 +13,12 @@ a{color:var(--orange-deep)}
 .btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .btn-primary:hover{color:var(--orange-ink)}
 .levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-width:320px;margin-bottom:16px}
-/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。タブは4等分の等幅。 */
+/* T5: lvtab は surface+hair・17px（H2段）。タブは4等分の等幅。
+ * 選択中は共通デザイン基盤のボタングループ選択状態（墨黒の反転）に合わせた控えめな表現にする
+ * （2026-07-29・ツールバー整理）。オレンジの面塗りは日付ピッカー(.pk.on)の選択中だけに残す。 */
 .lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 0;font:inherit;font-size:17px;font-weight:600;text-align:center;transition:transform .16s ease}
 .lvtab:hover{transform:translateY(-2px)}
-.lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
+.lvtab.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
 .daytabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
 /* T5: daytab は surface+hair・15px（H3段相当） */
@@ -28,12 +28,18 @@ a{color:var(--orange-deep)}
 .daytab:hover{transform:translateY(-2px)}
 .daytab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 
-/* T5: modetoggle は bg+hair（inset廃止） */
+/* T5: modetoggle は bg+hair（inset廃止）。3択トグルの共通見た目（editor.mjs の
+ * onlyGenderToggleHtml＝編集画面内の「女子のみ/男子のみ/男女両方」切替が使用）。
+ * 組違いON/OFFの単独ボタン（旧・上部ツールバー）は2026-07-29に撤去済みだが、この見た目自体は
+ * 別機能（男女オンリーの3択）が引き続き使うため、クラス定義は残す。 */
 .modetoggle{display:inline-flex;gap:6px;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:4px}
 .modetoggle .mt{appearance:none;border:none;cursor:pointer;background:transparent;color:var(--mute);border-radius:999px;padding:7px 15px;font:inherit;font-size:14px;font-weight:600;white-space:nowrap;transition:color .16s ease}
-/* T5: mt.on は surface+hair */
+/* T5: mt.on は surface+hair（オレンジは文字色のみ・面塗りではない） */
 .modetoggle .mt.on{background:var(--surface);color:var(--orange-deep);border:1px solid var(--hair)}
 .modetoggle .mt:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+
+/* スクリーンリーダー専用（視覚に出さず文書構造を1本通す）。アイコンのみボタンの読み上げラベル用。 */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0}
 
 /* 男女チップ */
 .gchip{display:inline-flex;align-items:center;gap:6px;font-weight:700}
@@ -53,8 +59,6 @@ a{color:var(--orange-deep)}
 .dayhead .dh-aiml{display:block;font-size:17px;color:var(--orange-deep);font-weight:700;margin-bottom:4px}
 /* 印刷専用の右側目標（月/週）。画面では非表示（画面は day レベルの目標バーで見せる） */
 .dayhead .dh-goals{display:none}
-.inote{font-size:14px;line-height:1.6}
-.inote b{color:var(--orange-deep);font-weight:700}
 
 /* 区画（2部構成の日＝火）の部ヘッダ。日ヘッダの下に各部の見出しとして並べる。 */
 .parthead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:18px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line-2)}
@@ -216,7 +220,7 @@ a{color:var(--orange-deep)}
    * body だけを print-bg で上書きしても html 側の地色が縮小後の余白・最下部にはみ出して見える
    * ため、html/body 両方の背景を明示的に消す（背景画像も含め除去）。画面表示は不変。 */
   html,body{background:transparent!important;background-color:transparent!important;background-image:none!important}
-  .toolbar,.levels,.daytabs,.modetoggle{display:none}
+  .levels,.daytabs{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
   /* 1日=1ページに収めるため印刷時のみ全体を縮小。左右余白拡大（6mm→10mm）分の横幅減を吸収しつつ

@@ -13,7 +13,7 @@
  * 同一のCSSクラス・同一のDOM構造を移植して出す（スパイン3列・spine-band・tc2系・dayhead系）。
  */
 
-import { BLOCK_TINT } from './render-shared.mjs';
+import { BLOCK_TINT, EDIT_SVG } from './render-shared.mjs';
 import { loadCss } from './styles/load-css.mjs';
 import { isSameGenderCell, isTogetherRow } from './two-col-together.mjs';
 
@@ -35,19 +35,16 @@ const ISLAND_ID = 'bcs-ed';
  */
 export const EDITOR_CSS = loadCss(import.meta.url, 'styles/editor.css');
 
-/* ───────────────────────── 2) ツールバー3ボタン ───────────────────────── */
+/* ───────────────────────── 2) ツールバーの編集ボタン ───────────────────────── */
 
 /**
- * 日ビューのツールバーに足す3ボタン（編集・自動に戻す・書き出し）。
- * data-print-hide で印刷時は非表示。クラスは既存 .btn を流用。
+ * 日ビューのツールバーに足す「編集」アイコンボタン（印刷・コピーと横並びの3操作の1つ）。
+ * 「自動で叩き台を入れる」「自動に戻す」「入力を書き出し」は編集画面の中（panelHtml の ed-actions）へ
+ * 移設済み（2026-07-29・上部ツールバーの整理）。ここでは「この日を編集」だけを返す。
  * @returns {string} HTML
  */
 export function editorToolbar() {
-  return `<button class="btn" id="ed-edit" type="button" data-print-hide>この日を編集</button>` +
-    `<button class="btn" id="ed-seed" type="button" data-print-hide>自動で叩き台を入れる</button>` +
-    `<button class="btn" id="ed-auto" type="button" data-print-hide>自動に戻す</button>` +
-    `<button class="btn" id="ed-export" type="button" data-print-hide>入力を書き出し</button>` +
-    `<span class="ed-msg" id="ed-msg" data-print-hide></span>`;
+  return `<button class="op-btn op-btn--icon" id="ed-edit" type="button" title="編集"><span class="sr-only">編集</span>${EDIT_SVG}</button>`;
 }
 
 /* ───────────────────────── 3) データアイランド ───────────────────────── */
@@ -500,6 +497,16 @@ export function editorScript() {
         '<button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button>'+
       '</div></div>';
   }
+  // 「自動で叩き台を入れる」（旧: 上部ツールバーの単独ボタン）を編集画面の中へ移設した導線。
+  // その日のエンジン叩き台（seedPrefill）が無ければ導線を出さない（押しても無反応のボタンにしない）。
+  function seedLoadOptions(){
+    if(!SEEDPREFILL[model.date])return '';
+    return '<div class="ed-field"><span class="ed-lab">自動の叩き台</span>'+
+      '<div class="ed-copyfrom">'+
+        '<button type="button" class="ed-mini" data-act="load-seed">叩き台を読み込む</button>'+
+        '<span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span>'+
+      '</div></div>';
+  }
   // この日の編集モデルに「中身」があるか（見出し or 名前のある項目）。コピー上書きの確認に使う。
   function modelHasContent(){
     if(!model)return false;
@@ -580,7 +587,7 @@ export function editorScript() {
       cells+
     '</div>';
   }
-  // 男女オンリーモードの3択トグル（既存 modetoggle 作法・render-shared.mjs の組違いON/OFFと同じ見た目）。
+  // 男女オンリーモードの3択トグル（既存 .modetoggle/.mt の見た目クラスを流用。base.css 参照）。
   function onlyGenderToggleHtml(){
     var g=model.onlyGender;
     var opt=function(val,label){
@@ -596,6 +603,7 @@ export function editorScript() {
       onlyGenderToggleHtml()+
       catalogDatalist()+
       copyFromOptions()+
+      seedLoadOptions()+
       '<div class="ed-field"><span class="ed-lab">この日のねらい</span>'+
         '<textarea class="ed-in" id="ed-aim" rows="3" placeholder="この日のねらい（改行できます）">'+esc(model.aim)+'</textarea></div>'+
       '<div class="ed-field"><span class="ed-lab">コート</span>'+
@@ -605,6 +613,10 @@ export function editorScript() {
       '<div class="ed-actions">'+
         '<button type="button" class="btn btn-primary" data-act="save">保存</button>'+
         '<button type="button" class="btn" data-act="cancel">キャンセル</button>'+
+        '<button type="button" class="ed-mini" data-act="export">入力を書き出し</button>'+
+        // 破壊的操作（サーバの手直しを削除）。保存・キャンセルと混同しないよう小型＋ed-del（警告色）で
+        // 視覚的に分け、クリック時に確認ダイアログも挟む（移設後の誤操作防止・タスク要求）。
+        '<button type="button" class="ed-mini ed-del" data-act="revert-auto">自動生成に戻す</button>'+
       '</div>';
   }
   // ── 並べ替え（SortableJS・ハンドルで掴む／着地位置を点線で表示）──
@@ -688,6 +700,17 @@ export function editorScript() {
     var act=btn.getAttribute('data-act');
     if(act==='save'){doSave();return;}
     if(act==='cancel'){closePanel();return;}
+    if(act==='export'){exportJson();return;}
+    if(act==='revert-auto'){revertAuto();return;}
+    if(act==='load-seed'){
+      var seed=SEEDPREFILL[model.date];
+      if(!seed){flash('この日の叩き台はありません');return;}
+      if(modelHasContent()&&!window.confirm('いまの内容を、自動生成の叩き台で上書きします。よろしいですか？'))return;
+      model=normalizeModel(deepClone(seed),model.date,model.weekday);
+      renderPanel();
+      flash('叩き台を読み込みました。確認して保存してください');
+      return;
+    }
     collectInputs(); // 構造変更の前に現在値を取り込む
     if(act==='only-gender'){
       var wantG=btn.getAttribute('data-only-gender')||null;
@@ -1112,11 +1135,15 @@ export function editorScript() {
   }
 
   // ── 自動に戻す: サーバの上書きを削除→再読込（サーバが自動生成を再描画）──
+  // 上部ツールバーから編集画面の中へ移設済み（2026-07-29）。編集中は対象の article が hidden 化されて
+  // curDay()（hidden でない .day を探す）が拾えなくなるため、編集中は editingArticle を優先して使う。
   function revertAuto(){
-    var article=curDay();
+    var article=editingArticle||curDay();
     if(!article){flash('対象の日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
     if(!date){flash('この日は上書き編集の対象外です');return;}
+    // 破壊的操作（元に戻せない）のため、移設後の誤操作防止として確認を挟む。
+    if(!window.confirm('この日の手直しをサーバから削除し、自動生成に戻します。元に戻せません。よろしいですか？'))return;
     flash('自動に戻しています…');
     withAuth({'Content-Type':'application/json'})
       .then(function(headers){return fetch(withTenantQ('/api/override/delete'),{method:'POST',headers:headers,body:JSON.stringify({date:date})});})
@@ -1167,8 +1194,10 @@ export function editorScript() {
     if(area)return area;
     area=document.createElement('textarea');
     area.id='ed-export-area';area.className='ed-export-area';area.readOnly=true;area.setAttribute('data-print-hide','');
+    // 「入力を書き出し」ボタンは編集画面（panel）の中にあるので、クリップボード不可時のフォールバック欄も
+    // panel の中に出す（panel が無い呼び出し経路は無い想定だが、念のため #ed-msg の親へ退避する）。
     var msg=document.getElementById('ed-msg');
-    var host=msg&&msg.parentNode?msg.parentNode:document.body;
+    var host=panel||(msg&&msg.parentNode?msg.parentNode:document.body);
     host.appendChild(area);
     return area;
   }
@@ -1183,10 +1212,9 @@ export function editorScript() {
   }
 
   // ── ボタン結線 ──
+  // 「自動で叩き台を入れる」「自動に戻す」「入力を書き出し」は編集画面の中へ移設済み（2026-07-29）。
+  // それぞれ data-act="load-seed"/"revert-auto"/"export" として onPanelClick の委譲で拾う（上記）。
   var editBtn=document.getElementById('ed-edit');if(editBtn)editBtn.addEventListener('click',function(){openPanel(false);});
-  var seedBtn=document.getElementById('ed-seed');if(seedBtn)seedBtn.addEventListener('click',function(){openPanel(true);});
-  var autoBtn=document.getElementById('ed-auto');if(autoBtn)autoBtn.addEventListener('click',revertAuto);
-  var exportBtn=document.getElementById('ed-export');if(exportBtn)exportBtn.addEventListener('click',exportJson);
 
   // 空状態日の中の導線（「入力する」「自動で叩き台を入れる」）。表示中の空状態日からそのまま編集に入る。
   document.addEventListener('click',function(e){

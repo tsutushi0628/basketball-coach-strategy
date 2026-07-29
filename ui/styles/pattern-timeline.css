@@ -286,3 +286,25 @@
 .pk.on.sun,.pk.on.sat{color:var(--orange-ink)}
 .pk-off{opacity:.4;cursor:default;border-style:dashed}
 .pk-off:hover{transform:none}
+
+/* ── 日ビュー2段目ツールバー: 左=7曜日ピッカー／右=操作3つ（印刷・編集・コピー） ──
+ * 間に他要素を挟まない1段。横幅が足りない時は右側（操作群）だけを折り返す。 */
+.daytoolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:14px 0 18px}
+.daytoolbar-picker{min-width:0}
+.daytoolbar-picker .picker{margin-bottom:0}
+.daytoolbar-ops{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}
+/* 操作3ボタンの連結グループ。共通デザイン基盤の副次ボタン（透明背景＋細い1本罫）の考え方に合わせ、
+ * 面塗り（背景の塗りつぶし）は使わない。境界の重なりは連結ボタン群の作法（-1pxで1本に畳む）。 */
+.op-group{display:inline-flex;align-items:stretch}
+.op-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 16px;font:inherit;font-size:14px;font-weight:600;color:var(--ink);background:transparent;border:1px solid var(--hair);border-radius:0;cursor:pointer;white-space:nowrap;transition:border-color .16s ease,color .16s ease}
+.op-group .op-btn+.op-btn{margin-left:-1px}
+.op-btn:hover,.op-btn:focus-visible{z-index:1;border-color:var(--line-2);color:var(--orange-deep)}
+.op-btn:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.op-btn--icon{width:44px;min-width:44px;padding:0}
+.op-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:680px){.daytoolbar{align-items:stretch}.daytoolbar-ops{margin-left:0}}
+/* 印刷時は日ビュー2段目ツールバー（曜日ピッカー＋操作3つ）を丸ごと非表示にする。
+ * この規則は base.css の @media print より後段（本ファイルは renderPage で base.css の後に連結される）
+ * に置く必要がある: 同じセレクタ特異度なら後勝ちのため、.daytoolbar{display:flex}（本ファイル内・上記）
+ * より後に書かないと印刷時に上書きされず flex のまま残ってしまう（実測で確認済み）。 */
+@media print{.daytoolbar{display:none}}

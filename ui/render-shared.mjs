@@ -70,6 +70,16 @@ export const esc = (s) =>
 export const VIDEO_SVG =
   '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z"/></svg>';
 
+/** 日ビュー操作ツールバーのアイコン（プリンタ／鉛筆／複製・自作インラインSVG・emoji不使用）。
+ * 線幅・角処理（stroke-width/stroke-linecap/stroke-linejoin）は3つとも styles/pattern-timeline.css の
+ * .op-btn svg 側で揃える（各SVGにはpath形状のみ持たせる）。 */
+export const PRINT_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg>';
+export const EDIT_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg>';
+export const COPY_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg>';
+
 /**
  * §3.3: モードマーク（dot + 文字ラベル）。自走は空文字（多数派の自走全行にマークを置くと
  * コーチ付きの希少性が消えるため、コーチ付き・レクチャのみ表示）。
@@ -132,14 +142,6 @@ export function emptyState({ text, actions = '' }) {
 export function emptyDayActions() {
   return `<button type="button" class="btn" data-empty-act="blank" data-print-hide>入力する</button>` +
     `<button type="button" class="btn" data-empty-act="seed" data-print-hide>自動で叩き台を入れる</button>`;
-}
-
-/** 組違いON/OFFトグル。 */
-export function modeToggle() {
-  return `<div class="modetoggle" data-print-hide role="group" aria-label="組違いの切り替え">
-    <button class="mt on" type="button" data-mode-go="on">組違いON（体育館共有）</button>
-    <button class="mt" type="button" data-mode-go="off">組違いOFF（別時間）</button>
-  </div>`;
 }
 
 /** 日ヘッダ（曜日・コート・時間・本日の狙い）。印刷時は右側に月/週の目標を横並びにして行を稼ぐ。 */
@@ -479,7 +481,9 @@ export function clientScript() {
     document.querySelectorAll('.day[data-date]').forEach(function(p){p.hidden=p.getAttribute('data-date')!==iso;});
     var wkKey=weekKeyOfDay(target);
     // 対象日が属する週グループだけ表示（他は隠す）。週セレクタの on も同期。
-    document.querySelectorAll('.daywk[data-week]').forEach(function(g){g.hidden=g.getAttribute('data-week')!==wkKey;});
+    // .daywk（goalsBar+タイムライン）と .daywk-picker（7曜日ピッカー・row2左側）は別要素だが同じ
+    // data-week キーを共有するグループなので、両方まとめて切り替える（週切替時の表示ズレを防ぐ）。
+    document.querySelectorAll('.daywk[data-week],.daywk-picker[data-week]').forEach(function(g){g.hidden=g.getAttribute('data-week')!==wkKey;});
     dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===wkKey);});
     // 日ピッカーの on は「いま見えている日＝同じISO」のボタンだけ。
     dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-date')===iso);});
@@ -563,13 +567,6 @@ export function clientScript() {
   function showMonth(t){document.querySelectorAll('.mopanel[data-month]').forEach(function(p){p.hidden=p.getAttribute('data-month')!==t;});
     mts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curMonth=t;}
   mts.forEach(function(b){b.addEventListener('click',function(){showMonth(b.getAttribute('data-go'));});});
-  function setMode(m){
-    document.querySelectorAll('[data-interact]').forEach(function(el){el.hidden=el.getAttribute('data-interact')!==m;});
-    document.querySelectorAll('.modetoggle .mt').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-mode-go')===m);});
-    window.__shareMode=m;
-  }
-  document.querySelectorAll('.modetoggle .mt').forEach(function(b){b.addEventListener('click',function(){setMode(b.getAttribute('data-mode-go'));});});
-  setMode('on');
   // ── 印刷/PDF保存の既定ファイル名を選択中日付(yyyymmdd)にする ──
   // タイトル差替は window の beforeprint/afterprint に初期化時1回だけ登録する（ボタン経由も
   // Ctrl+P・ブラウザメニュー印刷も同じ経路で対象になり、連打・リスナー多重登録の穴が構造ごと消える）。
@@ -594,7 +591,12 @@ export function clientScript() {
       return null;
     })();
     var el=day?day.querySelector('.plain'):document.querySelector('.plain');
-    navigator.clipboard.writeText(el?el.textContent:'').then(function(){c.textContent='コピーしました';setTimeout(function(){c.textContent='テキストでコピー';},1500);});
+    // copyBtn はアイコンのみ（sr-onlyラベル＋SVG）なので、旧実装のようにボタン自身の textContent は
+    // 書き換えない（書き換えるとアイコン構造ごと消えて元に戻らなくなる）。共有の状態表示(#ed-msg)へ出す。
+    navigator.clipboard.writeText(el?el.textContent:'').then(function(){
+      var msg=document.getElementById('ed-msg');
+      if(msg){msg.textContent='コピーしました';setTimeout(function(){msg.textContent='';},1500);}
+    });
   });
   // ── ハッシュ駆動ドリル詳細オーバーレイ（§2.2）──
   var overlay=document.getElementById('drill-overlay');
