@@ -15,10 +15,13 @@
 
 import { BLOCK_TINT } from './render-shared.mjs';
 import { loadCss } from './styles/load-css.mjs';
-import { isAllTogetherTwoColRows } from './two-col-together.mjs';
+import { isSameGenderCell, isTogetherRow } from './two-col-together.mjs';
 
-/** 編集に出すブロック種別（BLOCK_TINT のブロックキー側）。 */
-const BLOCK_KEYS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
+/**
+ * 編集に出すブロック種別（BLOCK_TINT のブロックキー側）。移動・その他は遠征日等にコーチが
+ * 手で選ぶ枠（決定論エンジンの自動生成対象にはしない＝エンジンは移動時間の入力を持たない）。
+ */
+const BLOCK_KEYS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム', '移動', 'その他'];
 
 /** データアイランドの id（editorDataIsland と editorScript で共有）。 */
 const ISLAND_ID = 'bcs-ed';
@@ -209,7 +212,8 @@ export function editorDataIsland(data) {
  */
 export function editorScript() {
   return `(function(){
-  var isAllTogetherTwoColRows=${isAllTogetherTwoColRows.toString()};
+  var isSameGenderCell=${isSameGenderCell.toString()};
+  var isTogetherRow=${isTogetherRow.toString()};
   var island=document.getElementById('${ISLAND_ID}');
   if(!island)return;
   var ED=JSON.parse(island.textContent||'{}');
@@ -295,10 +299,8 @@ export function editorScript() {
     return '<div class="tc2-head"><span class="tll tll-lg" style="--t:'+tint+'">'+esc(cell.label)+'</span></div>'+
       '<div class="tc2-body">'+items+'</div>';
   }
-  // 全幅バンド1本（男女共通 or オンリー1列で共用）。cell から見出し＋item群を描く。
-  //  mirror=true: 男女共通（左右2バンドミラー・2列グリッド）。
-  //  only=true: オンリー1列（左レール時計＋内容フル幅・tc2-only グリッド）。
-  function bandRowHtml(cell,from,mirror,only){
+  // 全幅バンド1本（時計は左レール54px固定・内容は全幅）。男女同一行／オンリー1列行で共用。
+  function oneColRowHtml(cell,from){
     var tint=cell?tintOf(cell.block):'var(--mute)';
     var bandInner=cell
       ?('<span class="tll tll-lg" style="--t:'+tint+'">'+esc(cell.label)+'</span>'+
@@ -306,57 +308,66 @@ export function editorScript() {
           return '<span class="tc2-bn">'+esc(it.name)+(it.note?'（'+esc(it.note)+'）':'')+'</span>';
         }).join(''))
       :'<div class="tc2-empty">—</div>';
-    var clk='<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
-      '<span class="spine-dot" style="background:var(--t)"></span></div>';
-    var band='<div class="spine-band left">'+bandInner+'</div>';
-    // オンリー時は 左=時計→右=内容 の順（グリッド 54px 1fr）。共通(mirror)時は従来の 左band｜clk｜右band。
-    var inner=only?(clk+band):(band+clk+(mirror?'<div class="spine-band right">'+bandInner+'</div>':''));
-    return '<div class="spine-row spine-together tc2-together'+(only?' tc2-only':'')+'" style="--t:'+tint+'">'+
-      inner+
+    return '<div class="spine-row spine-together tc2-together tc2-only" style="--t:'+tint+'">'+
+      '<div class="spine-clk"><span class="tk">'+esc(from)+'</span>'+
+        '<span class="spine-dot" style="background:var(--t)"></span></div>'+
+      '<div class="spine-band left">'+bandInner+'</div>'+
     '</div>';
   }
-  function rowHtml(row,onlyG,allTogether){
-    // オンリー時は対象性別1列（バンド）。対象セルが無く共通(both)があれば both を出す（F: '—'にしない）。
-    if(onlyG||allTogether){
-      var cellOnly=onlyG?(cellHasContent(row[onlyG])?row[onlyG]:(row.both||row[onlyG])):(row.both||row['男子']);
-      return bandRowHtml(cellOnly,row.from,false,true);
-    }
-    if(row.both)return bandRowHtml(row.both,row.from,true,false); // 男女共通の全幅バンド（左右ミラー）
-    return '<div class="spine-row spine-rotation tc2-split">'+
-      '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['男子'])+'</div>'+
+  // 男女で内容が異なる行。時計は左レール固定・内容は右側で男子/女子2分割（tc2-pair）。
+  function splitRowHtml(row){
+    return '<div class="spine-row spine-rotation tc2-only tc2-split">'+
       '<div class="spine-clk"><span class="tk">'+esc(row.from)+'</span>'+
         '<span class="spine-dot" style="background:var(--orange)"></span></div>'+
-      '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['女子'])+'</div>'+
+      '<div class="tc2-pair">'+
+        '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['男子'])+'</div>'+
+        '<div class="spine-side spine-self tc2-cell">'+cellInnerHtml(row['女子'])+'</div>'+
+      '</div>'+
+    '</div>';
+  }
+  // 連続する相違行の区間の先頭にだけ出す男子/女子見出し（左レール分は空スペーサ）。
+  function runHeaderHtml(){
+    return '<div class="spine-header tc2-only tc2-runhead">'+
+      '<div class="spine-clock-header"></div>'+
+      '<div class="tc2-pair">'+
+        '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
+        '<div class="spine-col-label">'+genderChipHtml('女子')+'</div>'+
+      '</div>'+
     '</div>';
   }
   function timelineHtml(ov){
     var rows=ov.rows||[];
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
-    // 男女共通だけの日も既存 onlyGender の1列構造を使う。男女別セルが残る日は混在させず従来の2列に保つ。
-    var allTogether=isAllTogetherTwoColRows(rows);
-    var oneColumn=!!onlyG||allTogether;
-    // オンリー時は 左=時計列（空ヘッダ）／右=性別チップ の順・左レール時計＋内容フル幅の1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
-    var genderHeader=onlyG
-      ?('<div class="spine-header tc2-only">'+
+    var headerHtml='';
+    var rowsHtml='';
+    if(onlyG){
+      // オンリー時は 左=時計列（空ヘッダ）／右=性別チップ の順・左レール時計＋内容フル幅の1列レイアウト（サーバ描画 twoColTimeline と一致・C）。
+      headerHtml='<div class="spine-header tc2-only">'+
           '<div class="spine-clock-header"></div>'+
           '<div class="spine-col-label">'+genderChipHtml(onlyG)+'</div>'+
-        '</div>')
-      :(!allTogether?('<div class="spine-header">'+
-          '<div class="spine-col-label">'+genderChipHtml('男子')+'</div>'+
-          '<div class="spine-clock-header"></div>'+
-          '<div class="spine-col-label">'+genderChipHtml('女子')+'</div>'+
-        '</div>'):'');
-    var rowsHtml=rows.map(function(r){return rowHtml(r,onlyG,allTogether);}).join('');
+        '</div>';
+      // 対象性別セルを優先。対象セルが無く共通(both)があれば both を出す（F: '—'にしない）。
+      rowsHtml=rows.map(function(r){
+        var cellOnly=cellHasContent(r[onlyG])?r[onlyG]:(r.both||r[onlyG]);
+        return oneColRowHtml(cellOnly,r.from);
+      }).join('');
+    }else{
+      // 行単位判定: 共通行は全幅1本、相違行だけ2分割し、連続する相違区間の先頭にだけ見出しを出す。
+      var prevSplit=false;
+      rows.forEach(function(r){
+        var split=!isTogetherRow(r);
+        if(split&&!prevSplit)rowsHtml+=runHeaderHtml();
+        rowsHtml+= split?splitRowHtml(r):oneColRowHtml(r.both||r['男子'],r.from);
+        prevSplit=split;
+      });
+    }
     var endTo=rows.length?(rows[rows.length-1].to||''):'';
-    // 終了行: オンリー時は 左=時計→右=終了バンド の順。共通/2列時は従来どおり 左バンド｜clk｜右バンド。
-    var endClk='<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
-      '<span class="spine-dot" style="background:var(--mute)"></span></div>';
-    var endBand='<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>';
-    var endInner=oneColumn?(endClk+endBand):(endBand+endClk+'<div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>');
-    var endRow='<div class="spine-row spine-together spine-end'+(oneColumn?' tc2-only':'')+'">'+
-      endInner+
+    var endRow='<div class="spine-row spine-together spine-end tc2-only">'+
+      '<div class="spine-clk"><span class="tk">'+esc(endTo)+'</span>'+
+        '<span class="spine-dot" style="background:var(--mute)"></span></div>'+
+      '<div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>'+
     '</div>';
-    return genderHeader+'<div id="plan-top" class="spine'+(oneColumn?' spine-only':'')+'">'+rowsHtml+endRow+'</div>';
+    return headerHtml+'<div id="plan-top" class="spine spine-only">'+rowsHtml+endRow+'</div>';
   }
   // 既存「テキストでコピー」用のプレーンテキスト（編集中 override から組む）。
   // 既存 plainText(twoCol分岐) と同趣旨: 日付（曜日）／狙い／各行 from-to ＋ 男女別 or 男女共通。
@@ -380,11 +391,10 @@ export function editorScript() {
         // 対象セルが無く共通(both)があれば both を出す（F と整合）。
         var cellO=cellHasContent(r[onlyG])?r[onlyG]:(r.both||r[onlyG]);
         L.push('　'+onlyG+'｜'+(cellO?cellPlain(cellO):'—'));
-      }else if(isAllTogetherTwoColRows(ov.rows||[])){
+      }else if(isTogetherRow(r)){
+        // 明示のboth、または男女セルの内容一致（行単位）のいずれも共通の1本行として出す。
         var common=r.both||r['男子'];
         L.push('　[男女共通] '+cellPlain(common));
-      }else if(r.both){
-        L.push('　[男女共通] '+cellPlain(r.both));
       }else{
         L.push('　男子｜'+(r['男子']?cellPlain(r['男子']):'—'));
         L.push('　女子｜'+(r['女子']?cellPlain(r['女子']):'—'));

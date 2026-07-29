@@ -256,6 +256,8 @@ a{color:var(--orange-deep)}
   .drill-overlay{display:none!important}
   /* onlyGender日（対象が単一性別）のタイムライン直上チップは、日ヘッダのteamChipと同一情報の
    * 二重表示（列ラベルとしての位置情報も持たない＝1列しかない）。印刷限定で消し対象表記をヘッダへ
-   * 一本化する。男女同居日の3列spine-header（左右どちらの列かを示す位置ラベル）は対象外で維持する。 */
-  .spine-header.tc2-only{display:none}
+   * 一本化する。男女同居日の3列spine-header（左右どちらの列かを示す位置ラベル）は対象外で維持する。
+   * tc2-runhead（行単位で男女相違区間の先頭に出す男子/女子見出し）も対象外: 日ヘッダ側に重複情報を
+   * 持たず、この見出しを消すと相違行の左右どちらが男子/女子か紙面から読めなくなるため消してはいけない。 */
+  .spine-header.tc2-only:not(.tc2-runhead){display:none}
 }

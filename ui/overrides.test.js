@@ -239,3 +239,54 @@ test('⑦ 男女オンリーモード: onlyGender 未指定の従来上書きは
   const tue = result.find((d) => d.day === '火');
   assert.equal(tue.onlyGender, undefined, 'onlyGender未指定の日は従来どおり男女両方（キー自体を持たない）');
 });
+
+// ⑧ 遠征日（移動/その他）: コーチが手で選ぶ移動・その他ブロックが保存内容どおり描画され、
+//    自動生成専用の固定順ガード（engine/src/gates.js assertSessionForm）を経由しないため
+//    ブロック順に関わらず弾かれない ─────────────────────────────────────────────
+
+/** 遠征日（火・移動→その他の順で並ぶ男女共通2行）の上書き1件。 */
+function travelDayOverride(dateStr = '2026-06-23') {
+  return {
+    date: dateStr,
+    weekday: '火',
+    source: 'coach',
+    layout: 'two-col',
+    title: '遠征（練習試合）',
+    court: '屋外',
+    rows: [
+      {
+        from: '13:00', to: '15:00', minutes: 120,
+        both: { block: '移動', label: '移動（バス）', items: [{ name: '会場への移動', note: '集合13:00・体育館前' }] },
+      },
+      {
+        from: '15:00', to: '15:30', minutes: 30,
+        both: { block: 'その他', label: 'その他', items: [{ name: '受付・アップ場所確認' }] },
+      },
+    ],
+  };
+}
+
+test('⑧ 遠征日: コーチが選んだ移動/その他ブロックが手書き内容のまま画面に出る', () => {
+  const week = makeWeek();
+  const result = applyOverrides(week, [travelDayOverride('2026-06-23')], WEEK_START);
+
+  const tue = result.find((d) => d.day === '火');
+  assert.equal(tue.source, 'coach', '火が source:coach になる');
+  assert.equal(tue.rows.length, 2, '移動→その他の2行がそのまま描画データに残る');
+  assert.equal(tue.rows[0].both.block, '移動', '1行目が移動ブロックとして残る');
+  assert.equal(tue.rows[0].both.label, '移動（バス）', '移動ブロックの手書き見出しがそのまま残る');
+  assert.equal(tue.rows[0].both.items[0].name, '会場への移動', '移動ブロックの手書き項目名がそのまま残る');
+  assert.equal(tue.rows[1].both.block, 'その他', '2行目がその他ブロックとして残る');
+});
+
+test('⑧ 遠征日: 移動/その他を含む上書き日の描画は、自動生成専用の固定順ガードを経由しないため例外を投げない', () => {
+  // engine/src/gates.js の assertSessionForm は「移動」「その他」を知らない固定順配列で判定するが、
+  // それは planWeek() が組み立てる Plan オブジェクト（自動生成6ブロックのみ）にしか実行されない。
+  // applyOverrides はコーチ上書きを直接描画データへ変換するだけで planWeek/runAllGates を一切呼ばない
+  // ため、未知ブロックとして弾かれることはない（この非依存関係そのものが業務要件）。
+  const week = makeWeek();
+  assert.doesNotThrow(
+    () => applyOverrides(week, [travelDayOverride('2026-06-23')], WEEK_START),
+    '移動/その他を含む上書き日の描画が例外なく完了するべき',
+  );
+});

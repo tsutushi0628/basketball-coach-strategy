@@ -10,7 +10,7 @@
  */
 
 import { loadCss } from './styles/load-css.mjs';
-import { isAllTogetherTwoColRows } from './two-col-together.mjs';
+import { isAllTogetherTwoColRows, isTogetherRow } from './two-col-together.mjs';
 
 /** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。実体は styles/tokens.css。
  * T5: --shadow/--shadow-soft/--inset を削除し、border+面の濃淡2値で区切りを表現する。
@@ -52,6 +52,10 @@ export const BLOCK_TINT = {
   ラン: 'var(--sage)',
   静的: 'var(--mute)',
   ゲーム: 'var(--orange)',
+  // 遠征日等にコーチが手で選ぶ枠（自動生成対象外）。既存トークンの未使用の濃色2種を割り当て、
+  // 互いに区別できる色にする（灰色フォールバックに落とさない）。
+  移動: 'var(--orange-deep)',
+  その他: 'var(--terra-ink)',
   // 表示ラベル（together行 row.label 経由の参照用）
   ファンダメンタル: 'var(--orange)',
   走り込み: 'var(--sage)',
@@ -682,14 +686,21 @@ export function plainText(data, pd) {
     // 男女2列日（twoCol）: 時間スロットごとに男女2列で出す。both は男女共通の1本。
     if (pd.twoCol) {
       const onlyG = (pd.onlyGender === '男子' || pd.onlyGender === '女子') ? pd.onlyGender : null;
-      const headScope = onlyG ? `・${onlyG}のみ` : '・男女2列';
+      // 見出しは実際の割れ方に合わせる（行単位判定）: 全行共通／一部だけ男女別／全行男女別。
+      const splitCount = pd.rows.filter((r) => !isTogetherRow(r)).length;
+      const headScope = onlyG
+        ? `・${onlyG}のみ`
+        : isAllTogetherTwoColRows(pd.rows)
+          ? '・男女共通'
+          : splitCount === pd.rows.length
+            ? '・男女2列'
+            : '・一部男女別';
       L.push(`【${data.school}】${data.month}月 ${pd.dayLabel}（${pd.court}${headScope}）${pd.title || '練習メニュー'}`);
       L.push('');
       L.push(`■ この日のねらい：${pd.aim}`);
       const cellText = (cell) =>
         (cell.items || []).map((it) => `${it.name}${it.note ? `（${it.note}）` : ''}`).join('／');
       const cellLine = (cell) => (cell ? `${cell.label}：${cellText(cell)}` : '—');
-      const allTogether = isAllTogetherTwoColRows(pd.rows);
       for (const r of pd.rows) {
         L.push('');
         L.push(`■ ${r.from}〜${r.to}`);
@@ -699,11 +710,10 @@ export function plainText(data, pd) {
           const sideKey = onlyG === '男子' ? 'boys' : 'girls';
           const cell = r[sideKey] || r.both || null;
           L.push(`　${onlyG}｜${cellLine(cell)}`);
-        } else if (allTogether) {
+        } else if (isTogetherRow(r)) {
+          // 明示のboth、または男女セルの内容一致（行単位）のいずれも共通の1本行として出す。
           const cell = r.both || r.boys || r['男子'] || null;
           L.push(`　[男女共通] ${cellLine(cell)}`);
-        } else if (r.both) {
-          L.push(`　[男女共通] ${r.both.label}：${cellText(r.both)}`);
         } else {
           L.push(`　男子｜${cellLine(r.boys)}`);
           L.push(`　女子｜${cellLine(r.girls)}`);

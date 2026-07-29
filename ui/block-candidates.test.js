@@ -2,8 +2,9 @@
  * @file 編集画面の枠別ドリル候補（buildPlanData().blockCandidates）の業務意図テスト。
  *
  * 検証する業務意図:
- *   - blockCandidates は編集画面の7枠（自動生成6枠＋ゲーム）をキーに持ち、各枠に
- *     その枠に該当するドリル名だけが並ぶ（手編集の候補が自動生成の枠分けと揃う）。
+ *   - blockCandidates は編集画面の9枠（自動生成6枠＋ゲーム＋移動/その他）をキーに持ち、各枠に
+ *     その枠に該当するドリル名だけが並ぶ（手編集の候補が自動生成の枠分けと揃う）。移動/その他は
+ *     コーチが手で選ぶだけの枠でどのドリルも自動分類されないため、候補は常に空配列になる。
  *   - 候補のドリル名は drillIndex（タイムラインが引く詳細レジストリ＝カタログ名）のキーに含まれる
  *     ＝編集画面で選んだ候補が必ず詳細を引ける（孤児候補を出さない）。
  *   - 枠をまたいだ二重所属が無い（あるドリル名が2枠に現れない）。
@@ -25,8 +26,8 @@ import { buildPlanData } from './plan-data.mjs';
 import { localStorages } from './build.mjs';
 import { normalizeDrills } from '../engine/src/normalize.js';
 
-/** 編集画面の7枠（editor.mjs の BLOCK_KEYS と一致）。 */
-const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
+/** 編集画面の9枠（editor.mjs の BLOCK_KEYS と一致）。 */
+const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム', '移動', 'その他'];
 
 /** 得点動作（リム付近のフィニッシュ含め全てシュート枠に集約済み。専用カテゴリは撤去）。 */
 const SCORING_CATEGORIES = new Set(['シュート']);
@@ -53,11 +54,11 @@ function catalogNameSet(drillIndex) {
   return new Set(Object.keys(drillIndex));
 }
 
-test('blockCandidates は編集画面の7枠を持ち、各候補名がカタログ（drillIndex）に実在する', async () => {
+test('blockCandidates は編集画面の9枠を持ち、各候補名がカタログ（drillIndex）に実在する', async () => {
   const data = await buildPlanData(localStorages());
   const bc = data.blockCandidates;
   assert.ok(bc && typeof bc === 'object', 'blockCandidates が返るべき');
-  assert.deepEqual(Object.keys(bc).sort(), [...EDITOR_BLOCKS].sort(), '7枠ちょうどをキーに持つ');
+  assert.deepEqual(Object.keys(bc).sort(), [...EDITOR_BLOCKS].sort(), '9枠ちょうどをキーに持つ');
 
   const catalog = catalogNameSet(data.drillIndex);
   for (const block of EDITOR_BLOCKS) {

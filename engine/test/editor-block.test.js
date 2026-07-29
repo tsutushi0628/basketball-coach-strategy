@@ -1,10 +1,11 @@
 /**
- * @file Tests for the editor's 7-block mapping (editorBlockOf) and the editor candidate buckets.
+ * @file Tests for the editor's block mapping (editorBlockOf) and the editor candidate buckets.
  *
  * Business intent verified (NOT the regex/branch mechanics):
- *   (a) Every drill in the real catalog is routed to exactly ONE of the 7 editor blocks —
+ *   (a) Every drill in the real catalog is routed to exactly ONE of the 9 editor blocks —
  *       no drill is lost (取りこぼし) and none lands in two buckets (二重所属); the bucket
- *       sizes sum to the total drill count.
+ *       sizes sum to the total drill count. 移動/その他 are coach-typed-only (no drill routes
+ *       there), so their buckets stay at 0 — this is expected, not a gap.
  *   (b) Finishing (フィニッシュ・ゴール下/レイアップ) is a scoring action, so EVERY finishing drill
  *       routes to the shooting block (シュート) regardless of mastery stage — none falls into the
  *       fundamentals block (ファンダ＝3基礎だけ・得点動作は全てシュート枠). This is inherited from
@@ -28,8 +29,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
 const DRILLS_PATH = resolve(repoRoot, 'docs/practice-knowledge/data/drills.json');
 
-/** The editor's 7 blocks (auto-generated 6 + ゲーム). */
-const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
+/**
+ * The editor's 9 blocks (auto-generated 6 + ゲーム + 移動/その他). 移動/その他 are coach-typed-only
+ * travel-day blocks: no catalog drill ever routes to them via editorBlockOf, so their buckets
+ * stay at 0 in the partition test below — included here only so EDITOR_BLOCKS mirrors the real
+ * editor block set (editor.mjs BLOCK_KEYS).
+ */
+const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム', '移動', 'その他'];
 
 /** Load + normalize the real catalog. */
 function loadDrills() {
@@ -56,7 +62,7 @@ function drill(over) {
 }
 
 // ── (a) partition: every drill → exactly one editor block, sizes sum to the total ──
-test('editorBlockOf partitions the whole catalog into the 7 editor blocks (no loss, no double-assignment)', () => {
+test('editorBlockOf partitions the whole catalog into the 9 editor blocks (no loss, no double-assignment)', () => {
   const drills = loadDrills();
   const buckets = Object.fromEntries(EDITOR_BLOCKS.map((b) => [b, 0]));
   let unmapped = 0;
@@ -72,9 +78,12 @@ test('editorBlockOf partitions the whole catalog into the 7 editor blocks (no lo
   const placed = EDITOR_BLOCKS.reduce((s, b) => s + buckets[b], 0);
   // No drill is lost or double-counted: placed + unmapped === total.
   assert.equal(placed + unmapped, drills.length, '振り分け済み＋未割当の合計が総ドリル数に一致するべき');
-  // The real catalog has a home for every drill, so the 7 buckets cover ALL of it (sum = total).
-  assert.equal(unmapped, 0, '実カタログの全ドリルが7枠のいずれかに入る（取りこぼしゼロ）');
-  assert.equal(placed, drills.length, '7枠のサイズ合計＝総ドリル数');
+  // The real catalog has a home for every drill, so the 7 auto/game buckets cover ALL of it
+  // (sum = total). 移動/その他 legitimately stay at 0 (coach-typed-only, no catalog drill).
+  assert.equal(unmapped, 0, '実カタログの全ドリルが編集画面の枠のいずれかに入る（取りこぼしゼロ）');
+  assert.equal(placed, drills.length, '枠のサイズ合計＝総ドリル数');
+  assert.equal(buckets['移動'], 0, '移動枠はコーチ手入力専用でカタログドリルは自動分類されない');
+  assert.equal(buckets['その他'], 0, 'その他枠はコーチ手入力専用でカタログドリルは自動分類されない');
 });
 
 // ── (b) 得点動作（マイカン/レイアップ/ゴール下フィニッシュ）は全てシュート枠（ファンダ枠に出ない）──

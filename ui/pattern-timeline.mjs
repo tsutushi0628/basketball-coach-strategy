@@ -13,7 +13,7 @@ import {
   genderChip, VIDEO_SVG, emptyState, emptyDayActions,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
-import { isAllTogetherTwoColRows } from './two-col-together.mjs';
+import { isTogetherRow } from './two-col-together.mjs';
 import { GOAL_EDITOR_CSS, goalEditorScript } from './goal-editor.mjs';
 import { loadCss } from './styles/load-css.mjs';
 // 並べ替え（D&D）ライブラリは firebase-kit 共有vendorが正本。ページにインライン注入して window.Sortable を生やす。
@@ -202,17 +202,19 @@ function rotationTimeline(pd, drillIndex) {
 }
 
 /**
- * コーチ指定の上書き日（layout:"two-col"）専用の男女2列タイムライン。
+ * コーチ指定の上書き日（layout:"two-col"）専用のタイムライン（行単位・時間軸は常に左端固定）。
  *
- * レイアウト: 左=男子セル / 中央=時刻クロック＋dot / 右=女子セル。
- *  - both 行（ラントレ等の男女共通）: 3列を横断する全幅バンド（together）。
- *  - 男女別行: 左右2セル。各セルは見出し(label・16px)＋itemリスト(name 14px・note は .alt)。
- * 既存トークン（spine/spine-band/spine-clk/tll/tll-lg/tdn/alt/genderChip）を再利用。
+ * レイアウト: 左レール(54px)=時刻クロック＋dot（全行共通） / 右=内容。
+ *  - 男女同一の行（row.both、または男子セルと女子セルの内容が一致）: 右側は全幅バンド1本（見出し
+ *    大16px＋itemリスト）。男子/女子の見出しは出さない。
+ *  - 男女で異なる行: 右側を左=男子／右=女子の2セルに分割。連続する相違行の区間の先頭にだけ
+ *    「男子」「女子」見出し行（tc2-runhead）を1回出す。区間が離れていれば区間ごとに見出しを出す。
+ * 既存トークン（spine/spine-band/spine-clk/spine-side/tll/tll-lg/tdn/alt/genderChip/tc2-only）を
+ * 再利用し、内容2分割にだけ新規 .tc2-pair（1fr 1fr グリッド）を足す。
  * 手書きドリル名はカタログ外なので drillIndex を使わず素テキスト化する（throwさせない）。
  *
- * pd.onlyGender（男女オンリーモード）が立っている日は、男女2列を描かず対象性別1列で描く。
- * 新規レンダラーは作らず、既存の全幅バンド（spine-together/spine-band）を1性別の中身で使い回す
- * （both行の全幅バンド描画と同一のCSS・DOM構造＝新規クラスなし）。
+ * pd.onlyGender（男女オンリーモード）が立っている日は、行単位判定を経由せず対象性別1列で描く
+ * （オンリー日は男女相違の概念が無く、常に対象性別のセル1本のため）。
  */
 function twoColTimeline(pd) {
   const rows = pd.rows || [];
@@ -232,87 +234,74 @@ function twoColTimeline(pd) {
       <div class="tc2-body">${items}</div>`;
   };
 
-  const onlyGender = pd.onlyGender === '男子' || pd.onlyGender === '女子';
-  // 男女共通だけの日も既存 onlyGender の1列構造に畳む。男女別セルが1行でもあれば2列のままにする。
-  const allTogether = isAllTogetherTwoColRows(rows);
-
-  // オンリーモード、または全行が男女共通の日: 左レール(時計)＋内容フル幅の本物の1列レイアウト。
-  if (onlyGender || allTogether) {
-    const side = pd.onlyGender === '男子' ? 'boys' : 'girls';
-    // 左=時計列（空ヘッダ）／右=性別チップ（内容側）の順（グリッド 54px 1fr に合わせる）。
-    const genderHeader = onlyGender ? `<div class="spine-header tc2-only">
-      <div class="spine-clock-header"></div>
-      <div class="spine-col-label">${genderChip(pd.onlyGender)}</div>
-    </div>` : '';
-    const rowsHtml = rows.map((row) => {
-      // 対象性別セルを優先。無く row.both があれば共通(both)を1列に出す（F: '—'幽霊を避ける）。
-      const cell = onlyGender ? (row[side] || row.both || null) : (row.both || row.boys || row['男子'] || null);
-      const tint = cell ? (BLOCK_TINT[cell.block] || 'var(--mute)') : 'var(--mute)';
-      const bandInner = cell
-        ? `<span class="tll tll-lg" style="--t:${tint}">${esc(cell.label)}</span>
-          ${(cell.items || []).map((it) => `<span class="tc2-bn">${esc(it.name)}${it.note ? `（${esc(it.note)}）` : ''}</span>`).join('')}`
-        : '<div class="tc2-empty">—</div>';
-      // 左=時計(spine-clk)→右=内容バンド の順（グリッド 54px 1fr）。
-      return `<div class="spine-row spine-together tc2-together tc2-only" style="--t:${tint}">
-        <div class="spine-clk">
-          <span class="tk">${esc(row.from)}</span>
-          <span class="spine-dot" style="background:var(--t)"></span>
-        </div>
-        <div class="spine-band left">${bandInner}</div>
-      </div>`;
-    }).join('');
-    const endRowOnly = `<div class="spine-row spine-together spine-end tc2-only">
+  // 時計は左レール(54px)固定・内容は全幅1本（男女同一行／オンリー行で共用）。
+  const oneColRow = (cell, from) => {
+    const tint = cell ? (BLOCK_TINT[cell.block] || 'var(--mute)') : 'var(--mute)';
+    const bandInner = cell
+      ? `<span class="tll tll-lg" style="--t:${tint}">${esc(cell.label)}</span>
+        ${(cell.items || []).map((it) => `<span class="tc2-bn">${esc(it.name)}${it.note ? `（${esc(it.note)}）` : ''}</span>`).join('')}`
+      : '<div class="tc2-empty">—</div>';
+    return `<div class="spine-row spine-together tc2-together tc2-only" style="--t:${tint}">
       <div class="spine-clk">
-        <span class="tk">${esc(pd.end)}</span>
-        <span class="spine-dot" style="background:var(--mute)"></span>
+        <span class="tk">${esc(from)}</span>
+        <span class="spine-dot" style="background:var(--t)"></span>
       </div>
-      <div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>
+      <div class="spine-band left">${bandInner}</div>
     </div>`;
-    return `${genderHeader}<div id="plan-top" class="spine spine-only">${rowsHtml}${endRowOnly}</div>`;
-  }
+  };
 
-  const genderHeader = `<div class="spine-header">
-    <div class="spine-col-label">${genderChip('男子')}</div>
-    <div class="spine-clock-header"></div>
-    <div class="spine-col-label">${genderChip('女子')}</div>
+  // 時計は左レール固定・内容は右側で男子/女子2分割（男女で内容が異なる行）。
+  const splitRow = (row) => `<div class="spine-row spine-rotation tc2-only tc2-split">
+    <div class="spine-clk">
+      <span class="tk">${esc(row.from)}</span>
+      <span class="spine-dot" style="background:var(--orange)"></span>
+    </div>
+    <div class="tc2-pair">
+      <div class="spine-side spine-self tc2-cell">${cellInner(row.boys)}</div>
+      <div class="spine-side spine-self tc2-cell">${cellInner(row.girls)}</div>
+    </div>
   </div>`;
 
-  const rowsHtml = rows.map((row) => {
-    if (row.both) {
-      // 男女共通の全幅バンド（左右ミラー・中央クロック）。見出し大＋itemリスト。
-      const tint = BLOCK_TINT[row.both.block] || 'var(--mute)';
-      const bandInner = `<span class="tll tll-lg" style="--t:${tint}">${esc(row.both.label)}</span>
-        ${(row.both.items || []).map((it) => `<span class="tc2-bn">${esc(it.name)}${it.note ? `（${esc(it.note)}）` : ''}</span>`).join('')}`;
-      return `<div class="spine-row spine-together tc2-together" style="--t:${tint}">
-        <div class="spine-band left">${bandInner}</div>
-        <div class="spine-clk">
-          <span class="tk">${esc(row.from)}</span>
-          <span class="spine-dot" style="background:var(--t)"></span>
-        </div>
-        <div class="spine-band right">${bandInner}</div>
-      </div>`;
-    }
-    // 男女別行: 左=男子 / 中央=時刻 / 右=女子。
-    return `<div class="spine-row spine-rotation tc2-split">
-      <div class="spine-side spine-self tc2-cell">${cellInner(row.boys)}</div>
-      <div class="spine-clk">
-        <span class="tk">${esc(row.from)}</span>
-        <span class="spine-dot" style="background:var(--orange)"></span>
-      </div>
-      <div class="spine-side spine-self tc2-cell">${cellInner(row.girls)}</div>
-    </div>`;
-  }).join('');
+  // 連続する相違行の区間の先頭にだけ出す男子/女子見出し（左レール分は空スペーサ）。
+  const runHeader = `<div class="spine-header tc2-only tc2-runhead">
+    <div class="spine-clock-header"></div>
+    <div class="tc2-pair">
+      <div class="spine-col-label">${genderChip('男子')}</div>
+      <div class="spine-col-label">${genderChip('女子')}</div>
+    </div>
+  </div>`;
 
-  const endRow = `<div class="spine-row spine-together spine-end">
-    <div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>
+  const onlyGender = pd.onlyGender === '男子' || pd.onlyGender === '女子';
+
+  let headerHtml = '';
+  let rowsHtml = '';
+  if (onlyGender) {
+    const side = pd.onlyGender === '男子' ? 'boys' : 'girls';
+    headerHtml = `<div class="spine-header tc2-only">
+      <div class="spine-clock-header"></div>
+      <div class="spine-col-label">${genderChip(pd.onlyGender)}</div>
+    </div>`;
+    // 対象性別セルを優先。無く row.both があれば共通(both)を1列に出す（'—'幽霊を避ける）。
+    rowsHtml = rows.map((row) => oneColRow(row[side] || row.both || null, row.from)).join('');
+  } else {
+    let prevSplit = false;
+    for (const row of rows) {
+      const split = !isTogetherRow(row);
+      if (split && !prevSplit) rowsHtml += runHeader;
+      rowsHtml += split ? splitRow(row) : oneColRow(row.both || row.boys || row['男子'] || null, row.from);
+      prevSplit = split;
+    }
+  }
+
+  const endRow = `<div class="spine-row spine-together spine-end tc2-only">
     <div class="spine-clk">
       <span class="tk">${esc(pd.end)}</span>
       <span class="spine-dot" style="background:var(--mute)"></span>
     </div>
-    <div class="spine-band right spine-band-end"><span class="tbl">終了</span></div>
+    <div class="spine-band left spine-band-end"><span class="tbl">終了</span></div>
   </div>`;
 
-  return `${genderHeader}<div id="plan-top" class="spine">${rowsHtml}${endRow}</div>`;
+  return `${headerHtml}<div id="plan-top" class="spine spine-only">${rowsHtml}${endRow}</div>`;
 }
 
 // ── T2: ドリル詳細オーバーレイパネル（ハッシュ駆動）──────────────────────────────

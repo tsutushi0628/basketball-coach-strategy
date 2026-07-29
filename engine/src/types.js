@@ -237,7 +237,9 @@
 
 /**
  * @typedef {Object} PlanBlock
- * @property {"アップ"|"ファンダ"|"シュート"|"対人"|"ラン"|"静的"} block  Fixed-skeleton block key.
+ * @property {"アップ"|"ファンダ"|"シュート"|"対人"|"ラン"|"静的"|"移動"|"その他"} block  Fixed-skeleton
+ *   block key for engine-generated sessions, plus "移動"/"その他" — editor-only blocks a coach
+ *   hand-picks for travel days (never emitted by the engine; see allocate.js BLOCK_ORDER).
  *   Sessions are built as the fixed 6-block order アップ→ファンダ→シュート→対人→ラン→静的
  *   (warm-up → fundamentals → shooting → contested → conditioning run → static stretch).
  * @property {PlanItem[]} items

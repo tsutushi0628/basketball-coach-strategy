@@ -58,6 +58,8 @@ const BLOCK_LABEL = {
   対人: '対人',
   ラン: '走り込み',
   静的: '静的ストレッチ',
+  移動: '移動',
+  その他: 'その他',
 };
 /** 束ね（左右同一・実尺占有）表示にするブロック＝ルーティン本（アップ/走り込み/静的）。 */
 const BUNDLE_BLOCKS = new Set(['アップ', 'ラン', '静的']);
@@ -195,8 +197,12 @@ function buildSelfFillPool(drills, dominantCat, usedNames) {
     }));
 }
 
-/** 編集画面の7枠（自動生成6枠＋ゲーム枠）。editorBlockOf の写像先と一致させる。 */
-const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム'];
+/**
+ * 編集画面の9枠（自動生成6枠＋ゲーム枠＋移動/その他）。移動・その他は遠征日等にコーチが手で
+ * 選ぶだけの枠で、editorBlockOf の写像先（ドリルカタログからの自動振り分け）には含まれない
+ * （どのドリルも移動/その他には自動分類されない＝候補は常に空配列で自由入力のみ）。
+ */
+const EDITOR_BLOCKS = ['アップ', 'ファンダ', 'シュート', '対人', 'ラン', '静的', 'ゲーム', '移動', 'その他'];
 
 /**
  * 編集画面の枠（ブロック）別ドリル候補を、エンジンと同じ正規化済みドリル集合から構築する。
@@ -614,7 +620,8 @@ function toTwoColDay(day, ov, dISO) {
       from: r.from || '',
       to: r.to || '',
       minutes: Number.isFinite(r.minutes) ? r.minutes : null,
-      // 行単位の both 化はしない。日単位の判定でのみ1列表示にする。
+      // ここでは both 化しない（元の入力形のまま渡す）。共通行か相違行かの判定は描画側
+      // （two-col-together.mjs の isTogetherRow）が行単位で行う。
       both,
       boys,
       girls,

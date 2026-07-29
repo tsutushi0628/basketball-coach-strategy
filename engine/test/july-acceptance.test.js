@@ -98,6 +98,21 @@ test('A2: 全曜日が固定6ブロック順で末尾は静的ストレッチ（
   }
 });
 
+// A2b. 移動/その他はコーチが手で選ぶ編集専用枠であり、決定論エンジンの自動生成には出ない
+// （エンジンは移動時間・遠征に関する入力を一切持たないため）。
+test('A2b: 自動生成の通常練習日には「移動」「その他」ブロックが現れない（コーチ手動枠は自動生成対象外）', async () => {
+  const { plan } = await loadJulyPlan(1);
+  let inspectedDays = 0;
+  for (const day of plan.days) {
+    inspectedDays += 1;
+    for (const b of day.blocks) {
+      assert.notEqual(b.block, '移動', `${day.day}: 自動生成に移動ブロックが混入してはならない`);
+      assert.notEqual(b.block, 'その他', `${day.day}: 自動生成にその他ブロックが混入してはならない`);
+    }
+  }
+  assert.ok(inspectedDays > 0, '検査対象の日が1件以上あるべき（テストが空振りしていない）');
+});
+
 // A3. 対人は1on1とチーム守備(3on3)で構成。
 test('A3: 対人ブロックは1on1とチーム守備(3on3)を中心に構成（刻まない）', async () => {
   const { plan } = await loadJulyPlan(2);

@@ -206,6 +206,10 @@
 .tc2-cell .tll-lg{display:block;color:var(--t)}
 .tc2-cell .tc2-body{display:flex;flex-direction:column;gap:6px}
 
+/* 行単位の男女相違区間: 時計は左レール(tc2-only の54px列)で共通のまま、内容側だけ男子/女子2分割。
+   相違行(spine-rotation.tc2-only)の内容セル・区間見出し(tc2-runhead)の性別ラベルの両方で共用する。 */
+.tc2-pair{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+
 /* ── オンリーモード（女子のみ/男子のみ）1列タイムライン ── */
 /* 左レール（時計=固定54px）｜内容バンド(フル幅) の本物の1列レイアウト（既存 spine トークン・ドット/罫線/tint 作法を再利用）。 */
 .spine-header.tc2-only,.spine-row.tc2-only{grid-template-columns:54px 1fr}
