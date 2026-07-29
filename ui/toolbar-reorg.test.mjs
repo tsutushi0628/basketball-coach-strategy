@@ -100,12 +100,12 @@ test('組違いのトグルが画面のどこにも出ない（文言・属性�
   assert.doesNotMatch(js, /data-interact|setMode|__shareMode/, '共有クライアントJSに組違いトグルの配線(ON/OFF状態管理)が無い');
 });
 
-test('表示単位の選択中(lvtab)と日付の選択中(pk)は別クラス系統・別の塗り色で区別される', () => {
+test('表示単位の選択中(lvtab)と日付の選択中(pk)は別クラス系統で、どちらもこの製品の選択中の色(オレンジ)で塗られる', () => {
   assert.match(RENDER.body, /<button class="lvtab on" data-go="day"/, '表示単位タブの選択中クラスは lvtab.on');
   assert.match(RENDER.body, /class="pk cal-go[^"]*\son\b[^"]*"/, '日付ピッカーの選択中クラスは pk.on（別系統）');
-  // 塗り色: lvtab.on は墨黒反転、pk.on だけがオレンジ塗りを維持する（CSSの実値で確認）。
-  assert.match(BASE_CSS, /\.lvtab\.on\{background:var\(--ink\)/, '表示単位タブの選択中は墨黒(--ink)反転');
-  assert.doesNotMatch(BASE_CSS.match(/\.lvtab\.on\{[^}]*\}/)[0], /--orange/, '表示単位タブの選択中にオレンジは使わない');
+  // 塗り色: 表示単位タブ・日付ピッカーとも、この製品の選択中を表すオレンジ塗りを維持する（CSSの実値で確認）。
+  // 2段構成（表示単位/日付）は位置で軸が分かれているため、選択中の色を分ける必要はない。
+  assert.match(BASE_CSS, /\.lvtab\.on\{background:var\(--orange\)/, '表示単位タブの選択中はこの製品の選択中色(オレンジ)で塗られる');
   assert.match(RENDER.css, /\.pk\.on\{background:var\(--orange\)/, '日付ピッカーの選択中はオレンジ塗りを維持');
 });
 

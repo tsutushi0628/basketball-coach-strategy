@@ -13,12 +13,10 @@ a{color:var(--orange-deep)}
 .btn-primary{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .btn-primary:hover{color:var(--orange-ink)}
 .levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-width:320px;margin-bottom:16px}
-/* T5: lvtab は surface+hair・17px（H2段）。タブは4等分の等幅。
- * 選択中は共通デザイン基盤のボタングループ選択状態（墨黒の反転）に合わせた控えめな表現にする
- * （2026-07-29・ツールバー整理）。オレンジの面塗りは日付ピッカー(.pk.on)の選択中だけに残す。 */
+/* T5: lvtab は surface+hair・17px（H2段）。選択中は orange塗り（罫線不要）。タブは4等分の等幅。 */
 .lvtab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:14px;padding:8px 0;font:inherit;font-size:17px;font-weight:600;text-align:center;transition:transform .16s ease}
 .lvtab:hover{transform:translateY(-2px)}
-.lvtab.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
 .daytabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
 /* T5: daytab は surface+hair・15px（H3段相当） */
