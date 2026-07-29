@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ツールバー比較モック</title>
+  <link rel="stylesheet" href="../../../ui/styles/base.css">
+  <link rel="stylesheet" href="../../../ui/styles/pattern-timeline.css">
+  <!-- The product injects these tokens into base.css via Node string replacement; this is a verbatim copy of ui/styles/tokens.css. -->
+  <style>
+:root{
+
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
+  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
+  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
+  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
+  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
+  --scrim:rgba(42,32,26,.32);
+  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
+  --print-bg:#fff;
+}
+  </style>
+  <style>:root{--t:var(--orange)}</style>
+  <!-- These firebase-kit design-system styles are not used by the product; they are loaded only for the proposal-block button rules. -->
+  <link rel="stylesheet" href="../../../../firebase-kit/design-system/tokens.css">
+  <link rel="stylesheet" href="../../../../firebase-kit/design-system/general.css">
+  <style>
+    /* 整理後だけ、1段目は表示単位、2段目は日付と操作を分ける。操作群は製品の細い罫線色で連結する。 */
+    .proposal-controlbar { display:grid; gap:14px; margin:14px 0 18px; }
+    .proposal-view-tabs .ds-btn { min-height:44px; padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 4); }
+    .proposal-day-actions { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .proposal-day-picker { min-width:0; }
+    .proposal-day-picker .picker { margin-bottom:0; }
+    .proposal-toolbar { display:flex; align-items:center; flex:0 0 auto; margin-left:auto; }
+    .proposal-toolbar .ds-btn-group { display:inline-flex; align-items:stretch; gap:0; }
+    .proposal-toolbar .ds-btn { position:relative; min-height:44px; padding:calc(var(--spacing) * 2.5) calc(var(--spacing) * 4); border-color:var(--line); border-radius:var(--shape-action); background-color:transparent; }
+    .proposal-toolbar .ds-btn + .ds-btn { margin-left:-1px; }
+    .proposal-toolbar .ds-btn:hover { background-color:transparent; color:var(--ink); border-color:var(--line-2); }
+    .proposal-toolbar .ds-btn:hover, .proposal-toolbar .ds-btn:focus-visible { z-index:1; }
+    .proposal-toolbar .ds-btn--icon { width:44px; min-width:44px; padding:0; }
+    .proposal-toolbar svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .proposal-toolbar .ds-btn[data-tooltip]::after { content:attr(data-tooltip); position:absolute; top:calc(100% + 6px); left:50%; z-index:2; transform:translateX(-50%); padding:4px 7px; border-radius:4px; color:var(--on-surface); background:var(--surface-card); box-shadow:0 1px 3px rgba(0,0,0,.16); font-family:var(--font-noto); font-size:var(--text-small); line-height:1.3; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity var(--motion-duration-control) var(--motion-ease-control); }
+    .proposal-toolbar .ds-btn[data-tooltip]:hover::after, .proposal-toolbar .ds-btn[data-tooltip]:focus-visible::after { opacity:1; }
+    @media (max-width:760px) { .proposal-day-actions { align-items:stretch; } .proposal-toolbar { margin-left:0; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>日ビュー上部ツールバーの比較</h1>
+
+    <section aria-labelledby="current-title">
+      <h2 id="current-title">いま</h2>
+      <p>現行の順序どおり、表示単位の後に操作群、その後に7曜日の日付ピッカーを置いた状態を確認する。</p>
+      <p>組違いトグル・自動で叩き台を入れる・自動に戻す・入力を書き出しの行き先は、整理後では順に撤去・編集画面へ移設・編集画面へ移設・撤去。</p>
+      <div class="levels" role="tablist" aria-label="表示単位">
+        <button class="lvtab on" type="button">日</button><button class="lvtab" type="button">週</button><button class="lvtab" type="button">月</button><button class="lvtab" type="button">年</button>
+      </div>
+      <div class="toolbar" data-print-hide>
+        <div class="modetoggle" data-print-hide role="group" aria-label="組違いの切り替え"><button class="mt on" type="button" data-mode-go="on">組違いON（体育館共有）</button><button class="mt" type="button" data-mode-go="off">組違いOFF（別時間）</button></div>
+        <button class="btn btn-primary" id="printBtn" type="button">印刷 / PDFで保存</button>
+        <button class="btn" id="copyBtn" type="button">テキストでコピー</button>
+        <button class="btn" id="ed-edit" type="button" data-print-hide>この日を編集</button>
+        <button class="btn" id="ed-seed" type="button" data-print-hide>自動で叩き台を入れる</button>
+        <button class="btn" id="ed-auto" type="button" data-print-hide>自動に戻す</button>
+        <button class="btn" id="ed-export" type="button" data-print-hide>入力を書き出し</button>
+      </div>
+      <div class="daywk" data-week="2026-07-27"><div class="picker" data-print-hide aria-label="曜日"><button class="pk cal-go" data-go="月" data-date="2026-07-27" type="button">月<small>07-27</small></button><button class="pk cal-go on" data-go="火" data-date="2026-07-28" type="button">火<small>07-28</small></button><button class="pk cal-go" data-go="水" data-date="2026-07-29" type="button">水<small>07-29</small></button><button class="pk cal-go" data-go="木" data-date="2026-07-30" type="button">木<small>07-30</small></button><button class="pk cal-go" data-go="金" data-date="2026-07-31" type="button">金<small>07-31</small></button><button class="pk cal-go sat" data-go="土" data-date="2026-08-01" type="button">土<small>08-01</small></button><button class="pk cal-go sun" data-go="日" data-date="2026-08-02" type="button">日<small>08-02</small></button></div></div>
+      <article class="dayhead"><div class="dh-main"><div class="dh-t">7/28（火）<span class="dh-court">第1体育館　16:00–18:30</span></div><div class="dh-aim"><span class="dh-aiml">この日のねらい</span>ハーフコートでの守備の約束をそろえ、ヘルプ後のローテーションを声で確認する。</div></div></article>
+      <div class="timeline" aria-label="練習タイムライン"><div class="tlrow"><div class="tlclock"><span class="tk">16:00</span></div><div class="tlseg"><div class="tlcard"><div class="tlh"><span class="tll">ウォームアップ</span><span class="tll-time">20分</span></div><div class="tlbody"><div class="tdrill"><span class="tdn">動的ストレッチとボールハンドリング</span><span class="tlm">20分</span></div></div></div></div></div><div class="tlrow"><div class="tlclock"><span class="tk">16:20</span></div><div class="tlseg"><div class="tlcard"><div class="tlh"><span class="tll">チーム守備</span><span class="tll-time">25分</span></div><div class="tlbody"><div class="tdrill"><span class="tdn">ヘルプとローテーションの4対4</span><span class="tlm">25分</span></div></div></div></div></div></div>
+    </section>
+
+    <hr>
+
+    <section aria-labelledby="proposal-title">
+      <h2 id="proposal-title">整理後</h2>
+      <p>1段目は表示単位、2段目は左に7曜日の日付、右に操作を置く。主役となる日付の選択だけをオレンジで示す。</p>
+      <p>叩き台と自動に戻すは編集画面の中へ移設し、組違いトグルと書き出しは画面から撤去する。</p>
+      <div class="proposal-controlbar">
+        <div class="proposal-view-tabs" role="tablist" aria-label="表示単位">
+          <div class="ds-btn-group">
+            <button class="ds-btn ds-btn--secondary is-active" type="button" role="tab" aria-selected="true">日</button><button class="ds-btn ds-btn--secondary" type="button" role="tab" aria-selected="false">週</button><button class="ds-btn ds-btn--secondary" type="button" role="tab" aria-selected="false">月</button><button class="ds-btn ds-btn--secondary" type="button" role="tab" aria-selected="false">年</button>
+          </div>
+        </div>
+        <div class="proposal-day-actions">
+          <div class="proposal-day-picker daywk" data-week="2026-07-27"><div class="picker" data-print-hide aria-label="曜日"><button class="pk cal-go" data-go="月" data-date="2026-07-27" type="button">月<small>07-27</small></button><button class="pk cal-go on" data-go="火" data-date="2026-07-28" type="button">火<small>07-28</small></button><button class="pk cal-go" data-go="水" data-date="2026-07-29" type="button">水<small>07-29</small></button><button class="pk cal-go" data-go="木" data-date="2026-07-30" type="button">木<small>07-30</small></button><button class="pk cal-go" data-go="金" data-date="2026-07-31" type="button">金<small>07-31</small></button><button class="pk cal-go sat" data-go="土" data-date="2026-08-01" type="button">土<small>08-01</small></button><button class="pk cal-go sun" data-go="日" data-date="2026-08-02" type="button">日<small>08-02</small></button></div></div>
+          <div class="proposal-toolbar" data-print-hide>
+          <div class="ds-btn-group" role="group" aria-label="日ビューの操作">
+            <button class="ds-btn ds-btn--secondary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg><span>印刷</span></button>
+            <button class="ds-btn ds-btn--secondary ds-btn--icon" type="button" data-tooltip="編集" title="編集"><span class="sr-only">編集</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg></button>
+            <button class="ds-btn ds-btn--secondary ds-btn--icon" type="button" data-tooltip="テキストとしてコピー" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg></button>
+          </div>
+          </div>
+        </div>
+      </div>
+      <article class="dayhead"><div class="dh-main"><div class="dh-t">7/28（火）<span class="dh-court">第1体育館　16:00–18:30</span></div><div class="dh-aim"><span class="dh-aiml">この日のねらい</span>ハーフコートでの守備の約束をそろえ、ヘルプ後のローテーションを声で確認する。</div></div></article>
+      <div class="timeline" aria-label="練習タイムライン"><div class="tlrow"><div class="tlclock"><span class="tk">16:00</span></div><div class="tlseg"><div class="tlcard"><div class="tlh"><span class="tll">ウォームアップ</span><span class="tll-time">20分</span></div><div class="tlbody"><div class="tdrill"><span class="tdn">動的ストレッチとボールハンドリング</span><span class="tlm">20分</span></div></div></div></div></div><div class="tlrow"><div class="tlclock"><span class="tk">16:20</span></div><div class="tlseg"><div class="tlcard"><div class="tlh"><span class="tll">チーム守備</span><span class="tll-time">25分</span></div><div class="tlbody"><div class="tdrill"><span class="tdn">ヘルプとローテーションの4対4</span><span class="tlm">25分</span></div></div></div></div></div></div>
+    </section>
+  </main>
+</body>
+</html>
