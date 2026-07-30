@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>押せる部品の5役割 モック</title>
+<!-- 素HTMLの土台と本文書体は製品の共通CSSから受ける（このファイルは書体を宣言しない）。 -->
+<link rel="stylesheet" href="../../ui/styles/base.css">
+<!-- 色は製品の意味ロール層から受ける。生成物で、値の正本は ui/styles/tokens.css。 -->
+<link rel="stylesheet" href="./button-roles-20260730-tokens.css">
+<style>
+/* 役割別の見た目。色は意味ロール経由でのみ当てる（生の色トークンを直参照しない）。 */
+
+.r-wrap{max-width:900px;margin:0 auto;padding:28px 16px 72px}
+.r-doc-h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.r-doc-note{font-size:12px;color:var(--on-surface-muted);line-height:1.6;margin-bottom:22px}
+.r-doc-h2{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--on-label-accent);margin:30px 0 10px}
+
+/* --- 役割2 確定 ---
+ * アクセントの塗り。塗りは「選ぶ・決める」の意味で、器の中なら印、単独ならチェック印つきの確定。
+ * 弁別は単独配置と角丸四角の形とチェック印の3点で行う。 */
+.r-commit{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  letter-spacing:.04em;min-height:44px;padding:0 22px;border-radius:8px;white-space:nowrap;
+  background:var(--action-commit-fill);border:1.5px solid var(--action-commit-line);
+  color:var(--on-action-commit);transition:transform .16s ease}
+.r-commit svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.r-commit:hover{transform:translateY(-1px)}
+.r-commit:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-commit:disabled{cursor:not-allowed;transform:none;
+  background:var(--action-commit-fill-disabled);
+  border:1px solid var(--action-commit-line-disabled);
+  color:var(--on-action-commit-disabled)}
+
+/* --- 役割4 中立操作 ---
+ * カード面を補助色の枠で縁取った静かなボタン。塗りを持たないことで確定と分かれる。
+ * 連結帯は使わない。並べるときも独立したボタンとして gap で離す。 */
+.r-neutral{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
+  background:var(--action-neutral-fill);border:1px solid var(--action-neutral-line);
+  color:var(--on-action-neutral);transition:background .16s ease}
+.r-neutral:hover{background:var(--action-neutral-fill-hover)}
+.r-neutral:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-neutral--icon{width:44px;padding:0}
+.r-neutral svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* --- 役割3 破壊 ---
+ * 中立操作と同じ形（カード面・角丸8px・同じ内側余白）にし、形では分けない。
+ * 分けるのは色（破壊色の枠と文字）、ゴミ箱と取消の記号、行の右端という置き場所、添える一文。 */
+.r-destroy{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
+  background:var(--action-destructive-fill);border:1px solid var(--action-destructive-line);
+  color:var(--on-action-destructive);transition:background .16s ease}
+.r-destroy:hover{background:var(--action-destructive-fill-hover)}
+.r-destroy:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-destroy--icon{width:44px;padding:0}
+.r-destroy svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* --- 役割5 移動 ---
+ * 形は正円。面も輪郭も持たず、記号そのものが部品の在り処を示す（淡い罫線は地に対して
+ * 1.25で見えないので置いていない）。
+ * 行き先が記号だけでは紛れる場合（週送りは日送りと読み違えられる）は短い語を添える。 */
+.r-move{appearance:none;cursor:pointer;font:inherit;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;
+  background:var(--action-move-fill);border:1px solid var(--action-move-line);
+  color:var(--on-action-move);transition:color .16s ease,background .16s ease}
+.r-move:hover{color:var(--on-action-move-hover);background:var(--action-move-fill-hover)}
+.r-move:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-move svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+/* つまみは記号だけの移動なので正円を保つ（角丸四角にすると破壊アイコンと同形になる） */
+.r-grip{cursor:grab}
+.r-grip:active{cursor:grabbing}
+
+/* --- 役割1 状態 ---
+ * 形はピル（確定の角丸四角と分ける）。選択中は面に加えてアクセント深色の輪郭を必ず持つ。
+ * 面だけだと明るいチームカラーで未選択の面と1.63しか離れないが、輪郭なら全配色で5.62以上。
+ * 状態の部品は必ず兄弟と同じ器（トラック）に入る。単独で置かない。 */
+/* 器（状態の部品を入れる唯一の入れ物）。角丸20px・地色の面・濃い側の罫線・内側余白5px。
+ * 中身は同じ形の兄弟だけ。角丸20pxは器以外の入れ物（10/12/14px）に現れない値なので、
+ * 面と罫線に加えて形でも器を一意に判定できる。幅による例外は置かない。 */
+.r-track{display:flex;gap:6px;padding:5px;border-radius:20px;
+  background:var(--surface-ground);border:1px solid var(--line-strong)}
+.r-tabs{margin-bottom:14px}
+.r-tab{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;text-align:center;
+  flex:1 1 0;min-width:0;min-height:44px;padding:0 4px;border-radius:999px;
+  background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
+  transition:background .16s ease}
+.r-tab:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
+.r-tab.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
+  color:var(--on-state-selected);font-weight:700}
+
+/* 曜日の帯。7日すべてを常時見せる（狭い幅では2段に折り返す。横スクロールに隠さない）。
+ * 左右の送りは週送りなので語ラベルを添える。両端に留め、上下に分断させない。 */
+.r-daynav{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;flex:0 1 auto}
+.r-daytrack{flex:1 1 auto;min-width:0}
+.r-days{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start}
+.r-dshort{display:none}
+/* 語を添える移動はピル形。記号だけの移動（正円）と役割は同じで、形で用途の広さを示す */
+.r-weekgo{flex:0 0 auto;flex-direction:column;gap:0;width:auto;min-width:44px;
+  padding:0 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.1}
+.r-weekgo svg{width:16px;height:16px}
+.r-day{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+  min-height:44px;min-width:52px;padding:6px 12px;border-radius:999px;
+  background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
+  transition:transform .16s ease}
+.r-day small{font-weight:400;font-size:12px;opacity:.82}
+.r-day:hover{transform:translateY(-2px)}
+.r-day:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-day.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
+  color:var(--on-state-selected);font-weight:700}
+.r-day.is-sat{color:var(--on-saturday)}
+.r-day.is-sun{color:var(--on-sunday)}
+.r-day.is-on.is-sat,.r-day.is-on.is-sun{color:var(--on-state-selected)}
+
+/* 対象3択。器の中に横一列で固定し、狭い幅でも折り返さず等分で縮める */
+.r-seg{display:flex;gap:5px;width:100%;padding:5px;border-radius:20px;
+  background:var(--surface-ground);border:1px solid var(--line-strong)}
+.r-seg-b{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
+  flex:1 1 0;min-width:0;min-height:44px;padding:0 6px;white-space:nowrap;border-radius:999px;
+  background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
+  transition:background .16s ease}
+.r-seg-b:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
+.r-seg-b.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
+  color:var(--on-state-selected);font-weight:700;z-index:1}
+
+/* --- 文字だけの導線 --- */
+/* 文字導線は常時下線。下線の有無だけが「押せるオレンジ文字」と「押せない見出し」を分ける。
+ * 大きさは置かれた本文と同寸、太さ400。hoverは下線を太くするだけ。 */
+.r-link{color:var(--on-link);text-decoration:underline;text-underline-offset:2px;
+  font-weight:400;font-size:inherit}
+.r-link:hover{text-decoration-thickness:2px}
+
+/* --- 対象識別（押せない標識。押せる部品の5役割の規律の対象外） ---
+ * 語ラベルが主、色は補助。男子色と女子色の弁別比は全配色で3:1未満（最良1.67）なので
+ * 色だけでは男女を見分けられない。塗りつぶしの円と中抜きの円で形も分ける。
+ * 識別色の上に文字は置かない（女子色は配色によって明暗どちらにも振れるため）。 */
+.r-team{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
+  color:var(--on-team-label);white-space:nowrap}
+.r-team::before{content:"";width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+.r-team.is-boys::before{background:var(--team-boys-fill)}
+.r-team.is-girls::before{background:transparent;
+  box-shadow:inset 0 0 0 3px var(--team-girls-fill)}
+/* 進行中チップは素の識別チップと同形にする（専用の面・枠・内側余白を持たない） */
+
+/* --- 面と入力 --- */
+.r-pagehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--line-hairline)}
+.r-school{font-size:17px;font-weight:700}
+.r-account{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.r-mail{font-size:12px;color:var(--on-surface-muted)}
+/* ツールバー容器。基底では操作列を全幅の専用段にし、曜日帯の直下へ右揃えで置く。
+ * 900px以上でだけ操作列を曜日帯と同じ段の右端へ上げる。曜日帯の寸法には触れない。 */
+.r-toolbar{display:flex;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;column-gap:14px;row-gap:10px;margin:14px 0 20px}
+/* 印刷・コピー・編集は連結せず独立した3ボタン。左からコピー・印刷・編集で編集が最右端。
+ * 899px以下は曜日帯の直下の専用段・右端揃え、900px以上は曜日帯と同じ段の右端。
+ * ボタンの内側余白・間隔・語ラベル・曜日帯の寸法は一切動かさない。 */
+.r-ops{flex:1 1 100%;display:flex;justify-content:flex-end;gap:8px}
+.r-panel{background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:14px;padding:18px 20px}
+/* その日の見出し。チップは見出しの直後に置き、幅が足りなければ折り返して左揃えの単独行になる */
+.r-panel-h{font-size:17px;font-weight:700;color:var(--on-label-accent);
+  letter-spacing:-.01em;margin-bottom:16px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.r-panel-h .r-team{white-space:nowrap}
+.r-sec{padding-top:16px;margin-top:16px;border-top:1px solid var(--line-hairline)}
+.r-sec:first-of-type{padding-top:0;margin-top:0;border-top:none}
+.r-sec-t{font-size:14px;font-weight:700;margin-bottom:12px}
+.r-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.r-lab{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em}
+.r-input{appearance:none;font:inherit;font-size:14px;width:100%;min-height:44px;padding:9px 12px;
+  border-radius:10px;line-height:1.4;
+  background:var(--surface-card);border:1px solid var(--line-hairline);color:var(--on-surface)}
+textarea.r-input{min-height:64px;resize:vertical}
+.r-input:focus{outline:2px solid var(--focus-ring);outline-offset:1px}
+.r-hint{font-size:12px;color:var(--on-surface-muted);line-height:1.5}
+.r-duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.r-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.r-nowrap{flex-wrap:nowrap;flex:0 0 auto}
+.r-row{background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.r-row-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.r-rownum{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em}
+.r-time{width:auto;min-width:104px}
+/* チェック箱は入力部品。状態ロール（アクセント面塗り）を借りない。面と枠は入力欄と揃える */
+.r-check{display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;
+  user-select:none;color:var(--on-surface);min-height:44px}
+.r-check input{appearance:none;flex:0 0 auto;width:20px;height:20px;border-radius:6px;cursor:pointer;
+  display:inline-grid;place-content:center;
+  background:var(--surface-card);border:1px solid var(--line-hairline)}
+.r-check input::before{content:"";width:13px;height:13px;background:var(--on-surface);
+  clip-path:polygon(13% 50%,5% 60%,39% 93%,97% 21%,88% 12%,38% 74%);
+  transform:scale(0);transition:transform .12s ease}
+.r-check input:checked::before{transform:scale(1)}
+.r-check input:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-cells{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.r-cell{background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:10px;padding:11px 13px}
+.r-cell-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.r-item{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.r-item .r-input{min-height:38px}
+/* 前案にあった欄。セルの見出しと、項目ごとの補足。どちらもラベルを付ける */
+.r-sublab{font-size:11px;font-weight:700;color:var(--on-surface-muted);letter-spacing:.04em;
+  flex:0 0 auto}
+.r-cell-title{flex:1 1 100px;min-width:0;min-height:40px;font-weight:700}
+.r-item{flex-wrap:wrap}
+.r-item-fields{display:flex;gap:6px;flex-wrap:wrap;flex:1 1 0;min-width:0}
+.r-item-name{flex:2 1 120px;min-width:0}
+.r-item-note{flex:1 1 110px;min-width:0}
+.r-cell-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* 削除は必ず行の右端に固定幅で置く（行ごとに位置を変えない） */
+.r-row-del{margin-left:auto;flex:0 0 44px}
+.r-spacer{flex:1 1 auto}
+
+/* 確定の節。確定と破壊を同じ列に並べず段で分ける */
+.r-confirm{display:flex;flex-direction:column;gap:12px}
+.r-confirm-main{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.r-confirm-sub{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding-top:12px;border-top:1px solid var(--line-hairline)}
+.r-confirm-sub .r-hint{flex:1 1 160px}
+
+/* 役割の見分け表 */
+.r-legend{display:grid;gap:10px;grid-template-columns:repeat(3,1fr);
+  background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:12px;padding:14px 16px}
+.r-legend-cell{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.r-legend-k{font-size:12px;font-weight:700;color:var(--on-surface-muted);letter-spacing:.04em}
+
+/* 暗いチーム色の実演 */
+/* 器以外の入れ物は角丸四角＋カード面＋淡い罫線。器（角丸20px＋地色の面＋濃い側の罫線）と3点で別物にする。
+ * 器以外は10pxから14pxの角丸を使い、器の20pxはこの集合に現れない。 */
+.r-theme{background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:12px;padding:14px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+/* 同段に要る内容幅837pxとページ左右余白32pxで成立下限869px。メディアクエリの幅には
+ * スクロールバー（Windowsで約17px）が含まれ実効レイアウト幅が最大17px目減りするため、
+ * 869+17=886pxを覆う切りのよい値として900pxに置く。方向はmin-widthの1本のみで、
+ * 899px以下は基底（2段）が既定で成立する。 */
+@media (min-width:900px){
+  .r-ops{flex:0 0 auto}
+}
+@media (max-width:580px){
+  .r-legend{grid-template-columns:repeat(2,1fr)}
+  .r-duo,.r-cells{grid-template-columns:1fr}
+  .r-tab{font-size:14px}
+  .r-seg-b{font-size:12px;padding:0 4px}
+}
+/* 狭い幅では週送りを1段上へ回し、曜日の帯に全幅を渡して7日を2段に収める。
+ * 送り2つは同じ段の両端に並べる（上下に分断しない）。
+ * 414px以上では送りを器の左右へ戻す。実測すると375pxでは左右へ戻すと曜日が3段になり、
+ * 送りを1段上に置いたときより編集パネルが下がるため、戻す境界を414pxに置いた。 */
+@media (max-width:413px){
+  .r-daynav{flex-wrap:wrap;justify-content:space-between;row-gap:2px;flex:1 1 100%}
+  .r-daynav>.r-weekgo:first-child{order:1}
+  .r-daynav>.r-weekgo:last-child{order:2}
+  .r-daytrack{order:3;flex:1 1 100%}
+  .r-weekgo{flex-direction:row;gap:4px}
+}
+@media (max-width:380px){
+  .r-tab{font-size:13px;letter-spacing:0}
+  .r-seg-b{font-size:11px}
+}
+</style>
+</head>
+<body>
+<div class="r-wrap">
+
+  <h1 class="r-doc-h1">押せる部品の5役割を当てた練習計画画面</h1>
+  <p class="r-doc-note">
+    覚える規則は4つ。オレンジの塗りは「いま選ばれている・決める」。縁取りの箱は「道具」で、文字と枠が赤茶のものだけ消える・戻る。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。薄いものは、いま押せないだけである。
+    見出しの5役割と文字の導線は、この4つの規則に畳んである。下の見分け表の6升は、規則を部品の現物で見たときの内訳である。
+    男子と女子の識別ドットも同じチーム色を使うが、これは押せない標識なので押せる部品の規律の外にある。
+    色はすべて製品の意味ロール層から取っており、このページに色の実値は書いていない。
+  </p>
+
+  <h2 class="r-doc-h2">役割の見分け</h2>
+  <div class="r-legend">
+    <div class="r-legend-cell">
+      <span class="r-legend-k">いま選ばれている印</span>
+      <div class="r-seg" style="max-width:200px">
+        <button type="button" class="r-seg-b is-on">選択中</button>
+        <button type="button" class="r-seg-b">未選択</button>
+      </div>
+    </div>
+    <div class="r-legend-cell">
+      <span class="r-legend-k">保存して確定する</span>
+      <button type="button" class="r-commit">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+        保存
+      </button>
+    </div>
+    <div class="r-legend-cell">
+      <span class="r-legend-k">保存が押せないとき</span>
+      <button type="button" class="r-commit" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+        保存
+      </button>
+    </div>
+    <div class="r-legend-cell">
+      <span class="r-legend-k">印刷や書き出し</span>
+      <button type="button" class="r-neutral">印刷</button>
+    </div>
+    <div class="r-legend-cell">
+      <span class="r-legend-k">消す、元に戻す</span>
+      <button type="button" class="r-destroy">削除</button>
+    </div>
+    <div class="r-legend-cell">
+      <span class="r-legend-k">日を送る、並べ替える</span>
+      <button type="button" class="r-move" aria-label="次の日へ">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <h2 class="r-doc-h2">練習計画の画面</h2>
+
+  <header class="r-pagehead">
+    <div class="r-school">港北第三中学校　バスケットボール部</div>
+    <div class="r-account">
+      <span class="r-mail">coach.tanaka@example.jp</span>
+      <button type="button" class="r-neutral r-neutral--icon" aria-label="チーム設定を変更">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.6v2.1M12 18.3v2.1M4.7 7.8l1.8 1M17.5 15.2l1.8 1M4.7 16.2l1.8-1M17.5 8.8l1.8-1"/></svg>
+      </button>
+      <button type="button" class="r-neutral">ログアウト</button>
+    </div>
+  </header>
+
+  <div class="r-tabs r-track">
+    <button type="button" class="r-tab is-on">日</button>
+    <button type="button" class="r-tab">週</button>
+    <button type="button" class="r-tab">月</button>
+    <button type="button" class="r-tab">年</button>
+  </div>
+
+  <div class="r-toolbar">
+    <div class="r-daynav">
+      <button type="button" class="r-move r-weekgo" aria-label="前の週へ">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        前週
+      </button>
+      <div class="r-daytrack r-track">
+        <div class="r-days">
+          <button type="button" class="r-day">月<small><span class="r-dfull">07-27</span><span class="r-dshort">27</span></small></button>
+          <button type="button" class="r-day is-on">火<small><span class="r-dfull">07-28</span><span class="r-dshort">28</span></small></button>
+          <button type="button" class="r-day">水<small><span class="r-dfull">07-29</span><span class="r-dshort">29</span></small></button>
+          <button type="button" class="r-day">木<small><span class="r-dfull">07-30</span><span class="r-dshort">30</span></small></button>
+          <button type="button" class="r-day">金<small><span class="r-dfull">07-31</span><span class="r-dshort">31</span></small></button>
+          <button type="button" class="r-day is-sat">土<small><span class="r-dfull">08-01</span><span class="r-dshort">01</span></small></button>
+          <button type="button" class="r-day is-sun">日<small><span class="r-dfull">08-02</span><span class="r-dshort">02</span></small></button>
+        </div>
+      </div>
+      <button type="button" class="r-move r-weekgo" aria-label="次の週へ">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        翌週
+      </button>
+    </div>
+    <div class="r-ops">
+      <button type="button" class="r-neutral" aria-label="テキストとしてコピー">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h10v11H9zM5 15V4h10v2"/></svg>
+        コピー
+      </button>
+      <button type="button" class="r-neutral">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5M7 18H5v-6h14v6h-2M7 14h10v6H7z"/></svg>
+        印刷
+      </button>
+      <button type="button" class="r-neutral">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16zM14 6l4 4"/></svg>
+        編集
+      </button>
+    </div>
+  </div>
+
+  <div class="r-panel">
+    <div class="r-panel-h"><span>7/28（火）の練習を編集</span><span class="r-team is-boys is-now">いま男子の時間</span></div>
+
+    <section class="r-sec">
+      <h3 class="r-sec-t">1　この日の基本</h3>
+      <div class="r-field">
+        <span class="r-lab">この日の対象</span>
+        <div class="r-seg">
+          <button type="button" class="r-seg-b">女子のみ</button>
+          <button type="button" class="r-seg-b">男子のみ</button>
+          <button type="button" class="r-seg-b is-on">男女両方</button>
+        </div>
+      </div>
+      <div class="r-field">
+        <span class="r-lab">この日のねらい</span>
+        <textarea class="r-input" rows="2">ヘルプの一歩目を速くする。戻りで背中を見せない。</textarea>
+      </div>
+      <div class="r-field">
+        <span class="r-lab">コート</span>
+        <input class="r-input" value="第1体育館　半面（女子は東側）">
+      </div>
+    </section>
+
+    <section class="r-sec">
+      <h3 class="r-sec-t">2　内容の用意</h3>
+      <p class="r-hint" style="margin-bottom:12px">
+        どちらも押すと今入っている内容を置き換えます。中身があるときは実行前に確認が出ます。
+      </p>
+      <div class="r-duo">
+        <div class="r-field">
+          <span class="r-lab">自動の叩き台</span>
+          <div class="r-inline">
+            <button type="button" class="r-neutral">叩き台を読み込む</button>
+          </div>
+        </div>
+        <div class="r-field">
+          <span class="r-lab">他の日からコピー</span>
+          <div class="r-inline">
+            <select class="r-input" style="width:auto;min-width:126px">
+              <option>7/21（火）</option>
+              <option>7/14（火）</option>
+            </select>
+            <button type="button" class="r-neutral">この日を取り込む</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="r-sec">
+      <h3 class="r-sec-t">3　時間割</h3>
+
+      <div class="r-row">
+        <div class="r-row-top">
+          <button type="button" class="r-move r-grip" aria-label="この時間を並べ替え">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>
+          </button>
+          <span class="r-rownum">時間1</span>
+          <span class="r-inline">
+            <input class="r-input r-time" value="16:00">
+            <span class="r-hint">〜</span>
+            <input class="r-input r-time" value="16:20">
+          </span>
+          <label class="r-check"><input type="checkbox" checked>男女共通</label>
+          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+          </button>
+        </div>
+        <div class="r-cell">
+          <div class="r-cell-head">
+            <span class="r-team is-boys">男子</span>
+            <span class="r-team is-girls">女子</span>
+            <span class="r-sublab">見出し</span>
+            <input class="r-input r-cell-title" value="ウォームアップ">
+          </div>
+          <div class="r-item">
+            <span class="r-item-fields">
+              <span class="r-sublab">内容</span>
+              <input class="r-input r-item-name" value="動的ストレッチ">
+              <span class="r-sublab">補足</span>
+              <input class="r-input r-item-note" value="8分・肩と股関節">
+            </span>
+            <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+            </button>
+          </div>
+          <div class="r-cell-actions">
+            <button type="button" class="r-neutral">項目を追加</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="r-row">
+        <div class="r-row-top">
+          <button type="button" class="r-move r-grip" aria-label="この時間を並べ替え">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>
+          </button>
+          <span class="r-rownum">時間2</span>
+          <span class="r-inline">
+            <input class="r-input r-time" value="16:20">
+            <span class="r-hint">〜</span>
+            <input class="r-input r-time" value="16:50">
+          </span>
+          <label class="r-check"><input type="checkbox">男女共通</label>
+          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+          </button>
+        </div>
+        <div class="r-cells">
+          <div class="r-cell">
+            <div class="r-cell-head">
+              <span class="r-team is-boys">男子</span>
+              <span class="r-sublab">見出し</span>
+              <input class="r-input r-cell-title" value="ディフェンス">
+            </div>
+            <div class="r-item">
+              <span class="r-item-fields">
+                <span class="r-sublab">内容</span>
+                <input class="r-input r-item-name" value="ヘルプと戻り">
+                <span class="r-sublab">補足</span>
+                <input class="r-input r-item-note" value="3人組・両サイド">
+              </span>
+              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+              </button>
+            </div>
+            <div class="r-cell-actions">
+              <button type="button" class="r-neutral">項目を追加</button>
+            </div>
+          </div>
+          <div class="r-cell">
+            <div class="r-cell-head">
+              <span class="r-team is-girls">女子</span>
+              <span class="r-sublab">見出し</span>
+              <input class="r-input r-cell-title" value="ディフェンス">
+            </div>
+            <div class="r-item">
+              <span class="r-item-fields">
+                <span class="r-sublab">内容</span>
+                <input class="r-input r-item-name" value="クローズアウト">
+                <span class="r-sublab">補足</span>
+                <input class="r-input r-item-note" value="2人組・コーナー">
+              </span>
+              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+              </button>
+            </div>
+            <div class="r-cell-actions">
+              <button type="button" class="r-neutral">項目を追加</button>
+            </div>
+          </div>
+        </div>
+        <div class="r-cell-actions">
+          <button type="button" class="r-neutral">男女を反転してコピー</button>
+        </div>
+      </div>
+
+      <button type="button" class="r-neutral">時間を追加</button>
+    </section>
+
+    <section class="r-sec">
+      <h3 class="r-sec-t">4　確定</h3>
+      <div class="r-confirm">
+        <div class="r-confirm-main">
+          <button type="button" class="r-commit">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+            保存
+          </button>
+          <button type="button" class="r-destroy">キャンセル</button>
+          <span class="r-hint">保存すると自動生成の下書きは置き換わります。</span>
+        </div>
+        <div class="r-confirm-sub">
+          <button type="button" class="r-neutral">入力を書き出し</button>
+          <p class="r-hint">書き出しは今の入力を読み取るだけで、内容は変わりません。</p>
+        </div>
+        <div class="r-confirm-sub">
+          <button type="button" class="r-destroy">自動生成に戻す</button>
+          <p class="r-hint">手で入れた内容を捨てて自動生成に戻します。<a class="r-link" href="#">やり直しの手順</a></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <h2 class="r-doc-h2">まだ何も入っていない日</h2>
+  <p class="r-doc-note">
+    叩き台の読み込みと他の日からの取り込みは、中身の有無に関わらず常に中立操作の見た目にする。
+    見た目が状態で変わると、同じボタンが日によって別物に見えてしまう。
+    置き換えの保護は見た目ではなく実行時の確認に置き、中身があるときだけ確認を出す。
+  </p>
+  <div class="r-panel">
+    <div class="r-panel-h">7/30（木）の練習を編集</div>
+    <section class="r-sec">
+      <h3 class="r-sec-t">2　内容の用意</h3>
+      <p class="r-hint" style="margin-bottom:12px">まだ何も入っていません。どちらかで下書きを作れます。</p>
+      <div class="r-duo">
+        <div class="r-field">
+          <span class="r-lab">自動の叩き台</span>
+          <div class="r-inline">
+            <button type="button" class="r-neutral">叩き台を読み込む</button>
+          </div>
+        </div>
+        <div class="r-field">
+          <span class="r-lab">他の日からコピー</span>
+          <div class="r-inline">
+            <select class="r-input" style="width:auto;min-width:126px">
+              <option>7/23（水）</option>
+              <option>7/16（水）</option>
+            </select>
+            <button type="button" class="r-neutral">この日を取り込む</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="r-sec">
+      <h3 class="r-sec-t">4　確定</h3>
+      <div class="r-confirm-main">
+        <button type="button" class="r-commit" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+          保存
+        </button>
+        <span class="r-hint">入れる内容がまだ無いので保存は押せません。</span>
+      </div>
+    </section>
+  </div>
+
+  <h2 class="r-doc-h2">チーム色を変えたとき（最悪の2配色）</h2>
+  <p class="r-doc-note">
+    16通りのチーム色のうち、いちばん見分けにくくなる2つを並べた。
+    選択中も確定も同じオレンジの塗りになる。塗りの意味が「選ぶ・決める」で共通だからで、
+    見分けるのは置かれ方である。器の中に兄弟と並んでいれば印、単独でチェック印が付いていれば確定。
+    上はチャコール、下はライムで、どちらもチーム色が既定から大きく離れる配色にあたる。
+    ライムは選択中の面と未選択の面がもっとも近づく配色（面だけで比べると1.63）だが、
+    選択中にはチーム色の濃い側で輪郭が付くので、面が近くても輪郭が5.97離れて印だと分かる。
+    識別のラベルはどちらの配色でも語が主で、色は補助に留めている。
+  </p>
+
+  <div class="r-theme" data-team-color="charcoal">
+    <div class="r-seg" style="max-width:200px">
+      <button type="button" class="r-seg-b is-on">選択中</button>
+      <button type="button" class="r-seg-b">未選択</button>
+    </div>
+    <button type="button" class="r-commit">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+      保存
+    </button>
+    <button type="button" class="r-commit" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+      保存
+    </button>
+    <button type="button" class="r-neutral">印刷</button>
+    <button type="button" class="r-destroy">削除</button>
+    <button type="button" class="r-move" aria-label="次の日へ">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <span class="r-team is-boys">男子</span>
+    <span class="r-team is-girls">女子</span>
+    <span class="r-team is-girls is-now">いま女子の時間</span>
+  </div>
+
+  <div class="r-theme" data-team-color="lime" style="margin-top:12px">
+    <div class="r-seg" style="max-width:200px">
+      <button type="button" class="r-seg-b is-on">選択中</button>
+      <button type="button" class="r-seg-b">未選択</button>
+    </div>
+    <button type="button" class="r-commit">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+      保存
+    </button>
+    <button type="button" class="r-commit" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+      保存
+    </button>
+    <button type="button" class="r-neutral">印刷</button>
+    <button type="button" class="r-destroy">削除</button>
+    <button type="button" class="r-move" aria-label="次の日へ">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <span class="r-team is-boys">男子</span>
+    <span class="r-team is-girls">女子</span>
+    <span class="r-team is-girls is-now">いま女子の時間</span>
+  </div>
+
+</div>
+</body>
+</html>

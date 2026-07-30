@@ -1,0 +1,151 @@
+/* design-system: exempt — この製品の色トークンの搬送役で、値の正本そのものを運ぶ。
+ * 生成物なので手で編集しない。手書きの色は1つも無い。
+ * 値の正本は ui/styles/tokens.css（既定色）と ui/color-presets.mjs（チームカラー）。
+ * 入れ子の実演ブロックでは :root で解決済みのロールが差し替わらないため、置換対象6変数を
+ * 参照しているロールだけを同じブロックで再宣言する（対象は生成時に機械的に走査して決めた）。
+ */
+:root{
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
+  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
+  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
+  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
+  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
+  --scrim:rgba(42,32,26,.32);
+  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
+  --print-bg:#fff;
+
+  /* === 意味ロール層 ===
+   * 上の色プリミティブが実値の正本で、この層は用途の正本。
+   * 部品CSSはプリミティブを直参照せず、以下のロール経由で色を当てる。
+   * 規律と部品の割り当ては docs/design-system/component-spec.md が正本。
+   * 各ロールの値はプリミティブへの var() 参照だけで構成する（面を持たない役割の
+   * transparent を除く）。よって算出値は現行と同一で、この層の追加だけでは見た目が動かない。
+   * チームカラーのプリセット（ui/color-presets.mjs）は後続の :root で
+   * --orange, --orange-ink, --orange-soft, --orange-deep, --boys, --girls を上書きする。
+   * ロールは参照のまま置き、実値を焼き込まないことで上書きに追従する。 */
+
+  /* 地と前景 */
+  --surface-ground:var(--bg); --surface-card:var(--surface);
+  --on-surface:var(--ink); --on-surface-muted:var(--mute);
+  --line-hairline:var(--hair); --line-strong:var(--line-2); --scrim-overlay:var(--scrim);
+
+  /* 役割1 状態: いま選ばれている印。
+   * 選択中と確定の見分けは色に預けない。選択中は必ず兄弟と並ぶ器の中にだけ出し、
+   * 単独では出さない。確定は必ず単独で出す。「群の中にあれば印、単独なら操作」で読み分ける。
+   * 器の有無はチームカラーが16通りに変わっても動かないので、どの配色でも成立する。
+   *
+   * 面の色だけでは印にならない。明るいチームカラー4種ではアクセント面と未選択のカード面の
+   * 弁別比が最小1.63まで落ちるため、面に加えてアクセント深色の輪郭を必ず持たせる。
+   * 輪郭なら16プリセット全件で未選択面に対し最小5.62、地に対し最小5.39を確保できる。 */
+  --state-selected-fill:var(--orange); --state-selected-ring:var(--orange-deep);
+  --on-state-selected:var(--orange-ink);
+  --state-idle-fill:var(--surface); --state-idle-line:var(--hair); --on-state-idle:var(--mute);
+
+  /* 役割2 確定: 保存と適用。アクセントの塗りを使う。
+   * アクセントの塗りは「選ぶ・決める」の意味を持ち、器の中にあれば印、単独にあれば確定になる。
+   * 弁別を担うのは単独配置（器の中に出さない）と角丸四角の形とチェック印の3点。
+   * 枠はアクセント深色で、明るいチームカラーでも面の輪郭が地から立つ。 */
+  --action-commit-fill:var(--orange); --action-commit-line:var(--orange-deep);
+  --on-action-commit:var(--orange-ink);
+  /* 押せない確定は塗りを失う。押せる・押せないの弁別を「塗りがあるか無いか」に置くことで、
+   * チームカラーの明暗に一切依存しなくなる。形と角丸と余白とチェック印は押せる側と同一のまま、
+   * 同じ場所で薄くなるだけにする。 */
+  --action-commit-fill-disabled:var(--surface); --action-commit-line-disabled:var(--hair);
+  --on-action-commit-disabled:var(--mute);
+
+  /* 役割3 破壊: 削除と取り消し。中立操作と同じ器の形（カード面＋角丸8px）にし、
+   * 形では分けない。分けるのは色（破壊色の枠と文字）、ゴミ箱と取消の記号、
+   * 行の右端という置き場所、そして添える一文の4点。
+   * 文字と枠には --terra ではなく濃い側の --terra-ink を使う。--terra はカード面の上で
+   * コントラスト比4.17でAAに届かず、--terra-ink なら5.90で満たす。 */
+  --action-destructive-fill:var(--surface); --action-destructive-line:var(--terra-ink);
+  --on-action-destructive:var(--terra-ink);
+  --action-destructive-fill-hover:var(--bg);
+
+  /* 役割4 中立操作: 印刷、コピー、編集、書き出し。カード面を補助色の枠で縁取った静かなボタン。
+   * 塗りを持たないことで、アクセントの塗り（選ぶ・決める）と役割が分かれる。
+   * 破壊とは同じ形を共有し、色と文言で分ける。 */
+  --action-neutral-fill:var(--surface); --action-neutral-line:var(--mute); --on-action-neutral:var(--ink);
+  --action-neutral-fill-hover:var(--bg);
+
+  /* 役割5 移動: 日送りと並べ替え。高頻度で低リスクなので序列の最下段に置く。
+   * 輪郭は持たない（淡い罫線は地に対して1.25で見えないため、有っても無くても同じ）。
+   * 部品の在り処は記号そのもので示す。記号は地に対して5.89ある。 */
+  --action-move-fill:transparent; --action-move-line:transparent;
+  --on-action-move:var(--mute); --on-action-move-hover:var(--ink);
+  --action-move-fill-hover:var(--bg);
+
+  /* 文字だけの導線: 見出しラベル、本文内リンク、開閉トリガ。押せる部品の5役割の外側 */
+  --on-label-accent:var(--orange-deep); --on-link:var(--orange-deep);
+
+  /* 焦点リング: 全役割で共通。現行の outline 色をそのまま役割化した */
+  --focus-ring:var(--orange);
+
+  /* === ここから下は押せない表示物のロール。上の押せる部品5役割の規律は適用しない === */
+
+  /* 対象識別: 男子と女子の見分け。押せない標識なので、アクセント面塗りを状態に専有させる
+   * 規律の対象外。男子の識別色は16プリセットすべてでアクセントと同値になるため、
+   * 識別色の面が選択中の面と同じ色に見えることがある。押せる部品ではないので混同しない。
+   *
+   * 識別色は弁別の仕事をしていない。男子色と女子色の弁別比は16プリセット全件で3:1未満
+   * （最良1.67、最悪1.26）なので、色だけで男女を見分けることはできない。
+   * したがって語ラベル（男子、女子）を主にし、識別色は補助に留める。
+   * さらに色以外の軸として、男子は塗りつぶしの円、女子は中抜きの円で形を分ける。
+   *
+   * --boys は16プリセットすべてで --orange と同値だが、プリセットの書き出し対象なので畳まない。
+   * --girls は既定テーマで --terra と、他の11テーマで --orange-deep と同値になる一方、
+   * 明るい4テーマではどちらとも一致しないため独立したロールが必要。
+   *
+   * 識別色は小さな面（ドット、細いバー）としてだけ使い、その上に文字を置かない。
+   * --girls はプリセットによって暗い側にも明るい側にも振れるので、上に乗せる文字色を
+   * 固定値で決められない（--orange-deep のように「全テーマで十分濃い」保証がない）。
+   * 識別ラベルの文字はカード面の上に本文前景で置く。base.css の .gchip が既にこの形である。 */
+  --team-boys-fill:var(--boys); --team-girls-fill:var(--girls);
+  --on-team-label:var(--on-surface);
+
+  /* 曜日: 押せる日ピルの文字色と淡面 */
+  --on-saturday:var(--sat); --on-sunday:var(--sun);
+  --fill-saturday-soft:var(--sat-soft); --fill-sunday-soft:var(--sun-soft);
+}
+
+/* チーム色が既定から大きく離れる配色 その1 */
+[data-team-color="charcoal"]{
+  --orange:#3a3f47;
+  --orange-ink:#f3f4f6;
+  --orange-soft:#c9ccd1;
+  --orange-deep:#23272d;
+  --boys:#3a3f47;
+  --girls:#23272d;
+  --state-selected-fill:var(--orange);
+  --state-selected-ring:var(--orange-deep);
+  --on-state-selected:var(--orange-ink);
+  --action-commit-fill:var(--orange);
+  --action-commit-line:var(--orange-deep);
+  --on-action-commit:var(--orange-ink);
+  --on-label-accent:var(--orange-deep);
+  --on-link:var(--orange-deep);
+  --focus-ring:var(--orange);
+  --team-boys-fill:var(--boys);
+  --team-girls-fill:var(--girls);
+}
+
+/* チーム色が既定から大きく離れる配色 その2 */
+[data-team-color="lime"]{
+  --orange:#a9d63b;
+  --orange-ink:#222d08;
+  --orange-soft:#e6f3c2;
+  --orange-deep:#52690f;
+  --boys:#a9d63b;
+  --girls:#8aab2f;
+  --state-selected-fill:var(--orange);
+  --state-selected-ring:var(--orange-deep);
+  --on-state-selected:var(--orange-ink);
+  --action-commit-fill:var(--orange);
+  --action-commit-line:var(--orange-deep);
+  --on-action-commit:var(--orange-ink);
+  --on-label-accent:var(--orange-deep);
+  --on-link:var(--orange-deep);
+  --focus-ring:var(--orange);
+  --team-boys-fill:var(--boys);
+  --team-girls-fill:var(--girls);
+}
