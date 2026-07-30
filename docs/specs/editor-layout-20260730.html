@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>編集画面と画面上部のレイアウト立て直し</title>
+  <!-- 実画面と同じ見た目にするため、製品の実CSSをそのまま読み込む（base → pattern-timeline → editor →
+       auth-client の順。editor.css が base.css より後に来る読み込み順も実画面と同じにしてある）。 -->
+  <link rel="stylesheet" href="../../ui/styles/base.css">
+  <link rel="stylesheet" href="../../ui/styles/pattern-timeline.css">
+  <link rel="stylesheet" href="../../ui/styles/editor.css">
+  <link rel="stylesheet" href="../../ui/styles/auth-client.css">
+  <!-- 製品は ui/styles/tokens.css の中身を base.css の /*TOKENS*/ へ差し込んでから配信する。
+       ここはその逐語コピーを :root{} で囲んだもの。色は全てこの既存トークンから取る。 -->
+  <style>
+:root{
+
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
+  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
+  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
+  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
+  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
+  --scrim:rgba(42,32,26,.32);
+  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
+  --print-bg:#fff;
+}
+  </style>
+  <style>
+    /* ============ 資料そのものの体裁（製品UIではない・比較資料の地の文用） ============ */
+    .doc-h1{font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.4;margin-bottom:8px}
+    .doc-lede{font-size:14px;color:var(--mute);line-height:1.7;margin-bottom:28px}
+    .doc-sec{margin-bottom:36px}
+    .doc-h2{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+    .doc-h3{font-size:14px;font-weight:700;color:var(--mute);letter-spacing:.04em;margin:22px 0 8px}
+    .doc-note{font-size:13px;line-height:1.75;color:var(--ink);margin-bottom:16px}
+    .doc-rule{height:1px;background:var(--line);margin:34px 0}
+
+    /* ============ 「いま」の再現用 ============
+     * アカウント表示は auth-client.css で position:fixed（画面右上に貼り付く）。文書の流れの中に
+     * 場所を持たないので、画面を下へ送ると常にその時いちばん上に来た行の上へ重なる。静止画で
+     * その瞬間を出すため、ここだけ absolute へ差し替えて操作行の上に置いている（位置関係は実物と同じ）。 */
+    .now-stage .daytoolbar{position:relative}
+    .now-stage .ed-authbox{position:absolute;top:-16px;right:-4px}
+
+    /* ============ 立て直し案 ============ */
+    /* 1) ページヘッダ層（新設・通常フロー）。左に学校名、右にアカウント。固定表示はやめる。 */
+    .p-pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding-bottom:14px;margin-bottom:22px;border-bottom:1px solid var(--line)}
+    .p-school{font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.01em;line-height:1.3}
+    .p-account{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+    .p-mail{font-size:13px;color:var(--mute);line-height:1.3;word-break:break-all}
+    .p-gear{width:44px;height:44px}
+
+    /* 2) 押せる部品の高さを44pxにそろえる（案の中だけに効かせる） */
+    .p-scope .btn,
+    .p-scope .op-btn,
+    .p-scope .ed-mini,
+    .p-scope .ed-in,
+    .p-scope .ed-sel,
+    .p-scope .ed-time,
+    .p-scope .ed-iconbtn,
+    .p-scope .ed-grip,
+    .p-scope .p-seg-b,
+    .p-scope .lvtab{min-height:44px}
+    .p-scope .lvtab{padding:0;line-height:1.2}
+    .p-scope .btn,
+    .p-scope .ed-mini{display:inline-flex;align-items:center;justify-content:center;padding:0 18px;line-height:1.3}
+    .p-scope .ed-mini{font-size:13px}
+    .p-scope .ed-in,
+    .p-scope .ed-sel,
+    .p-scope .ed-time{padding:0 12px;line-height:1.4}
+    .p-scope textarea.ed-in{padding:11px 12px;min-height:76px}
+    .p-scope .ed-iconbtn,
+    .p-scope .ed-grip{width:44px;height:44px}
+
+    /* 3) 日単位のセグメントコントロール（「この日の対象」）。横一列・選択中はオレンジ塗り。 */
+    .p-seg{display:inline-flex;flex-wrap:nowrap;align-items:stretch;gap:4px;max-width:100%;background:var(--bg);border:1px solid var(--hair);border-radius:999px;padding:4px}
+    .p-seg-b{appearance:none;cursor:pointer;flex:1 1 auto;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--mute);font:inherit;font-size:14px;font-weight:600;line-height:1.3;padding:0 20px;white-space:nowrap;transition:color .16s ease}
+    .p-seg-b:hover{color:var(--orange-deep)}
+    .p-seg-b.on{background:var(--orange);border-color:var(--orange);color:var(--orange-ink)}
+    .p-seg-b:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+
+    /* 4) 節の区切り。節と節の間はフィールド間（12px）より広い28pxを取り、2段の余白スケールにする。 */
+    .p-sec + .p-sec{margin-top:28px}
+    .p-sec-t{font-size:15px;font-weight:700;color:var(--ink);letter-spacing:0;line-height:1.4;margin-bottom:10px}
+    .p-sec > .ed-field:last-child,
+    .p-sec > .p-duo:last-child .ed-field:last-child{margin-bottom:0}
+    .p-duo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .p-duo .ed-hint{margin-top:2px}
+    .p-sec .ed-row:last-of-type{margin-bottom:12px}
+
+    /* 5) 確定の節。保存・キャンセルを左、書き出しと自動生成に戻すを右端へ分ける。 */
+    .p-sec-confirm{padding-top:18px;border-top:1px solid var(--line)}
+    .p-confirm{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+    .p-confirm-main,.p-confirm-sub{display:flex;flex-wrap:wrap;gap:9px}
+    .p-scope .p-danger{color:var(--terra)}
+    .p-scope .p-danger:hover{color:var(--orange-deep)}
+
+    @media (max-width:520px){
+      .p-seg-b{padding:0 10px;font-size:13px}
+      .p-duo{grid-template-columns:1fr}
+      .p-confirm-sub{margin-left:0}
+    }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <h1 class="doc-h1">編集画面と画面上部のレイアウト立て直し</h1>
+  <p class="doc-lede">1案だけ。上下に並べて、いまと立て直し案を同じ内容で見比べる。色は製品の既存トークンだけを使い、新しい色は足していない。</p>
+
+  <!-- ══════════════════════════ いま ══════════════════════════ -->
+  <section class="doc-sec">
+    <h2 class="doc-h2">いま</h2>
+    <p class="doc-note">
+      アカウント表示（メールアドレス・歯車・ログアウト）は画面右上に貼り付いていて、文書の流れの中に居場所がない。横幅876px以下（スマートフォンやタブレット）では本文の右上に乗り、画面を下へ送るとその時いちばん上に来た行——ここでは印刷・編集・コピーの操作——を覆う。下はその瞬間の再現。<br>
+      編集画面は見出しから操作までが1列にまっすぐ並び、どこまでが「この日の設定」でどこからが「時間割」なのか切れ目がない。「女子のみ／男子のみ／男女両方」は縦に積まれ、何を選ぶ部品なのかを説明するラベルもない。
+    </p>
+
+    <div class="now-stage">
+      <div class="levels" role="tablist" aria-label="表示単位">
+        <button class="lvtab on" type="button">日</button><button class="lvtab" type="button">週</button><button class="lvtab" type="button">月</button><button class="lvtab" type="button">年</button>
+      </div>
+      <div class="daytoolbar">
+        <div class="daytoolbar-picker"><div class="picker" aria-label="曜日">
+          <button class="pk" type="button">月<small>07-27</small></button><button class="pk on" type="button">火<small>07-28</small></button><button class="pk" type="button">水<small>07-29</small></button><button class="pk" type="button">木<small>07-30</small></button><button class="pk" type="button">金<small>07-31</small></button><button class="pk sat" type="button">土<small>08-01</small></button><button class="pk sun" type="button">日<small>08-02</small></button>
+        </div></div>
+        <div class="daytoolbar-ops">
+          <div class="op-group" role="group" aria-label="日ビューの操作">
+            <button class="op-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg><span>印刷</span></button>
+            <button class="op-btn op-btn--icon" type="button" title="編集"><span class="sr-only">編集</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg></button>
+            <button class="op-btn op-btn--icon" type="button" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg></button>
+          </div>
+        </div>
+        <div class="ed-authbox"><span class="ed-authlabel">coach.tanaka@example.jp</span><button class="ed-gear" type="button" aria-label="チーム設定を変更"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button><button class="btn" type="button">ログアウト</button></div>
+      </div>
+    </div>
+
+    <h3 class="doc-h3">編集画面（いま）</h3>
+    <div class="ed-panel">
+      <div class="ed-h">この日を編集（7/28（火））</div>
+      <div class="modetoggle ed-field" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div>
+      <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+        <div class="ed-copyfrom">
+          <select class="ed-sel" style="width:auto;min-width:200px"><option>選んでください…</option><option>7/21（火）：守備の約束をそろえる</option><option>7/24（金）：速攻の走り分け</option></select>
+          <button type="button" class="ed-mini">この日を取り込む</button>
+        </div></div>
+      <div class="ed-field"><span class="ed-lab">自動の叩き台</span>
+        <div class="ed-copyfrom">
+          <button type="button" class="ed-mini">叩き台を読み込む</button>
+          <span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span>
+        </div></div>
+      <div class="ed-field"><span class="ed-lab">この日のねらい</span>
+        <textarea class="ed-in" rows="3">ハーフコートの守りで、ヘルプに行った後の戻りを声に出してそろえる。速攻は3人目まで走り切る。</textarea></div>
+      <div class="ed-field"><span class="ed-lab">コート</span>
+        <input class="ed-in" value="第1体育館 半面（女子は東側）"></div>
+      <div class="ed-rows">
+        <div class="ed-row">
+          <div class="ed-row-top">
+            <button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+            <span class="ed-rownum">時間1</span>
+            <span class="ed-times"><input type="time" class="ed-time" value="16:00"><span class="ed-sep">〜</span><input type="time" class="ed-time" value="16:20"></span>
+            <label class="ed-check"><input type="checkbox" checked>男女共通</label>
+            <button type="button" class="ed-iconbtn ed-del" aria-label="この時間を削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+          </div>
+          <div class="ed-cells ed-cells-both">
+            <div class="ed-cell">
+              <div class="ed-cell-head"><span class="ed-cell-team">男女共通</span><select class="ed-sel" style="width:auto;min-width:108px"><option>ウォームアップ</option><option>基礎</option></select></div>
+              <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="体をあたためる"></div>
+              <div class="ed-items">
+                <div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="動的ストレッチ"><input class="ed-in ed-note" value="8分"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div>
+                <div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="2人組のボールハンドリング"><input class="ed-in ed-note" value="12分"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div>
+              </div>
+              <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="ed-row">
+          <div class="ed-row-top">
+            <button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+            <span class="ed-rownum">時間2</span>
+            <span class="ed-times"><input type="time" class="ed-time" value="16:20"><span class="ed-sep">〜</span><input type="time" class="ed-time" value="16:50"></span>
+            <label class="ed-check"><input type="checkbox">男女共通</label>
+            <button type="button" class="ed-mini">反転コピー</button>
+            <button type="button" class="ed-iconbtn ed-del" aria-label="この時間を削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+          </div>
+          <div class="ed-cells">
+            <div class="ed-cell">
+              <div class="ed-cell-head"><span class="ed-cell-team">男子</span><select class="ed-sel" style="width:auto;min-width:108px"><option>チーム守備</option></select></div>
+              <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="ヘルプと戻り"></div>
+              <div class="ed-items"><div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="4対4ハーフコート"><input class="ed-in ed-note" value="声かけ必須"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div></div>
+              <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+            </div>
+            <div class="ed-cell">
+              <div class="ed-cell-head"><span class="ed-cell-team">女子</span><select class="ed-sel" style="width:auto;min-width:108px"><option>チーム守備</option></select></div>
+              <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="クローズアウト"></div>
+              <div class="ed-items"><div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="3対3シェルドリル"><input class="ed-in ed-note" value="手を上げる"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div></div>
+              <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 時間を追加</button></div>
+      <div class="ed-actions">
+        <button type="button" class="btn btn-primary">保存</button>
+        <button type="button" class="btn">キャンセル</button>
+        <button type="button" class="ed-mini">入力を書き出し</button>
+        <button type="button" class="ed-mini ed-del">自動生成に戻す</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="doc-rule"></div>
+
+  <!-- ══════════════════════════ 立て直し案 ══════════════════════════ -->
+  <section class="doc-sec p-scope">
+    <h2 class="doc-h2">立て直し案</h2>
+    <p class="doc-note">
+      画面上部に、学校名とアカウントを置くページヘッダを1行足した。固定表示をやめて文書の流れに戻したので、どこまで送っても何にも重ならない。表示単位のタブと、7曜日＋操作の2段はそのまま。<br>
+      編集画面は1列を「この日の基本／内容の用意／時間割／確定」の4つの節に分けた。3択は「この日の対象」というラベルを付けて横一列にし、選ぶと他のタブと同じオレンジで塗る。節と節の間はフィールド間より広く空けて、切れ目が余白で読めるようにした。<br>
+      確定の行は、保存とキャンセルを左、書き出しと「自動生成に戻す」を右端へ分けた。編集の入口は2段目の右端1か所に集約する（表示中の日の右上）。
+    </p>
+
+    <header class="p-pagehead">
+      <div class="p-school">港北第三中学校　バスケットボール部</div>
+      <div class="p-account">
+        <span class="p-mail">coach.tanaka@example.jp</span>
+        <button class="ed-gear p-gear" type="button" aria-label="チーム設定を変更"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+        <button class="btn" type="button">ログアウト</button>
+      </div>
+    </header>
+
+    <div class="levels" role="tablist" aria-label="表示単位">
+      <button class="lvtab on" type="button">日</button><button class="lvtab" type="button">週</button><button class="lvtab" type="button">月</button><button class="lvtab" type="button">年</button>
+    </div>
+    <div class="daytoolbar">
+      <div class="daytoolbar-picker"><div class="picker" aria-label="曜日">
+        <button class="pk" type="button">月<small>07-27</small></button><button class="pk on" type="button">火<small>07-28</small></button><button class="pk" type="button">水<small>07-29</small></button><button class="pk" type="button">木<small>07-30</small></button><button class="pk" type="button">金<small>07-31</small></button><button class="pk sat" type="button">土<small>08-01</small></button><button class="pk sun" type="button">日<small>08-02</small></button>
+      </div></div>
+      <div class="daytoolbar-ops">
+        <div class="op-group" role="group" aria-label="日ビューの操作">
+          <button class="op-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg><span>印刷</span></button>
+          <button class="op-btn op-btn--icon" type="button" title="編集"><span class="sr-only">編集</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg></button>
+          <button class="op-btn op-btn--icon" type="button" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="doc-h3">編集画面（立て直し案）</h3>
+    <div class="ed-panel">
+      <div class="ed-h">7/28（火）の練習を編集</div>
+
+      <section class="p-sec">
+        <h4 class="p-sec-t">1　この日の基本</h4>
+        <div class="ed-field">
+          <span class="ed-lab">この日の対象</span>
+          <div class="p-seg" role="group" aria-label="この日の対象">
+            <button class="p-seg-b" type="button" aria-pressed="false">女子のみ</button><button class="p-seg-b" type="button" aria-pressed="false">男子のみ</button><button class="p-seg-b on" type="button" aria-pressed="true">男女両方</button>
+          </div>
+        </div>
+        <div class="ed-field"><span class="ed-lab">この日のねらい</span>
+          <textarea class="ed-in" rows="3">ハーフコートの守りで、ヘルプに行った後の戻りを声に出してそろえる。速攻は3人目まで走り切る。</textarea></div>
+        <div class="ed-field"><span class="ed-lab">コート</span>
+          <input class="ed-in" value="第1体育館 半面（女子は東側）"></div>
+      </section>
+
+      <section class="p-sec">
+        <h4 class="p-sec-t">2　内容の用意</h4>
+        <div class="p-duo">
+          <div class="ed-field"><span class="ed-lab">自動の叩き台</span>
+            <div class="ed-copyfrom"><button type="button" class="ed-mini">叩き台を読み込む</button></div>
+            <p class="ed-hint">今の入力を自動生成の下書きに置き換えます</p></div>
+          <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+            <div class="ed-copyfrom">
+              <select class="ed-sel" style="width:auto;min-width:200px"><option>選んでください…</option><option>7/21（火）：守備の約束をそろえる</option><option>7/24（金）：速攻の走り分け</option></select>
+              <button type="button" class="ed-mini">この日を取り込む</button>
+            </div>
+            <p class="ed-hint">選んだ日の時間割をそのまま持ってきます</p></div>
+        </div>
+      </section>
+
+      <section class="p-sec">
+        <h4 class="p-sec-t">3　時間割</h4>
+        <div class="ed-rows">
+          <div class="ed-row">
+            <div class="ed-row-top">
+              <button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+              <span class="ed-rownum">時間1</span>
+              <span class="ed-times"><input type="time" class="ed-time" value="16:00"><span class="ed-sep">〜</span><input type="time" class="ed-time" value="16:20"></span>
+              <label class="ed-check"><input type="checkbox" checked>男女共通</label>
+              <button type="button" class="ed-iconbtn ed-del" aria-label="この時間を削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+            </div>
+            <div class="ed-cells ed-cells-both">
+              <div class="ed-cell">
+                <div class="ed-cell-head"><span class="ed-cell-team">男女共通</span><select class="ed-sel" style="width:auto;min-width:108px"><option>ウォームアップ</option><option>基礎</option></select></div>
+                <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="体をあたためる"></div>
+                <div class="ed-items">
+                  <div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="動的ストレッチ"><input class="ed-in ed-note" value="8分"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div>
+                  <div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="2人組のボールハンドリング"><input class="ed-in ed-note" value="12分"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div>
+                </div>
+                <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="ed-row">
+            <div class="ed-row-top">
+              <button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button>
+              <span class="ed-rownum">時間2</span>
+              <span class="ed-times"><input type="time" class="ed-time" value="16:20"><span class="ed-sep">〜</span><input type="time" class="ed-time" value="16:50"></span>
+              <label class="ed-check"><input type="checkbox">男女共通</label>
+              <button type="button" class="ed-mini">反転コピー</button>
+              <button type="button" class="ed-iconbtn ed-del" aria-label="この時間を削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+            </div>
+            <div class="ed-cells">
+              <div class="ed-cell">
+                <div class="ed-cell-head"><span class="ed-cell-team">男子</span><select class="ed-sel" style="width:auto;min-width:108px"><option>チーム守備</option></select></div>
+                <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="ヘルプと戻り"></div>
+                <div class="ed-items"><div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="4対4ハーフコート"><input class="ed-in ed-note" value="声かけ必須"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div></div>
+                <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+              </div>
+              <div class="ed-cell">
+                <div class="ed-cell-head"><span class="ed-cell-team">女子</span><select class="ed-sel" style="width:auto;min-width:108px"><option>チーム守備</option></select></div>
+                <div class="ed-field"><span class="ed-lab">見出し</span><input class="ed-in" value="クローズアウト"></div>
+                <div class="ed-items"><div class="ed-item"><button type="button" class="ed-grip ed-grip-item" aria-label="並べ替え"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></button><input class="ed-in ed-name" value="3対3シェルドリル"><input class="ed-in ed-note" value="手を上げる"><button type="button" class="ed-iconbtn ed-del" aria-label="削除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div></div>
+                <div class="ed-cell-actions"><button type="button" class="ed-mini">＋ 項目を追加</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="ed-mini">＋ 時間を追加</button>
+      </section>
+
+      <section class="p-sec p-sec-confirm">
+        <h4 class="p-sec-t">4　確定</h4>
+        <div class="p-confirm">
+        <div class="p-confirm-main">
+          <button type="button" class="btn btn-primary">保存</button>
+          <button type="button" class="btn">キャンセル</button>
+        </div>
+        <div class="p-confirm-sub">
+          <button type="button" class="btn">入力を書き出し</button>
+          <button type="button" class="btn p-danger">自動生成に戻す</button>
+        </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+</body>
+</html>
