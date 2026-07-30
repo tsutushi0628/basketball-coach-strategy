@@ -18,14 +18,6 @@ a{color:var(--orange-deep)}
 .lvtab:hover{transform:translateY(-2px)}
 .lvtab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
 .lvtab:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.daytabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
-/* T5: daytab は surface+hair・15px（H3段相当） */
-.daytab{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:52px;transition:transform .16s ease}
-/* T6: small は 12px（補助段） */
-.daytab small{font-weight:400;font-size:12px;opacity:.82}
-.daytab:hover{transform:translateY(-2px)}
-.daytab.on{background:var(--orange);color:var(--orange-ink);border-color:var(--orange)}
-
 /* T5: modetoggle は bg+hair（inset廃止）。3択トグルの共通見た目（editor.mjs の
  * onlyGenderToggleHtml＝編集画面内の「女子のみ/男子のみ/男女両方」切替が使用）。
  * 組違いON/OFFの単独ボタン（旧・上部ツールバー）は2026-07-29に撤去済みだが、この見た目自体は
@@ -218,7 +210,7 @@ a{color:var(--orange-deep)}
    * body だけを print-bg で上書きしても html 側の地色が縮小後の余白・最下部にはみ出して見える
    * ため、html/body 両方の背景を明示的に消す（背景画像も含め除去）。画面表示は不変。 */
   html,body{background:transparent!important;background-color:transparent!important;background-image:none!important}
-  .levels,.daytabs{display:none}
+  .levels{display:none}
   [data-print-hide]{display:none!important}
   .interact[hidden]{display:none!important}
   /* 1日=1ページに収めるため印刷時のみ全体を縮小。左右余白拡大（6mm→10mm）分の横幅減を吸収しつつ
