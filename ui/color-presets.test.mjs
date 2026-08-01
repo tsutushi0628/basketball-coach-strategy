@@ -10,10 +10,23 @@
  *     一切出さない（構造色は据え置く設計）。
  *   - PRESET_SWATCHES は16件で、各件の主色/第2色が PRESET_THEMES と一致する（パネルとCSS変数の真実源一致）。
  *
+ * 意味ロール層（ui/styles/tokens.css）を守る検査3本（migration計画 §8.2、component-spec.md「アクセント塗りの意味」節）:
+ *   - 形: ロール層の全宣言は var() 参照か、面を持たない役割の transparent のどちらかである（リテラル色値・宙ぶらりん参照・循環参照はゼロ）。
+ *   - 追従性: 16プリセットでチームカラーに連動して動く意味ロールは、状態・確定・識別・文字導線・焦点リングの5群だけで、
+ *     破壊・中立操作・移動の3群は一切動かない（押せる部品の5役割のうち色で連動するのは状態と確定だけ、という設計の固定）。
+ *   - 面と前景の対: 押せる部品の面ロールが追従するなら、その面に乗る前景ロールも同じプリセット群で追従する
+ *     （面だけ動いて文字色が既定に固定される＝特定配色で文字が読めなくなる故障を検出する）。
+ *
+ * 押せない状態の色（component-spec.md「押せない（全系統共通）」節）:
+ *   - 押せないことは部品の種類ではなく状態が1つなので、色ロールは役割を問わず共通の3本
+ *     （--action-disabled-fill / --action-disabled-line / --on-action-disabled）だけで、役割別の専用色を持たない。
+ *   - この3本はどの16配色でも値が変わらない（押せない状態はチームカラーの明暗に一切依存しない）。
+ *
  * テスト基盤: node --test。
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   PRESET_THEMES,
@@ -26,6 +39,56 @@ import {
 const ACCENT_VARS = ['--orange', '--orange-ink', '--orange-soft', '--orange-deep', '--boys', '--girls'];
 // 上書きで絶対に出してはいけない構造色（据え置き対象）。
 const STRUCTURAL_VARS = ['--bg', '--surface', '--ink', '--mute', '--terra', '--gold', '--sage', '--sat', '--sun', '--line', '--hair'];
+
+const TOKENS_PATH = new URL('./styles/tokens.css', import.meta.url);
+const ROLE_MARKER = '/* === 意味ロール層 ===';
+// tokens.css の「面を持たない役割」コメントで明示されている、transparent を許す2ロール。
+const TRANSPARENT_ROLE_VARS = new Set([
+  '--action-move-fill',
+  '--action-move-line',
+]);
+const EXPECTED_THEME_FOLLOWING_ROLES = [
+  '--action-commit-fill',
+  '--action-commit-line',
+  '--focus-ring',
+  '--on-action-commit',
+  '--on-label-accent',
+  '--on-link',
+  '--on-state-selected',
+  '--state-selected-fill',
+  '--state-selected-ring',
+  '--team-boys-fill',
+  '--team-girls-fill',
+].sort();
+// 押せない状態の色は役割を問わず全系統共通のこの3本だけ（component-spec.md「押せない（全系統共通）」節）。
+const DISABLED_ROLES = ['--action-disabled-fill', '--action-disabled-line', '--on-action-disabled'].sort();
+
+function parseDeclarations(css) {
+  return new Map([...css.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+);/g)].map(([, name, value]) => [name, value.trim()]));
+}
+
+function resolveVariable(name, declarations, trail = []) {
+  if (trail.includes(name)) throw new Error(`循環参照: ${[...trail, name].join(' -> ')}`);
+  const value = declarations.get(name);
+  if (value === undefined) throw new Error(`宙ぶらりんの参照: ${[...trail, name].join(' -> ')}`);
+  const reference = value.match(/^var\((--[\w-]+)\)$/);
+  return reference ? resolveVariable(reference[1], declarations, [...trail, name]) : value;
+}
+
+function presetOverrides(themeKey) {
+  return parseDeclarations(`${themeOverrideCss(themeKey).replace(/}$/, '')};`);
+}
+
+async function readTokenRoles() {
+  const css = await readFile(TOKENS_PATH, 'utf8');
+  const roleStart = css.indexOf(ROLE_MARKER);
+  assert.notEqual(roleStart, -1, 'tokens.css に意味ロール層の開始コメントがある');
+  return {
+    css,
+    primitives: parseDeclarations(css.slice(0, roleStart)),
+    roles: parseDeclarations(css.slice(roleStart)),
+  };
+}
 
 test('THEME_KEYS は16キーで orange を含む', () => {
   assert.equal(THEME_KEYS.length, 16);
@@ -95,4 +158,110 @@ test('PRESET_SWATCHES は16件で、主色/第2色が PRESET_THEMES と一致す
   }
   // スウォッチ並びは THEME_KEYS と同順（パネル表示とAPI集合のズレを消す）。
   assert.deepEqual(PRESET_SWATCHES.map((s) => s.key), THEME_KEYS);
+});
+
+test('意味ロール層は参照だけで構成され、transparent は面を持たない役割だけに限る', async (t) => {
+  const { primitives, roles } = await readTokenRoles();
+  const values = [...roles.values()];
+
+  await t.test('リテラル色値を含まない', () => {
+    assert.equal(values.filter((value) => /#(?:[\da-f]{3,8})\b|\b(?:rgb|hsl|oklch)\s*\(/i.test(value)).length, 0);
+  });
+  await t.test('宙ぶらりんの参照がない', () => {
+    const allDeclarations = new Map([...primitives, ...roles]);
+    const dangling = [];
+    for (const name of roles.keys()) {
+      try { resolveVariable(name, allDeclarations); } catch (error) {
+        if (error.message.startsWith('宙ぶらりん')) dangling.push(error.message);
+      }
+    }
+    assert.deepEqual(dangling, []);
+  });
+  await t.test('transparent は面を持たない役割だけに使う', () => {
+    assert.deepEqual([...roles].filter(([, value]) => value === 'transparent').map(([name]) => name).sort(), [...TRANSPARENT_ROLE_VARS].sort());
+  });
+  await t.test('循環参照がない', () => {
+    const allDeclarations = new Map([...primitives, ...roles]);
+    const cycles = [];
+    for (const name of roles.keys()) {
+      try { resolveVariable(name, allDeclarations); } catch (error) {
+        if (error.message.startsWith('循環参照')) cycles.push(error.message);
+      }
+    }
+    assert.deepEqual(cycles, []);
+  });
+  await t.test('各ロールは var() 参照または許可された transparent である', () => {
+    for (const [name, value] of roles) {
+      assert.ok(/^var\(--[\w-]+\)$/.test(value) || TRANSPARENT_ROLE_VARS.has(name) && value === 'transparent', `${name} は参照または許可された transparent`);
+    }
+  });
+});
+
+test('16プリセットで追従する意味ロールは状態・確定・識別・文字導線・焦点リングだけ', async () => {
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+  const baseline = new Map([...roles.keys()].map((name) => [name, resolveVariable(name, defaults)]));
+  const followedByAnyPreset = new Set();
+
+  for (const key of THEME_KEYS) {
+    const declarations = new Map([...defaults, ...presetOverrides(key)]);
+    const changed = [...roles.keys()].filter((name) => resolveVariable(name, declarations) !== baseline.get(name)).sort();
+    assert.deepEqual(changed, key === DEFAULT_THEME_KEY ? [] : EXPECTED_THEME_FOLLOWING_ROLES, `${key} の追従ロール集合`);
+    changed.forEach((name) => followedByAnyPreset.add(name));
+  }
+
+  const groups = {
+    状態: /^--state-|^--on-state-/,
+    '確定': /^--action-commit-|^--on-action-commit$/,
+    識別: /^--team-|^--on-team-label$/,
+    文字導線: /^--on-label-accent$|^--on-link$/,
+    焦点リング: /^--focus-ring$/,
+  };
+  for (const [group, pattern] of Object.entries(groups)) {
+    assert.ok([...followedByAnyPreset].some((name) => pattern.test(name)), `${group} のロールが少なくとも1つ追従する`);
+  }
+});
+
+test('押せる部品の面と前景は同じプリセット群で追従する', async () => {
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+  const pairs = [
+    ['--state-selected-fill', '--on-state-selected'],
+    ['--state-idle-fill', '--on-state-idle'],
+    ['--action-commit-fill', '--on-action-commit'],
+    ['--action-disabled-fill', '--on-action-disabled'],
+    ['--action-destructive-fill', '--on-action-destructive'],
+    ['--action-neutral-fill', '--on-action-neutral'],
+    ['--action-move-fill', '--on-action-move'],
+  ];
+  for (const [fill, foreground] of pairs) {
+    const moved = (name) => THEME_KEYS.filter((key) => {
+      const declarations = new Map([...defaults, ...presetOverrides(key)]);
+      return resolveVariable(name, declarations) !== resolveVariable(name, defaults);
+    });
+    assert.deepEqual(moved(fill), moved(foreground), `${fill} と ${foreground} は同じプリセット群で追従する`);
+  }
+});
+
+test('押せない状態の色は全系統共通の3本だけで、役割ごとに増えず、チームカラーにも追従しない', async (t) => {
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+
+  await t.test('押せない用の色ロールは共通3本だけで、役割別の専用色が増えていない', () => {
+    // 役割ごとに専用の押せない色（例: 中立操作だけの disabled 色）を新設すると、
+    // 「押せないことは部品の種類ではなく状態が1つ」という裁定（component-spec.md）が崩れる。
+    // 命名でなく実在するロール名を数えるので、将来 disabled 系のロールが増減しても自動的に検出できる。
+    const disabledNamed = [...roles.keys()].filter((name) => name.includes('disabled')).sort();
+    assert.deepEqual(disabledNamed, DISABLED_ROLES, '押せない状態の色ロールは全系統共通の3本のみ存在する');
+  });
+
+  await t.test('押せない用3本はどの16配色でも値が変わらない（全系統・全配色で同じ死に方をする）', () => {
+    for (const name of DISABLED_ROLES) {
+      const moved = THEME_KEYS.filter((key) => {
+        const declarations = new Map([...defaults, ...presetOverrides(key)]);
+        return resolveVariable(name, declarations) !== resolveVariable(name, defaults);
+      });
+      assert.deepEqual(moved, [], `${name} はチームカラーのどのプリセットでも値が変わらない`);
+    }
+  });
 });
