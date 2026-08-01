@@ -29,9 +29,9 @@
 .r-commit:hover{transform:translateY(-1px)}
 .r-commit:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-commit:disabled{cursor:not-allowed;transform:none;
-  background:var(--action-commit-fill-disabled);
-  border:1px solid var(--action-commit-line-disabled);
-  color:var(--on-action-commit-disabled)}
+  background:var(--action-disabled-fill);
+  border:1.5px solid var(--action-disabled-line);
+  color:var(--on-action-disabled)}
 
 /* --- 役割4 中立操作 ---
  * カード面を補助色の枠で縁取った静かなボタン。塗りを持たないことで確定と分かれる。
@@ -49,7 +49,7 @@
 
 /* --- 役割3 破壊 ---
  * 中立操作と同じ形（カード面・角丸8px・同じ内側余白）にし、形では分けない。
- * 分けるのは色（破壊色の枠と文字）、ゴミ箱と取消の記号、行の右端という置き場所、添える一文。 */
+ * 分けるのはゴミ箱と取消の記号、行の右端という置き場所、添える一文。赤茶の色は気づきを速める補助で、弁別には数えない。 */
 .r-destroy{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
@@ -58,7 +58,7 @@
 .r-destroy:hover{background:var(--action-destructive-fill-hover)}
 .r-destroy:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-destroy--icon{width:44px;padding:0}
-.r-destroy svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;
+.r-destroy svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 
 /* --- 役割5 移動 ---
@@ -101,7 +101,6 @@
 .r-daynav{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;flex:0 1 auto}
 .r-daytrack{flex:1 1 auto;min-width:0}
 .r-days{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start}
-.r-dshort{display:none}
 /* 語を添える移動はピル形。記号だけの移動（正円）と役割は同じで、形で用途の広さを示す */
 .r-weekgo{flex:0 0 auto;flex-direction:column;gap:0;width:auto;min-width:44px;
   padding:0 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.1}
@@ -111,7 +110,7 @@
   min-height:44px;min-width:52px;padding:6px 12px;border-radius:999px;
   background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
   transition:transform .16s ease}
-.r-day small{font-weight:400;font-size:12px;opacity:.82}
+.r-day small{font-weight:400;font-size:12px}
 .r-day:hover{transform:translateY(-2px)}
 .r-day:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-day.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
@@ -130,6 +129,9 @@
 .r-seg-b:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
 .r-seg-b.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700;z-index:1}
+/* 押せない状態ピル。押せない確定と同じ死に方で、枠も --mute-2 の単色に落とす
+ * （枠幅は押せる側の未選択と同一の1px）。 */
+.r-seg-b:disabled{cursor:not-allowed;background:var(--action-disabled-fill);border:1px solid var(--action-disabled-line);color:var(--on-action-disabled)}
 
 /* --- 文字だけの導線 --- */
 /* 文字導線は常時下線。下線の有無だけが「押せるオレンジ文字」と「押せない見出し」を分ける。
@@ -228,10 +230,11 @@ textarea.r-input{min-height:64px;resize:vertical}
 .r-confirm-sub .r-hint{flex:1 1 160px}
 
 /* 役割の見分け表 */
-.r-legend{display:grid;gap:10px;grid-template-columns:repeat(3,1fr);
+.r-legend{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));
   background:var(--surface-card);border:1px solid var(--line-hairline);
   border-radius:12px;padding:14px 16px}
 .r-legend-cell{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.r-legend-cell:first-child{grid-column:1/-1}
 .r-legend-k{font-size:12px;font-weight:700;color:var(--on-surface-muted);letter-spacing:.04em}
 
 /* 暗いチーム色の実演 */
@@ -248,10 +251,8 @@ textarea.r-input{min-height:64px;resize:vertical}
   .r-ops{flex:0 0 auto}
 }
 @media (max-width:580px){
-  .r-legend{grid-template-columns:repeat(2,1fr)}
+  .r-legend{grid-template-columns:repeat(2,minmax(0,1fr))}
   .r-duo,.r-cells{grid-template-columns:1fr}
-  .r-tab{font-size:14px}
-  .r-seg-b{font-size:12px;padding:0 4px}
 }
 /* 狭い幅では週送りを1段上へ回し、曜日の帯に全幅を渡して7日を2段に収める。
  * 送り2つは同じ段の両端に並べる（上下に分断しない）。
@@ -264,10 +265,6 @@ textarea.r-input{min-height:64px;resize:vertical}
   .r-daytrack{order:3;flex:1 1 100%}
   .r-weekgo{flex-direction:row;gap:4px}
 }
-@media (max-width:380px){
-  .r-tab{font-size:13px;letter-spacing:0}
-  .r-seg-b{font-size:11px}
-}
 </style>
 </head>
 <body>
@@ -275,8 +272,7 @@ textarea.r-input{min-height:64px;resize:vertical}
 
   <h1 class="r-doc-h1">押せる部品の5役割を当てた練習計画画面</h1>
   <p class="r-doc-note">
-    覚える規則は4つ。オレンジの塗りは「いま選ばれている・決める」。縁取りの箱は「道具」で、文字と枠が赤茶のものだけ消える・戻る。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。薄いものは、いま押せないだけである。
-    見出しの5役割と文字の導線は、この4つの規則に畳んである。下の見分け表の6升は、規則を部品の現物で見たときの内訳である。
+    覚える規則は4つ。オレンジの塗りは「いま選ばれている・決める」。縁取りの箱は「道具」で、ゴミ箱か取消の記号が付いたものだけ消える・戻る。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。規則のほかに、状態の見方が1つある。文字も枠も灰色に沈んだものは、いま押せないだけである。下の見分け表の7升は、4つの規則と状態の見方1つの内訳である。塗りが2升（器の中の印、単独の確定）、縁取りの箱が2升（道具、破壊）、記号が1升、下線が1升、押せないが1升。
     男子と女子の識別ドットも同じチーム色を使うが、これは押せない標識なので押せる部品の規律の外にある。
     色はすべて製品の意味ロール層から取っており、このページに色の実値は書いていない。
   </p>
@@ -285,9 +281,10 @@ textarea.r-input{min-height:64px;resize:vertical}
   <div class="r-legend">
     <div class="r-legend-cell">
       <span class="r-legend-k">いま選ばれている印</span>
-      <div class="r-seg" style="max-width:200px">
+      <div class="r-seg" style="max-width:260px">
         <button type="button" class="r-seg-b is-on">選択中</button>
         <button type="button" class="r-seg-b">未選択</button>
+        <button type="button" class="r-seg-b" disabled>押せない</button>
       </div>
     </div>
     <div class="r-legend-cell">
@@ -310,7 +307,10 @@ textarea.r-input{min-height:64px;resize:vertical}
     </div>
     <div class="r-legend-cell">
       <span class="r-legend-k">消す、元に戻す</span>
-      <button type="button" class="r-destroy">削除</button>
+      <button type="button" class="r-destroy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+        削除
+      </button>
     </div>
     <div class="r-legend-cell">
       <span class="r-legend-k">日を送る、並べ替える</span>
@@ -318,6 +318,7 @@ textarea.r-input{min-height:64px;resize:vertical}
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
       </button>
     </div>
+    <div class="r-legend-cell"><span class="r-legend-k">別の場所へ跳ぶ</span><a class="r-link" href="#">やり直しの手順</a></div>
   </div>
 
   <h2 class="r-doc-h2">練習計画の画面</h2>
@@ -348,13 +349,13 @@ textarea.r-input{min-height:64px;resize:vertical}
       </button>
       <div class="r-daytrack r-track">
         <div class="r-days">
-          <button type="button" class="r-day">月<small><span class="r-dfull">07-27</span><span class="r-dshort">27</span></small></button>
-          <button type="button" class="r-day is-on">火<small><span class="r-dfull">07-28</span><span class="r-dshort">28</span></small></button>
-          <button type="button" class="r-day">水<small><span class="r-dfull">07-29</span><span class="r-dshort">29</span></small></button>
-          <button type="button" class="r-day">木<small><span class="r-dfull">07-30</span><span class="r-dshort">30</span></small></button>
-          <button type="button" class="r-day">金<small><span class="r-dfull">07-31</span><span class="r-dshort">31</span></small></button>
-          <button type="button" class="r-day is-sat">土<small><span class="r-dfull">08-01</span><span class="r-dshort">01</span></small></button>
-          <button type="button" class="r-day is-sun">日<small><span class="r-dfull">08-02</span><span class="r-dshort">02</span></small></button>
+          <button type="button" class="r-day">月<small>07-27</small></button>
+          <button type="button" class="r-day is-on">火<small>07-28</small></button>
+          <button type="button" class="r-day">水<small>07-29</small></button>
+          <button type="button" class="r-day">木<small>07-30</small></button>
+          <button type="button" class="r-day">金<small>07-31</small></button>
+          <button type="button" class="r-day is-sat">土<small>08-01</small></button>
+          <button type="button" class="r-day is-sun">日<small>08-02</small></button>
         </div>
       </div>
       <button type="button" class="r-move r-weekgo" aria-label="次の週へ">
@@ -545,15 +546,21 @@ textarea.r-input{min-height:64px;resize:vertical}
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
             保存
           </button>
-          <button type="button" class="r-destroy">キャンセル</button>
-          <span class="r-hint">保存すると自動生成の下書きは置き換わります。</span>
+          <button type="button" class="r-destroy">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5"/></svg>
+            キャンセル
+          </button>
+          <span class="r-hint">保存すると自動生成の下書きは置き換わります。キャンセルは保存していない入力を捨てます。</span>
         </div>
         <div class="r-confirm-sub">
           <button type="button" class="r-neutral">入力を書き出し</button>
           <p class="r-hint">書き出しは今の入力を読み取るだけで、内容は変わりません。</p>
         </div>
         <div class="r-confirm-sub">
-          <button type="button" class="r-destroy">自動生成に戻す</button>
+          <button type="button" class="r-destroy">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5"/></svg>
+            自動生成に戻す
+          </button>
           <p class="r-hint">手で入れた内容を捨てて自動生成に戻します。<a class="r-link" href="#">やり直しの手順</a></p>
         </div>
       </div>
@@ -627,7 +634,10 @@ textarea.r-input{min-height:64px;resize:vertical}
       保存
     </button>
     <button type="button" class="r-neutral">印刷</button>
-    <button type="button" class="r-destroy">削除</button>
+    <button type="button" class="r-destroy">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+      削除
+    </button>
     <button type="button" class="r-move" aria-label="次の日へ">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
@@ -650,7 +660,10 @@ textarea.r-input{min-height:64px;resize:vertical}
       保存
     </button>
     <button type="button" class="r-neutral">印刷</button>
-    <button type="button" class="r-destroy">削除</button>
+    <button type="button" class="r-destroy">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+      削除
+    </button>
     <button type="button" class="r-move" aria-label="次の日へ">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
     </button>
