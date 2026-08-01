@@ -5,13 +5,13 @@
  * 参照しているロールだけを同じブロックで再宣言する（対象は生成時に機械的に走査して決めた）。
  */
 :root{
-  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e;
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e; --mute-2:#a08b74;
   --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
   --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
   --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
   --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
   --scrim:rgba(42,32,26,.32);
-  --sat:#3f7da3; --sun:#b5524b; --sat-soft:rgba(63,125,163,.10); --sun-soft:rgba(181,82,75,.10);
+  --sat:#31658a; --sun:#a03f3b; --sat-soft:rgba(49,101,138,.10); --sun-soft:rgba(160,63,59,.10);
   --print-bg:#fff;
 
   /* === 意味ロール層 ===
@@ -47,15 +47,16 @@
    * 枠はアクセント深色で、明るいチームカラーでも面の輪郭が地から立つ。 */
   --action-commit-fill:var(--orange); --action-commit-line:var(--orange-deep);
   --on-action-commit:var(--orange-ink);
-  /* 押せない確定は塗りを失う。押せる・押せないの弁別を「塗りがあるか無いか」に置くことで、
-   * チームカラーの明暗に一切依存しなくなる。形と角丸と余白とチェック印は押せる側と同一のまま、
-   * 同じ場所で薄くなるだけにする。 */
-  --action-commit-fill-disabled:var(--surface); --action-commit-line-disabled:var(--hair);
-  --on-action-commit-disabled:var(--mute);
+  /* 押せない（全系統共通）。文字・記号・枠はすべて --mute-2 の単色に落ちる。弁別の主軸は
+   * 枠の出現（未選択の枠は面比1.30でほぼ見えないが、押せないの枠は面比3.14で輪郭が立つ）で、
+   * 文字の沈みは従軸。枠幅は押せる側と同一のまま、どの系統でも同じ場所で死に色に沈む。 */
+  --action-disabled-fill:var(--surface);
+  --action-disabled-line:var(--mute-2);
+  --on-action-disabled:var(--mute-2);
 
   /* 役割3 破壊: 削除と取り消し。中立操作と同じ器の形（カード面＋角丸8px）にし、
-   * 形では分けない。分けるのは色（破壊色の枠と文字）、ゴミ箱と取消の記号、
-   * 行の右端という置き場所、そして添える一文の4点。
+   * 形では分けない。分けるのはゴミ箱と取消の記号、行の右端という置き場所、
+   * そして添える一文の3点。赤茶の色は気づきを速める補助で、弁別には数えない。
    * 文字と枠には --terra ではなく濃い側の --terra-ink を使う。--terra はカード面の上で
    * コントラスト比4.17でAAに届かず、--terra-ink なら5.90で満たす。 */
   --action-destructive-fill:var(--surface); --action-destructive-line:var(--terra-ink);
@@ -64,7 +65,7 @@
 
   /* 役割4 中立操作: 印刷、コピー、編集、書き出し。カード面を補助色の枠で縁取った静かなボタン。
    * 塗りを持たないことで、アクセントの塗り（選ぶ・決める）と役割が分かれる。
-   * 破壊とは同じ形を共有し、色と文言で分ける。 */
+   * 破壊とは同じ形を共有し、記号と一文で分ける（色は気づきを速める補助で、弁別には数えない）。 */
   --action-neutral-fill:var(--surface); --action-neutral-line:var(--mute); --on-action-neutral:var(--ink);
   --action-neutral-fill-hover:var(--bg);
 
