@@ -70,6 +70,12 @@ async function openPanel() {
 /** パネルを閉じる（次シナリオを独立させる）。 */
 async function closePanel() {
   await page.evaluate(() => { const c = document.querySelector('.ed-panel [data-act="cancel"]'); if (c) c.click(); });
+  // キャンセルは中身がある日では確認カードを出す（決定書3.2節）。テスト用クリーンアップとして
+  // カードが出ていれば「実行」を押して閉じ切る（中身が無ければカードは出ず、次の evaluate は無害）。
+  await page.evaluate(() => {
+    const dlg = document.getElementById('ed-cd');
+    if (dlg && !dlg.hidden) { const exec = document.getElementById('ed-cd-exec'); if (exec) exec.click(); }
+  });
 }
 
 /** 末尾に新規の空行を1つ足し、その行インデックスを返す。 */
@@ -140,6 +146,21 @@ async function modelTimes() {
   return page.evaluate(() => window.__bcsEditor.model().rows.map((r) => [r.from, r.to]));
 }
 
+/**
+ * 行 ri の近くに出る結果・中断理由メッセージ（.ed-row-msg）の実テキストを読む。
+ * コーチが「押した行のすぐそば」で読める場所に文言が出ているかを一次情報で確認するための入口
+ * （model の変化だけでなく、実際に画面へ出る文言と出る場所を検証する）。
+ */
+async function rowMsgText(ri) {
+  return page.locator(`.ed-panel .ed-row[data-ri="${ri}"] .ed-row-msg`).textContent();
+}
+
+/** 行メッセージ欄(.ed-row-msg)が読み上げにも届く仕組み（role=status/aria-live）を持つか。 */
+async function rowMsgIsLive(ri) {
+  const el = page.locator(`.ed-panel .ed-row[data-ri="${ri}"] .ed-row-msg`);
+  return { role: await el.getAttribute('role'), ariaLive: await el.getAttribute('aria-live') };
+}
+
 test('(a) 前半ブロックに男女とも中身→反転コピーで後半行が1つ増え、男女入替・時刻は直後', async () => {
   await openPanel();
   const ri = await addRow();
@@ -160,6 +181,14 @@ test('(a) 前半ブロックに男女とも中身→反転コピーで後半行�
   assert.deepEqual(added.男子.items, ['走り込み・アジリティ'], '新しい行の男子項目＝元の女子項目');
   assert.equal(added.女子.label, 'ゲーム', '新しい行の女子＝元の男子内容（入替）');
   assert.deepEqual(added.女子.items, ['5対5 ゲーム形式'], '新しい行の女子項目＝元の男子項目');
+
+  // コーチに何が伝わるか（model の変化だけでなく、押した行の近くに出る実文言・置き場所を検証）。
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /追加しました/, '成功時は「追加しました」と結果が押した行の近くに出る');
+  assert.match(msg, /18:20.*18:40/, '成功時のメッセージに追加された後半ブロックの時間帯が含まれる（何がどこに増えたか分かる）');
+  const live = await rowMsgIsLive(ri);
+  assert.equal(live.role, 'status', '結果メッセージは role="status" を持つ（読み上げにも届く）');
+  assert.equal(live.ariaLive, 'polite', '結果メッセージは aria-live="polite" を持つ（読み上げにも届く）');
   await closePanel();
 });
 
@@ -195,6 +224,10 @@ test('(c) 追加位置が既存ブロックと時間重複する場合は追加�
   const afterCount = await rowCount();
   assert.equal(afterCount, beforeCount, '重複時は行数が変化しない（追加しない）');
   assert.deepEqual(after, before, '重複時は model の時刻配列が不変');
+
+  const msg = await rowMsgText(0);
+  assert.match(msg, /時間帯.*既存のブロックと重なる/, '中断理由「時間帯が既存のブロックと重なる」が押した行(行0)の近くに出る');
+  assert.match(msg, /16:25.*16:50/, '重なった具体的な時間帯がメッセージに含まれる');
   await closePanel();
 });
 
@@ -208,6 +241,10 @@ test('(d) 前半ブロックが空（男女とも中身なし）なら反転コ�
 
   const after = await rowCount();
   assert.equal(after, before, '中身が無い行は反転コピーしない（行数不変）');
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /元になる中身がありません/, '中断理由「元になる中身がない」が押した行の近くに出る');
+  assert.match(msg, /ドリルを入れて/, 'コーチが次にすべきこと（ドリルを入れる）が文言に含まれる');
   await closePanel();
 });
 
@@ -229,6 +266,9 @@ test('(e) 反転コピーは1回の呼び出しで1行だけ増える（3ブロ�
   await clickFlipCopy(ri);
   const afterSecond = await rowCount();
   assert.equal(afterSecond, afterFirst, '同じ起点行への2回目押下は、対象2枠が中身ありのため確認なしでは増えない（安全策で中断）');
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /時間帯.*既存のブロックと重なる/, '2回目押下の中断理由（直前に追加した行との重複）が押した行の近くに出る');
   await closePanel();
 });
 
@@ -251,5 +291,97 @@ test('(D) 24:00跨ぎ: 23:40始まりの前半で反転コピーは追加され�
   for (const [f, t] of times) {
     assert.doesNotMatch(String(t), /^2[4-9]:|^[3-9]\d:/, `終了時刻に24:00以上の不正値が無い（${t}）`);
   }
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /24:00を跨ぐ/, '中断理由「24:00を跨ぐ」が押した行の近くに出る');
+  assert.match(msg, /早い時間帯にしてください/, 'コーチが次にすべきこと（前半を早い時間帯にする）が文言に含まれる');
+  await closePanel();
+});
+
+// 【F】前半ブロックの時刻が未入力/不正（終了が開始以前）なら反転コピーしない。
+test('(F) 前半ブロックの時刻が未入力なら反転コピーしない（時刻必須の中断理由が行の近くに出る）', async () => {
+  await openPanel();
+  const ri = await addRow();
+  await setTimes(ri, '', ''); // 明示的に時刻を空にする（add-row の既定引き継ぎを打ち消す）
+  await fillCell(ri, '男子', 'ラン', ['流し']);
+  await fillCell(ri, '女子', '静的', ['ストレッチ']);
+  const before = await rowCount();
+
+  await clickFlipCopy(ri);
+
+  const after = await rowCount();
+  assert.equal(after, before, '前半ブロックの時刻が無い行は反転コピーしない（行数不変）');
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /開始・終了時刻が必要/, '中断理由「開始・終了時刻が必要」が押した行の近くに出る');
+  assert.match(msg, /時刻を入力してから押して/, 'コーチが次にすべきこと（時刻を入力する）が文言に含まれる');
+  await closePanel();
+});
+
+// 【I】前半ブロックの時刻が「入力されてはいるが逆転している」ケース（終了<開始）。(F)の「未入力」とは
+// 同じ分岐（fm==null||tm==null||!(tm>fm)）を通るが、コーチから見た状況は別物（打ち間違いで終了を
+// 開始より前に置いてしまった）。開始欄を変えたときの自動補正（終了を開始に合わせる）を経由せず、
+// 終了欄だけを開始より前の時刻へ直接書き換えて、補正が効かない逆転状態を作る。
+test('(I) 前半ブロックの時刻が入力済みだが逆転している(終了<開始)なら反転コピーしない', async () => {
+  await openPanel();
+  const ri = await addRow();
+  await setTimes(ri, '19:00', '18:30'); // 終了(18:30)が開始(19:00)より前＝逆転
+  await fillCell(ri, '男子', 'ラン', ['流し']);
+  await fillCell(ri, '女子', '静的', ['ストレッチ']);
+  const rowBefore = await readRow(ri);
+  assert.equal(rowBefore.from, '19:00', '前提: 開始時刻は入力されている（未入力ではない）');
+  assert.equal(rowBefore.to, '18:30', '前提: 終了時刻も入力されているが開始より前（逆転）');
+  const before = await rowCount();
+
+  await clickFlipCopy(ri);
+
+  const after = await rowCount();
+  assert.equal(after, before, '時刻が逆転している行は反転コピーしない（行数不変）');
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /開始・終了時刻が必要/, '中断理由が押した行の近くに出る（未入力と同じ分岐だが、逆転ケースでも正しく中断する）');
+  await closePanel();
+});
+
+// 【G】対象行が model 上に実在しない防御分岐（対象行がありません）。通常のUI操作では起きないが、
+// model と DOM がズレた場合の安全策として実装されている分岐を、実際にそのズレを作って固定する。
+// DOM側の行（ボタン・メッセージの入れ物）自体は残っているため、メッセージは押した行の近くに出る。
+test('(G) 対象行が model 上に無い防御分岐: 中断理由「対象の行が見つかりません」が押した行の近くに出る', async () => {
+  await openPanel();
+  const ri = await addRow();
+  await setTimes(ri, '22:00', '22:10');
+  await fillCell(ri, '男子', 'アップ', ['ジョグ']);
+  await fillCell(ri, '女子', 'シュート', ['フリースロー']);
+
+  // 反転コピーの実処理（flipCopyRow）が参照する model.rows だけを、DOM を再描画せずに空にする
+  // （model と、既に画面に出ている反転コピーボタンの data-ri が指す行がズレた状態を作る）。
+  await page.evaluate(() => { window.__bcsEditor.model().rows.length = 0; });
+
+  await page.click(`.ed-panel .ed-row[data-ri="${ri}"] [data-act="flip-copy"]`);
+  await page.waitForTimeout(80);
+
+  const msg = await rowMsgText(ri);
+  assert.match(msg, /対象の行が見つかりませんでした/, '中断理由「対象の行が見つからない」が、押した行のDOMが残っている限りその行の近くに出る');
+  await closePanel();
+});
+
+// 【H】行メッセージの入れ物自体がDOM上に無い防御時は、文言を取りこぼさず画面上部の共有欄(#ed-msg)へ
+// フォールバックする（flashRow のフォールバック経路そのものを固定する）。
+test('(H) 行メッセージの入れ物がDOM上に見つからない防御時: 共有欄(#ed-msg)へフォールバックし、文言を取りこぼさない', async () => {
+  await openPanel();
+  const ri = await addRow();
+  await setTimes(ri, '23:00', '23:10'); // 中身は入れないので B2（元になる中身がない）の分岐を使う
+
+  // 行メッセージの入れ物だけを取り除く（対象行のDOM・ボタン自体は残す＝入れ物が無い状況の再現）。
+  await page.evaluate((r) => {
+    const el = document.querySelector(`.ed-panel .ed-row[data-ri="${r}"] .ed-row-msg`);
+    if (el) el.remove();
+  }, ri);
+  await page.evaluate(() => { const el = document.getElementById('ed-msg'); if (el) el.textContent = ''; });
+
+  await clickFlipCopy(ri);
+
+  const sharedMsg = await page.locator('#ed-msg').textContent();
+  assert.match(sharedMsg, /元になる中身がありません/, '行メッセージの入れ物が見つからない防御時は、文言を取りこぼさず共有欄(#ed-msg)へフォールバックする');
   await closePanel();
 });

@@ -96,6 +96,12 @@ async function openPanel() {
 
 async function closePanel() {
   await page.evaluate(() => { const c = document.querySelector('.ed-panel [data-act="cancel"]'); if (c) c.click(); });
+  // キャンセルは中身がある日では確認カードを出す（決定書3.2節）。テスト用クリーンアップとして
+  // カードが出ていれば「実行」を押して閉じ切る（中身が無ければカードは出ず、次の evaluate は無害）。
+  await page.evaluate(() => {
+    const dlg = document.getElementById('ed-cd');
+    if (dlg && !dlg.hidden) { const exec = document.getElementById('ed-cd-exec'); if (exec) exec.click(); }
+  });
 }
 
 test('(c) setOnlyGender("女子")で反対列(男子)が退避され、model上は空になる', async () => {
@@ -143,6 +149,37 @@ test('(e) buildOverride: onlyGender設定時は対象性別セルだけが載り
   assert.ok('女子' in result.rows[0], '対象性別(女子)のセルは保存に載る');
   const json = JSON.stringify(result);
   assert.doesNotMatch(json, /_onlyMemo/, '退避キー(_onlyMemo)は保存ペイロードの文字列に一切出ない');
+  await closePanel();
+});
+
+// 【H-layout】男女オンリー3択トグル: 見た目クラス(modetoggle)と間隔用クラス(ed-field)の同居による
+// 縦積み崩れの回帰テスト。2026-08 に .modetoggle と .ed-field を同一要素に同居させた結果、
+// display:flex;flex-direction:column（ed-field側）が横並びを潰して3択が縦に積まれる不具合があった。
+// 修正: ed-field は間隔だけを担う外側の入れ物にし、modetoggle 本体はその内側に入れ子にする。
+test('(H-layout) 男女オンリー3択は横1列に並ぶ（ed-fieldの縦積みスタイルと衝突しない・余白は保たれる）', async () => {
+  await openPanel();
+  const result = await page.evaluate(() => {
+    const toggle = document.querySelector('.ed-panel .modetoggle');
+    const btns = [...toggle.querySelectorAll('.mt')];
+    const cs = getComputedStyle(toggle);
+    const tops = btns.map((b) => b.getBoundingClientRect().top);
+    const outer = toggle.parentElement;
+    return {
+      btnCount: btns.length,
+      display: cs.display,
+      flexDirection: cs.flexDirection,
+      topsEqual: tops.length === 3 && tops.every((t) => Math.abs(t - tops[0]) < 1),
+      toggleHasEdFieldClass: toggle.classList.contains('ed-field'),
+      outerHasEdFieldClass: !!outer && outer.classList.contains('ed-field'),
+      outerMarginBottom: outer ? getComputedStyle(outer).marginBottom : null,
+    };
+  });
+  assert.equal(result.btnCount, 3, '3択（女子のみ／男子のみ／男女両方）が3ボタンとも描かれる');
+  assert.equal(result.flexDirection, 'row', '横並び（flex-direction:row）。ed-fieldの縦積み(column)と衝突しない');
+  assert.ok(result.topsEqual, '3つのボタンの実描画y座標が一致する＝横1列に並んでいる');
+  assert.equal(result.toggleHasEdFieldClass, false, '.modetoggle 要素自体は ed-field クラスを持たない（同居による崩れを再発させない）');
+  assert.equal(result.outerHasEdFieldClass, true, '間隔用の ed-field は外側の入れ物として残る');
+  assert.equal(result.outerMarginBottom, '12px', 'ed-fieldの下余白(12px)は保たれ、まわりの間隔が崩れない');
   await closePanel();
 });
 
@@ -352,8 +389,9 @@ test('(layout) オンリー日は左レール1列レイアウト（時計が先�
 });
 
 // 【時刻表示の統一】時刻(.tk)は基底 .spine-clk .tk を両モード共通で使い、モードで見た目を変えない。
-// 業務意図: 18px・枠/角丸/影/縁取り(text-shadow)なし・地色マスク(background:var(--bg))＋横padだけで、
-// 連結線が数字を貫かず読める。オンリー専用の .tk 上書きは持たない（オンリーと2列で完全に同一の見た目）。
+// 業務意図: 18px・枠/角丸/影/縁取り(text-shadow)なし・地色マスク(background:var(--surface-ground)、
+// 意味ロール層への付け替え後は--bgの参照名。値は不変)＋横padだけで、連結線が数字を貫かず読める。
+// オンリー専用の .tk 上書きは持たない（オンリーと2列で完全に同一の見た目）。
 test('(tk-parity) 時刻(.tk)は18px・text-shadowなし・地色マスクのみの基底スタイルを両モード共通で使う', async () => {
   const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { css } = render(data);
@@ -367,7 +405,7 @@ test('(tk-parity) 時刻(.tk)は18px・text-shadowなし・地色マスクのみ
   assert.ok(decl, '基底 .spine-clk .tk（18px メイン宣言）が存在する');
   assert.match(decl, /font-size:18px/, 'font-size 18px（大きめ）');
   assert.match(decl, /font-weight:700/, 'font-weight 700 は維持');
-  assert.match(decl, /background:var\(--bg\)/, '地色マスク（background:var(--bg)）で連結線を数字から隠す');
+  assert.match(decl, /background:var\(--surface-ground\)/, '地色マスク（background:var(--surface-ground)＝--bgの意味ロール参照）で連結線を数字から隠す');
   assert.match(decl, /padding:0 4px/, '横 pad だけ（0 4px）＝縦の箱余白なし');
   assert.match(decl, /text-shadow:none/, 'text-shadow なし（前回の白縁ハローを撤去・数字が潰れない）');
   assert.doesNotMatch(decl, /border\s*:/, '枠線を持たない');

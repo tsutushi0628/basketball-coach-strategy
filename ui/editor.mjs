@@ -584,6 +584,9 @@ export function editorScript() {
         flipBtn+
         '<button type="button" class="ed-iconbtn ed-del" data-act="del-row" aria-label="この時間を削除" title="この時間を削除">'+trashSvg()+'</button>'+
       '</div>'+
+      // この行に対する操作（反転コピー等）の結果・中断理由をその場で出す（読み上げにも届くよう status/aria-live）。
+      // 画面上部の共有欄(#ed-msg)とは別スコープ。空のときは高さを持たない（editor.css の :empty）。
+      '<div class="ed-row-msg" role="status" aria-live="polite"></div>'+
       cells+
     '</div>';
   }
@@ -593,8 +596,14 @@ export function editorScript() {
     var opt=function(val,label){
       return '<button class="mt'+(g===val?' on':'')+'" type="button" data-act="only-gender" data-only-gender="'+esc(val==null?'':val)+'">'+esc(label)+'</button>';
     };
-    return '<div class="modetoggle ed-field" role="group" aria-label="男女オンリーの切り替え">'+
-      opt('女子','女子のみ')+opt('男子','男子のみ')+opt(null,'男女両方')+
+    // ed-field（縦積み・下余白12px）と modetoggle（横並びピル）は見た目の役割が異なるため同一要素に
+    // 同居させない（同居すると display:flex;flex-direction:column が横並びを潰して縦積みになる）。
+    // 外側の ed-field は間隔（margin-bottom）だけを担い、内側の modetoggle 本体を入れ子にすることで、
+    // 周りの余白を保ったまま横並びを保つ。
+    return '<div class="ed-field">'+
+      '<div class="modetoggle" role="group" aria-label="男女オンリーの切り替え">'+
+        opt('女子','女子のみ')+opt('男子','男子のみ')+opt(null,'男女両方')+
+      '</div>'+
     '</div>';
   }
   function panelHtml(){
@@ -826,15 +835,15 @@ export function editorScript() {
   // 前半ブロック（起点行）は一切変更しない（純粋な追加操作）。既存ブロックと時間重複するなら追加しない。
   function flipCopyRow(unitStartRi){
     var src=model.rows[unitStartRi];
-    if(!src){flash('反転コピーの対象行がありません');return;}
+    if(!src){flashRow(unitStartRi,'反転コピーする対象の行が見つかりませんでした。もう一度お試しください。');return;}
     var boys=cellOf(src,'男子'),girls=cellOf(src,'女子');
     if(!cellHasContent(boys)&&!cellHasContent(girls)){
-      flash('反転コピーの元になる中身がありません（男女どちらかにドリルを入れてください）');
+      flashRow(unitStartRi,'反転コピーの元になる中身がありません（男女どちらかにドリルを入れてください）');
       return;
     }
     var fm=toMin(src.from),tm=toMin(src.to);
     if(fm==null||tm==null||!(tm>fm)){
-      flash('反転コピーには前半ブロックの時刻（開始・終了）が必要です');
+      flashRow(unitStartRi,'反転コピーには前半ブロックの開始・終了時刻が必要です。時刻を入力してから押してください。');
       return;
     }
     var dur=tm-fm;
@@ -842,7 +851,7 @@ export function editorScript() {
     var newToMin=tm+dur;
     // 後半の終了が24:00以上に跨ぐと不正時刻（'24:20'等・<input type=time>が弾く）になるため追加しない（D）。
     if(newToMin>=1440){
-      flash('反転コピー先が24:00を跨ぐため追加できません（前半を早い時間帯にしてください）');
+      flashRow(unitStartRi,'反転コピー先が24:00を跨ぐため追加できません（前半を早い時間帯にしてください）');
       return;
     }
     var newTo=minToHm(newToMin);
@@ -852,7 +861,7 @@ export function editorScript() {
       return rangesOverlap(newFrom,newTo,r.from,r.to);
     });
     if(overlap){
-      flash('反転コピー先の時間帯が既存のブロックと重なるため追加できません');
+      flashRow(unitStartRi,'反転コピー先（'+newFrom+'〜'+newTo+'）の時間帯が既存のブロックと重なるため追加できません。前半の時刻をずらしてください。');
       return;
     }
     var added={
@@ -864,7 +873,7 @@ export function editorScript() {
     };
     model.rows.splice(unitStartRi+1,0,added);
     renderPanel();
-    flash('男女の中身を入れ替えた後半ブロックを追加しました。確認して保存してください');
+    flashRow(unitStartRi,'男女を入れ替えた後半ブロック（'+newFrom+'〜'+newTo+'）をこの行の直後に追加しました。内容を確認して保存してください。');
   }
   // 分→'HH:MM'（反転コピーの新しい終了時刻を作るため。toMin の逆）。
   function minToHm(min){
@@ -1210,6 +1219,19 @@ export function editorScript() {
     if(msgTimer)clearTimeout(msgTimer);
     msgTimer=setTimeout(function(){msg.textContent='';},2400);
   }
+  // 行の近くに出す確認表示（反転コピー等・押した行の結果／中断理由をその場で見せる）。
+  // 対象行のDOMが見つからない防御時は、メッセージを取りこぼさないよう共有欄(flash)へフォールバックする。
+  // 表示は5秒（flashの2400msだと中断理由・成功文言のような長い一文を読み切れないため長めに取る）。
+  var ROW_MSG_MS=5000;
+  function flashRow(ri,t){
+    var rowEl=panel&&panel.querySelector('.ed-row[data-ri="'+ri+'"]');
+    var el=rowEl&&rowEl.querySelector('.ed-row-msg');
+    if(!el){flash(t);return;}
+    el.textContent=t;
+    if(el._msgTimer)clearTimeout(el._msgTimer);
+    el._msgTimer=setTimeout(function(){el.textContent='';},ROW_MSG_MS);
+  }
+
 
   // ── ボタン結線 ──
   // 「自動で叩き台を入れる」「自動に戻す」「入力を書き出し」は編集画面の中へ移設済み（2026-07-29）。
