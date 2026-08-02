@@ -103,10 +103,11 @@ test('組違いのトグルが画面のどこにも出ない（文言・属性�
 test('表示単位の選択中(lvtab)と日付の選択中(pk)は別クラス系統で、どちらもこの製品の選択中の色(オレンジ)で塗られる', () => {
   assert.match(RENDER.body, /<button class="lvtab on" data-go="day"/, '表示単位タブの選択中クラスは lvtab.on');
   assert.match(RENDER.body, /class="pk cal-go[^"]*\son\b[^"]*"/, '日付ピッカーの選択中クラスは pk.on（別系統）');
-  // 塗り色: 表示単位タブ・日付ピッカーとも、この製品の選択中を表すオレンジ塗りを維持する（CSSの実値で確認）。
+  // 塗り色: 表示単位タブ・日付ピッカーとも、この製品の選択中を表す状態ロール（意味ロール層への
+  // 付け替え後は --state-selected-fill。実値は var(--orange) のまま不変）で塗られる（CSSの実値で確認）。
   // 2段構成（表示単位/日付）は位置で軸が分かれているため、選択中の色を分ける必要はない。
-  assert.match(BASE_CSS, /\.lvtab\.on\{background:var\(--orange\)/, '表示単位タブの選択中はこの製品の選択中色(オレンジ)で塗られる');
-  assert.match(RENDER.css, /\.pk\.on\{background:var\(--orange\)/, '日付ピッカーの選択中はオレンジ塗りを維持');
+  assert.match(BASE_CSS, /\.lvtab\.on\{background:var\(--state-selected-fill\)/, '表示単位タブの選択中はこの製品の選択中色(状態ロール)で塗られる');
+  assert.match(RENDER.css, /\.pk\.on\{background:var\(--state-selected-fill\)/, '日付ピッカーの選択中は状態ロールの塗りを維持');
 });
 
 test('印刷用CSSは上部ツールバー(.daytoolbar)一式を非表示にする規則を持つ', () => {

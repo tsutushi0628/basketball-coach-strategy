@@ -1,29 +1,37 @@
 
-/* 編集導線の小ボタン（既存 ed-mini と同じ surface+hair の pill トーン）。色帯にしない。 */
-.ge-edit{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:3px 11px;margin-left:8px;white-space:nowrap;vertical-align:middle;transition:transform .14s ease,color .14s ease}
-.ge-edit:hover{transform:translateY(-1px);color:var(--orange)}
-.ge-edit:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* 編集導線の小ボタン（副の操作ロール・タン面）。色帯にしない。
+ * 反応表3.6節: 位置でなく面で返す。押したら1px沈む。 */
+.ge-edit{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--action-secondary-fill);color:var(--on-action-secondary);border:1px solid var(--action-secondary-line);border-radius:999px;padding:3px 11px;margin-left:8px;white-space:nowrap;vertical-align:middle;transition:transform .14s ease,background-color .14s ease}
+.ge-edit:hover{background:var(--action-secondary-fill-hover)}
+.ge-edit:active{transform:translateY(1px)}
+.ge-edit:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 /* インライン編集ボックス（保存・取消・状態行）。全周罫線で囲う（帯にしない）。 */
-.ge-box{display:block;margin-top:8px;background:var(--bg);border:1px solid var(--hair);border-radius:10px;padding:10px 12px}
+.ge-box{display:block;margin-top:8px;background:var(--surface-ground);border:1px solid var(--line-hairline);border-radius:10px;padding:10px 12px}
 .ge-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
-.ge-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:8px 11px;line-height:1.4}
-.ge-in:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+.ge-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--on-surface);background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:8px 11px;line-height:1.4}
+.ge-in:focus{outline:2px solid var(--focus-ring);outline-offset:1px;border-color:var(--focus-ring)}
 .ge-in:disabled{opacity:.6}
-.ge-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--orange);color:var(--orange-ink);border:1px solid var(--orange);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
-.ge-save:hover{transform:translateY(-1px)}
-.ge-save:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* 主の操作ロール（目標の保存。component-spec.md「アクセント塗りの意味」節で明示）。
+ * 反応表3.6節: 位置で返す（触れたら2px浮く・押したら1px沈む）。旧仕様の1px浮きから訂正。 */
+.ge-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--action-primary-fill);color:var(--on-action-primary);border:1px solid var(--action-primary-line);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
+.ge-save:hover{transform:translateY(-2px)}
+.ge-save:active{transform:translateY(1px)}
+.ge-save:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .ge-save:disabled{opacity:.55;cursor:default;transform:none}
-.ge-cancel{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:8px 13px;white-space:nowrap}
-.ge-cancel:hover{color:var(--orange)}
-.ge-cancel:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-.ge-foot{font-size:12px;line-height:1.5;color:var(--ink);margin-top:6px}
+/* 副の操作ロール（キャンセル）。反応表3.6節: 位置でなく面で返す。押したら1px沈む。 */
+.ge-cancel{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:600;background:var(--action-secondary-fill);color:var(--on-action-secondary);border:1px solid var(--action-secondary-line);border-radius:999px;padding:8px 13px;white-space:nowrap;transition:transform .14s ease,background-color .14s ease}
+.ge-cancel:hover{background:var(--action-secondary-fill-hover);color:var(--on-action-secondary)}
+.ge-cancel:active{transform:translateY(1px)}
+.ge-cancel:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.ge-foot{font-size:12px;line-height:1.5;color:var(--on-surface);margin-top:6px}
 .ge-foot:empty{display:none}
-.ge-foot[data-kind="saving"]{color:var(--mute)}
+.ge-foot[data-kind="saving"]{color:var(--on-surface-muted)}
+/* 失敗メッセージ（--terraの2用途の一方。tokens.css冒頭コメント参照）。押せる部品ではない状態文字色で直参照を維持 */
 .ge-foot[data-kind="error"]{color:var(--terra);font-weight:600}
 /* 年タブの狭い arc月セル用: トリガは絶対配置（高さに影響させない）、編集ボックスは画面下中央のオーバーレイ。 */
 .arccell[data-goal-edit]{position:relative}
 .ge-edit-abs{position:absolute;top:4px;right:4px;margin-left:0;padding:2px 7px;font-size:11px}
-.ge-scrim{position:fixed;inset:0;background:var(--scrim);z-index:59}
-.ge-box-overlay{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;width:min(92vw,420px);margin-top:0;background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:14px 16px}
-.ge-ov-title{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:9px}
+.ge-scrim{position:fixed;inset:0;background:var(--scrim-overlay);z-index:59}
+.ge-box-overlay{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;width:min(92vw,420px);margin-top:0;background:var(--surface-card);border:1px solid var(--line-strong);border-radius:14px;padding:14px 16px}
+.ge-ov-title{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;margin-bottom:9px}
 @media print{.ge-edit,.ge-box,.ge-box-overlay,.ge-scrim{display:none!important}}

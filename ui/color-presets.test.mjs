@@ -321,14 +321,7 @@ const UNDERLINE_SELECTORS = [
   ['styles/pattern-timeline.css', '.dp-link'],
 ];
 
-test('文字だけの導線は常時下線を持つ（押せることを示す唯一の手掛かり）', {
-  skip:
-    '対象の5セレクタは、いずれも部品CSSのロール参照への付け替え（裁定 4.7節）と同じフェーズで下線を付ける。'
-    + 'いまは text-decoration:none のままなので、この検査を動かすと落ちる。'
-    + '色を落としたあとに下線まで外れると押せることを示すものが1つも無くなるため、'
-    + '歯止めとして先に置いておく。付け替えが済んだらこの skip を外して緑にする'
-    + '（裁定 6章の実装フェーズの完了条件に項目として入れてある）。',
-}, async () => {
+test('文字だけの導線は常時下線を持つ（押せることを示す唯一の手掛かり）', async () => {
   for (const [file, selector] of UNDERLINE_SELECTORS) {
     const css = await readFile(new URL(`./${file}`, import.meta.url), 'utf8');
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -1,59 +1,76 @@
 
 .ed-authbox{position:fixed;top:12px;right:14px;z-index:50;display:inline-flex;align-items:center;gap:8px}
-.ed-authbox .ed-authlabel{font-size:12px;font-weight:700;color:var(--orange-deep);background:var(--surface);border:1px solid var(--hair);border-radius:999px;padding:5px 11px}
-/* 歯車ボタン（SVG線画・emoji不可）。surface+hair の円形・押せるものなので枠線あり。 */
-.ed-gear{appearance:none;border:1px solid var(--hair);cursor:pointer;background:var(--surface);color:var(--mute);border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:transform .16s ease,color .16s ease}
-.ed-gear:hover{transform:translateY(-2px);color:var(--orange)}
-.ed-gear:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
-.ed-gear[aria-expanded="true"]{color:var(--orange-deep);border-color:var(--line-2)}
+/* ログイン中ラベルは押せない見出しラベル（--on-label-accent） */
+.ed-authbox .ed-authlabel{font-size:12px;font-weight:700;color:var(--on-label-accent);background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:999px;padding:5px 11px}
+/* 歯車ボタン（SVG線画・emoji不可）。副の操作ロール（タン面・押せるものなので枠線あり）。
+ * 反応表3.6節: 位置でなく面で返す。押したら1px沈む。 */
+.ed-gear{appearance:none;border:1px solid var(--action-secondary-line);cursor:pointer;background:var(--action-secondary-fill);color:var(--on-action-secondary);border-radius:999px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:transform .16s ease,background-color .16s ease}
+.ed-gear:hover{background:var(--action-secondary-fill-hover)}
+.ed-gear:active{transform:translateY(1px)}
+.ed-gear:focus-visible{outline:2px solid var(--focus-ring);outline-offset:3px}
+/* 展開中は色で状態を追加表示しない（3段の区別以外に色を足さない規律）。枠だけ強める。 */
+.ed-gear[aria-expanded="true"]{color:var(--on-surface);border-color:var(--line-strong)}
 .ed-gear svg{width:18px;height:18px;display:block}
 /* プリセット選択パネル（歯車直下のポップオーバー・16色4列）。 */
-.theme-panel{position:fixed;top:54px;right:14px;z-index:51;width:272px;background:var(--surface);border:1px solid var(--line-2);border-radius:16px;padding:16px 16px 14px}
+.theme-panel{position:fixed;top:54px;right:14px;z-index:51;width:272px;background:var(--surface-card);border:1px solid var(--line-strong);border-radius:16px;padding:16px 16px 14px}
 .theme-panel[hidden]{display:none}
 .tp-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:3px}
-.tp-title{font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
-.tp-close{appearance:none;border:none;background:none;cursor:pointer;color:var(--mute);padding:2px;line-height:1;border-radius:8px}
-.tp-close:hover{color:var(--orange-deep)}
-.tp-close:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.tp-title{font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--on-surface)}
+/* 副の操作ロール（アイコンのみの閉じるボタン）。反応表3.6節: 押したら1px沈む。 */
+.tp-close{appearance:none;border:none;background:none;cursor:pointer;color:var(--on-action-secondary);padding:2px;line-height:1;border-radius:8px;transition:transform .14s ease}
+.tp-close:hover{color:var(--on-action-secondary)}
+.tp-close:active{transform:translateY(1px)}
+.tp-close:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .tp-close svg{width:16px;height:16px;display:block}
-.tp-lede{font-size:12px;color:var(--mute);line-height:1.55;margin-bottom:13px}
+.tp-lede{font-size:12px;color:var(--on-surface-muted);line-height:1.55;margin-bottom:13px}
 /* 学校・チーム名セクション（スウォッチ格子の上）。tp-* と同トーン・既存トークンのみ。 */
-.ed-name-sec{margin-bottom:14px;padding-bottom:13px;border-bottom:1px solid var(--line)}
-.ed-name-lab{display:block;font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em;margin-bottom:6px}
+.ed-name-sec{margin-bottom:14px;padding-bottom:13px;border-bottom:1px solid var(--line-hairline)}
+.ed-name-lab{display:block;font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;margin-bottom:6px}
 .ed-name-row{display:flex;gap:7px;align-items:center}
-.ed-name-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:8px 11px;line-height:1.4}
-.ed-name-in:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+.ed-name-in{flex:1 1 auto;min-width:0;appearance:none;font:inherit;font-size:14px;color:var(--on-surface);background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:8px 11px;line-height:1.4}
+.ed-name-in:focus{outline:2px solid var(--focus-ring);outline-offset:1px;border-color:var(--focus-ring)}
 .ed-name-in:disabled{opacity:.6}
-.ed-name-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--orange);color:var(--orange-ink);border:1px solid var(--orange);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
-.ed-name-save:hover{transform:translateY(-1px)}
-.ed-name-save:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* 主の操作ロール（表示名の保存。component-spec.md「アクセント塗りの意味」節で明示）。
+ * 反応表3.6節: 主の操作は位置で返す（触れたら2px浮く・押したら1px沈む）。旧仕様の1px浮きから訂正。 */
+.ed-name-save{appearance:none;cursor:pointer;flex:0 0 auto;font:inherit;font-size:12px;font-weight:700;background:var(--action-primary-fill);color:var(--on-action-primary);border:1px solid var(--action-primary-line);border-radius:999px;padding:8px 15px;white-space:nowrap;transition:transform .14s ease}
+.ed-name-save:hover{transform:translateY(-2px)}
+.ed-name-save:active{transform:translateY(1px)}
+.ed-name-save:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .ed-name-save:disabled{opacity:.55;cursor:default;transform:none}
-.ed-name-foot{font-size:12px;line-height:1.5;color:var(--ink);margin-top:6px}
+.ed-name-foot{font-size:12px;line-height:1.5;color:var(--on-surface);margin-top:6px}
 .ed-name-foot:empty{display:none}
-.ed-name-foot[data-kind="saving"]{color:var(--mute)}
+.ed-name-foot[data-kind="saving"]{color:var(--on-surface-muted)}
+/* 失敗メッセージは --terra の2用途の一方（tokens.css冒頭コメント）。押せる部品ではない状態文字色で
+ * 意味ロール層の対象外。直参照を維持する。 */
 .ed-name-foot[data-kind="error"]{color:var(--terra);font-weight:600}
 /* 16スウォッチの格子＝4列×4行。押せるものなので各セルは border を持つ。 */
 .tp-swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-.tp-swatches .sw{position:relative;appearance:none;cursor:pointer;background:var(--surface);border:1px solid var(--hair);border-radius:11px;padding:7px 3px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font:inherit;transition:transform .16s ease,border-color .16s ease}
-.tp-swatches .sw:hover{transform:translateY(-2px);border-color:var(--line-2)}
-.tp-swatches .sw:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-/* 選択中: 主色の太縁＋面の濃淡で示す（テーマ非依存に効くよう var(--sw-main)）。 */
-.tp-swatches .sw[aria-pressed="true"]{border-color:var(--sw-main);border-width:2px;padding:6px 2px 5px;background:var(--bg)}
-.sw-dot{width:28px;height:28px;border-radius:50%;overflow:hidden;display:flex;flex:0 0 auto;border:1px solid var(--hair)}
+.tp-swatches .sw{position:relative;appearance:none;cursor:pointer;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:11px;padding:7px 3px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font:inherit;transition:transform .16s ease,border-color .16s ease}
+.tp-swatches .sw:hover{transform:translateY(-2px);border-color:var(--line-strong)}
+.tp-swatches .sw:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+/* 選択中: 主色の太縁＋面の濃淡で示す（テーマ非依存に効くよう var(--sw-main)）。--sw-main/--sw-2nd は
+ * JS側がプリセットごとに style 属性で注入するインスタンス変数で、tokens.css の色プリミティブではない
+ * （16通りの候補を同時に見せるプレビュー格子のため、単一のグローバルロールに畳めない）。直参照を維持する。 */
+.tp-swatches .sw[aria-pressed="true"]{border-color:var(--sw-main);border-width:2px;padding:6px 2px 5px;background:var(--surface-ground)}
+.sw-dot{width:28px;height:28px;border-radius:50%;overflow:hidden;display:flex;flex:0 0 auto;border:1px solid var(--line-hairline)}
 .sw-dot i{display:block;width:50%;height:100%}
 .sw-dot .a{background:var(--sw-main)}
 .sw-dot .b{background:var(--sw-2nd)}
-.sw-name{font-size:11px;font-weight:700;color:var(--ink);letter-spacing:0;white-space:nowrap;line-height:1.2}
+.sw-name{font-size:11px;font-weight:700;color:var(--on-surface);letter-spacing:0;white-space:nowrap;line-height:1.2}
 .sw-check{position:absolute;top:5px;right:5px;width:12px;height:12px;display:none;color:var(--sw-main)}
 .tp-swatches .sw[aria-pressed="true"] .sw-check{display:block}
 /* フッタ状態行（保存中・保存エラー）。 */
-.tp-foot{min-height:1.4lh;margin-top:13px;padding-top:11px;border-top:1px solid var(--line);font-size:12px;line-height:1.55;color:var(--ink)}
+.tp-foot{min-height:1.4lh;margin-top:13px;padding-top:11px;border-top:1px solid var(--line-hairline);font-size:12px;line-height:1.55;color:var(--on-surface)}
 .tp-foot:empty{min-height:0;border-top:none;padding-top:0;margin-top:0}
-.tp-foot[data-kind="saving"]{color:var(--mute)}
+.tp-foot[data-kind="saving"]{color:var(--on-surface-muted)}
+/* 失敗メッセージ（--terraの2用途の一方・ed-name-footと同じ扱い。直参照を維持） */
 .tp-foot[data-kind="error"]{color:var(--terra);font-weight:600}
-.tp-retry{appearance:none;border:1px solid var(--hair);background:var(--surface);color:var(--orange-deep);cursor:pointer;border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;font-weight:700;margin-left:8px}
-.tp-retry:hover{color:var(--orange);transform:translateY(-1px)}
-.tp-retry:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* 副の操作ロール（保存リトライ）。反応表3.6節: 位置でなく面で返す。押したら1px沈む。 */
+.tp-retry{appearance:none;border:1px solid var(--action-secondary-line);background:var(--action-secondary-fill);color:var(--on-action-secondary);cursor:pointer;border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;font-weight:700;margin-left:8px;transition:transform .14s ease,background-color .14s ease}
+.tp-retry:hover{background:var(--action-secondary-fill-hover)}
+.tp-retry:active{transform:translateY(1px)}
+.tp-retry:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+/* spinは押せない標識のアクセント（3.7節許可リスト・読み込み中の回転印）。直参照を維持 */
 .spin{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px;border:2px solid var(--orange-soft);border-top-color:var(--orange);border-radius:50%;animation:tp-spin .7s linear infinite}
 @keyframes tp-spin{to{transform:rotate(360deg)}}
 /* 保存中は再選択を抑止する見た目（操作は JS 側で無効化） */
