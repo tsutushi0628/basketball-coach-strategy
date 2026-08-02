@@ -10,58 +10,77 @@
 <link rel="stylesheet" href="./button-roles-20260730-tokens.css">
 <style>
 /* 役割別の見た目。色は意味ロール経由でのみ当てる（生の色トークンを直参照しない）。
- * 押せる部品に出る色は2系統だけ。アクセント（選ばれている、決める）と、
- * 無彩に近い暖色の階調（それ以外の全部）である。 */
+ * 押せる部品の面は、押した結果の重さの順に3段だけ。
+ *   選択中   アクセントの明るい側の塗り
+ *   主の操作 アクセントの濃い側の塗りに白抜きの文字
+ *   副の操作 タンの面（破壊も同じ面を共有する）
+ * 押せないはどの段も取らず、平らなカード面に沈む。 */
+
+/* オーナーが実物で見分けを確かめるための升。5つを同じ地の上に並べる。 */
+.r-compare{display:grid;gap:14px;grid-template-columns:repeat(5,minmax(0,1fr));
+  background:var(--surface-card);border:1px solid var(--line-hairline);
+  border-radius:12px;padding:16px}
+.r-compare-cell{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
+@media (max-width:680px){.r-compare{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .r-wrap{max-width:900px;margin:0 auto;padding:28px 16px 72px}
 .r-doc-h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
 .r-doc-note{font-size:12px;color:var(--on-surface-muted);line-height:1.6;margin-bottom:22px}
 .r-doc-h2{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--on-label-accent);margin:30px 0 10px}
 
-/* --- 役割2 確定 ---
- * アクセントの塗り。塗りは「選ぶ、決める」の意味で、選択中と確定を分けるのは
- * 形とチェック印が主、単独配置が従。確定は角丸四角にチェック印が付く。 */
+/* --- 役割2 主の操作 ---
+ * アクセントの濃い側の塗りに白抜きの文字。押すと元に戻せない結果が残る、画面でいちばん重い操作。
+ * 選択中（アクセントの明るい側）とは面の濃さの段で分かれる。既定の配色で2.08、
+ * 主が濃い側になることは16配色すべてで成立する。段が細くなる配色では、
+ * 角丸四角の形とチェック印と単独配置が分ける仕事の主軸に回る。 */
 .r-commit{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:700;
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   letter-spacing:.04em;min-height:44px;padding:0 22px;border-radius:8px;white-space:nowrap;
-  background:var(--action-commit-fill);border:1.5px solid var(--action-commit-line);
-  color:var(--on-action-commit);transition:transform .16s ease}
+  background:var(--action-primary-fill);border:1.5px solid var(--action-primary-line);
+  color:var(--on-action-primary);transition:transform .12s ease}
 .r-commit svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
-/* hover は位置が2px動く（最小量の条項3）。1pxでは知覚できないので状態と揃えて2pxにする。 */
+/* 触れたら2px浮く。アクセントの濃い側より濃い段が無いので、反応は位置で返す。 */
 .r-commit:hover:not(:disabled){transform:translateY(-2px)}
+/* 押したら1px沈む。浮いてから沈むので押した手応えが位置で返る。 */
+.r-commit:active:not(:disabled){transform:translateY(1px)}
 .r-commit:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-commit:disabled{cursor:not-allowed;transform:none;
   background:var(--action-disabled-fill);
   border:1.5px solid var(--action-disabled-line);
   color:var(--on-action-disabled)}
 
-/* --- 役割4 中立操作 ---
- * カード面を補助色の枠で縁取った静かなボタン。塗りを持たないことで確定と分かれる。
+/* --- 役割4 副の操作 ---
+ * タンの面を持つ道具。輪郭だけだと押せる部品に見えず、器の中の未選択の候補とも見分けがつかない。
+ * 面はカード面に対し1.55、地の面に対し1.49で、輪郭を見なくても押せる部品だと読める。
  * 連結帯は使わない。並べるときも独立したボタンとして gap で離す。 */
 .r-neutral{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
-  background:var(--action-neutral-fill);border:1px solid var(--action-neutral-line);
-  color:var(--on-action-neutral);transition:border-color .16s ease}
-/* hover は枠の色が面比6.14から15.31へ動く（最小量の条項1）。
- * 面だけを動かす hover は持たない。カード面から地の面への変化は弁別比1.043で知覚できない。 */
-.r-neutral:hover{border-color:var(--on-surface)}
+  background:var(--action-secondary-fill);border:1px solid var(--action-secondary-line);
+  color:var(--on-action-secondary);transition:background .12s ease,transform .12s ease}
+/* 触れたら面が濃い側へ動く（比1.20）。押したら1px沈む。 */
+.r-neutral:hover:not(:disabled){background:var(--action-secondary-fill-hover)}
+.r-neutral:active:not(:disabled){transform:translateY(1px)}
 .r-neutral:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.r-neutral:disabled{cursor:not-allowed;transform:none;
+  background:var(--action-disabled-fill);border:1px solid var(--action-disabled-line);
+  color:var(--on-action-disabled)}
 .r-neutral--icon{width:44px;padding:0}
 .r-neutral svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 
 /* --- 役割3 破壊 ---
- * 中立操作と同じ形（カード面、角丸8px、同じ内側余白）にし、形では分けない。
- * 色も中立と同じ値になる。強さで分けないと決めた以上、色でも分かれないのが正しい。
+ * 副の操作と同じ面と同じ形（タンの面、角丸8px、同じ内側余白）にし、形では分けない。
+ * 色も副と同じ値になる。強さで分けないと決めた以上、色でも分かれないのが正しい。
  * 分けるのはゴミ箱と取消の記号、行の右端という置き場所、添える一文の3点だけである。 */
 .r-destroy{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
   background:var(--action-destructive-fill);border:1px solid var(--action-destructive-line);
-  color:var(--on-action-destructive);transition:border-color .16s ease}
-.r-destroy:hover{border-color:var(--on-surface)}
+  color:var(--on-action-destructive);transition:background .12s ease,transform .12s ease}
+.r-destroy:hover{background:var(--action-destructive-fill-hover)}
+.r-destroy:active{transform:translateY(1px)}
 .r-destroy:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-destroy--icon{width:44px;padding:0}
 .r-destroy svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
@@ -75,9 +94,10 @@
   display:inline-flex;align-items:center;justify-content:center;
   width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;
   background:var(--action-move-fill);border:1px solid var(--action-move-line);
-  color:var(--on-action-move);transition:color .16s ease}
-/* hover は文字の色が面比6.14から15.31へ動く（最小量の条項1）。面は動かさない。 */
-.r-move:hover{color:var(--on-action-move-hover)}
+  color:var(--on-action-move);transition:color .12s ease,background .12s ease,transform .12s ease}
+/* 触れたら面を持たない状態からタンの面が現れ、文字も濃くなる。押したら1px沈む。 */
+.r-move:hover{color:var(--on-action-move-hover);background:var(--action-move-fill-hover)}
+.r-move:active{transform:translateY(1px)}
 .r-move:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-move svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
@@ -86,7 +106,8 @@
 .r-grip:active{cursor:grabbing}
 
 /* --- 役割1 状態 ---
- * 形はピル（確定の角丸四角と分ける）。選択中は面に加えてアクセント深色の輪郭を必ず持つ。
+ * 形はピル（主の操作の角丸四角と分ける）。選択中はアクセントの明るい側で、主の操作の濃い側と段で分かれる。
+ * 選択中は面に加えてアクセント深色の輪郭を必ず持つ。
  * 面だけだと明るいチームカラーで未選択の面と1.63しか離れないが、輪郭なら全配色で5.62以上。
  * 状態の部品は必ず兄弟と同じ器（トラック）に入る。単独で置かない。 */
 /* 器（状態の部品を入れる唯一の入れ物）。角丸20px、地色の面、濃い側の罫線、内側余白5px。
@@ -101,6 +122,7 @@
   background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
   transition:transform .16s ease}
 .r-tab:hover:not(:disabled){transform:translateY(-2px)}
+.r-tab:active:not(:disabled){transform:translateY(1px)}
 .r-tab:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
 .r-tab.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700}
@@ -124,6 +146,7 @@
   transition:transform .16s ease}
 .r-day small{font-weight:400;font-size:12px}
 .r-day:hover{transform:translateY(-2px)}
+.r-day:active{transform:translateY(1px)}
 .r-day:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-day.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700}
@@ -136,6 +159,7 @@
   background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
   transition:transform .16s ease}
 .r-seg-b:hover:not(:disabled){transform:translateY(-2px)}
+.r-seg-b:active:not(:disabled){transform:translateY(1px)}
 .r-seg-b:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
 .r-seg-b.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700;z-index:1}
@@ -339,12 +363,51 @@ textarea.r-input{min-height:64px;resize:vertical}
 
   <h1 class="r-doc-h1">押せる部品の5役割を当てた練習計画画面</h1>
   <p class="r-doc-note">
-    押せる部品に出る色は2つだけである。アクセント（いま選ばれている、決める）と、無彩に近い暖色の階調（それ以外の全部）。
-    覚える規則は4つ。オレンジの塗りは「いま選ばれている、決める」。縁取りの箱は「道具」で、ゴミ箱か取消の記号が付いたものだけが消すか戻す。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。規則のほかに、状態の見方が1つある。文字も枠も灰色に沈んだものは、いま押せないだけである。下の見分け表の7升は、4つの規則と状態の見方1つの内訳である。塗りが2升（ピル形の選択中、チェック印つきの確定）、縁取りの箱が2升（道具、破壊）、記号が1升、下線が1升、押せないが1升。
-    道具と破壊は同じ色になる。強さで分けないと決めたので、分けるのは記号と置き場所と添える一文だけである。
+    押せる部品の面は、押した結果の重さの順に3段だけである。明るいオレンジのピルは「いま選ばれている」。濃いオレンジに白抜きの箱は「決める」。タンの箱は「道具」。
+    覚える規則は4つ。この3段に、枠のない記号は「見る場所を動かす」、下線の付いた文字は「別の場所へ跳ぶ」が加わる。規則のほかに、状態の見方が1つある。文字も枠も灰色に沈んで面が平らなものは、いま押せないだけである。
+    道具と壊す操作は同じタンの面になる。強さで分けないと決めたので、分けるのは記号と置き場所と添える一文だけである。
     男子と女子の識別ドットも同じチーム色を使うが、これは押せない標識なので押せる部品の規律の外にある。
     色はすべて製品の意味ロール層から取っており、このページに色の実値は書いていない。
   </p>
+
+  <h2 class="r-doc-h2">5つを並べて見比べる</h2>
+  <p class="r-doc-note">
+    左から、いま選ばれている印、決める操作、道具、壊す操作、押せない状態。
+    決める操作だけが濃いオレンジに白抜きで、いま選ばれている印は明るいオレンジ。既定の配色で面の比は2.08あり、文字の明暗も反転する。
+    道具と壊す操作はタンの面を共有し、ゴミ箱の記号と置き場所で分かれる。
+    押せない状態は面の段を持たず、平らなカード面に沈む。道具の面とは1.55、文字は本文色9.86に対し死に色3.14で分かれる。
+  </p>
+  <div class="r-compare">
+    <div class="r-compare-cell">
+      <span class="r-legend-k">いま選ばれている</span>
+      <div class="r-seg" style="max-width:160px">
+        <button type="button" class="r-seg-b is-on">火</button>
+        <button type="button" class="r-seg-b">水</button>
+      </div>
+    </div>
+    <div class="r-compare-cell">
+      <span class="r-legend-k">決める</span>
+      <button type="button" class="r-commit">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+        保存
+      </button>
+    </div>
+    <div class="r-compare-cell">
+      <span class="r-legend-k">道具</span>
+      <button type="button" class="r-neutral">印刷</button>
+    </div>
+    <div class="r-compare-cell">
+      <span class="r-legend-k">壊す</span>
+      <button type="button" class="r-destroy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
+        削除
+      </button>
+    </div>
+    <div class="r-compare-cell">
+      <span class="r-legend-k">押せない</span>
+      <button type="button" class="r-neutral" disabled>印刷</button>
+    </div>
+  </div>
 
   <h2 class="r-doc-h2">役割の見分け</h2>
   <div class="r-legend">

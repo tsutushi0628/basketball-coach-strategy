@@ -51,16 +51,32 @@ const TRANSPARENT_ROLE_VARS = new Set([
   '--action-move-line',
 ]);
 const EXPECTED_THEME_FOLLOWING_ROLES = [
-  '--action-commit-fill',
-  '--action-commit-line',
+  '--action-primary-fill',
+  '--action-primary-line',
   '--focus-ring',
-  '--on-action-commit',
   '--on-state-selected',
   '--state-selected-fill',
   '--state-selected-ring',
   '--team-boys-fill',
   '--team-girls-fill',
 ].sort();
+
+/** sRGB相対輝度。コントラスト比の計算に使う（WCAG 2.x の定義）。 */
+function relativeLuminance(hex) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const channel = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255);
+}
+
+/** 2色のコントラスト比。 */
+function contrastRatio(a, b) {
+  const x = relativeLuminance(a);
+  const y = relativeLuminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
 // 押せる文字と押せない見出しラベルの色。押せることは常時下線が担うので、色はテーマに追従させない。
 const TEXT_ROLES_THAT_MUST_NOT_FOLLOW = ['--on-link', '--on-label-accent'];
 // 押せない状態の色は役割を問わず全系統共通のこの3本だけ（component-spec.md「押せない（全系統共通）」節）。
@@ -215,7 +231,7 @@ test('16プリセットで追従する意味ロールは状態・確定・識別
 
   const groups = {
     状態: /^--state-|^--on-state-/,
-    '確定': /^--action-commit-|^--on-action-commit$/,
+    主の操作: /^--action-primary-/,
     識別: /^--team-|^--on-team-label$/,
     焦点リング: /^--focus-ring$/,
   };
@@ -239,6 +255,60 @@ test('押せる文字の色はチームカラーに追従しない（押せる�
     });
     assert.deepEqual(moved, [], `${name} はチームカラーのどのプリセットでも値が変わらない`);
   }
+});
+
+test('主の操作は16配色すべてで白抜きの文字が読める（濃い面に淡い文字を固定で置く）', async () => {
+  // 主の操作の文字は --orange-ink（配色に追従する）ではなく固定の淡色を使う。
+  // 明色テーマでは --orange-ink が暗色になり、濃いアクセントの面の上で読めなくなるためである。
+  // 固定にした以上、どの配色でも面との比がAAを割らないことを直接測って守る。
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+  for (const key of THEME_KEYS) {
+    const declarations = new Map([...defaults, ...presetOverrides(key)]);
+    const fill = resolveVariable('--action-primary-fill', declarations);
+    const ink = resolveVariable('--on-action-primary', declarations);
+    const ratio = contrastRatio(fill, ink);
+    assert.ok(ratio >= 4.5, `${key}: 主の操作の面(${fill})と白抜きの文字(${ink})の比は ${ratio.toFixed(2)} でAA(4.5)を満たす`);
+  }
+});
+
+test('主の操作の面は16配色すべてで選択中の面より濃い（決める操作と選ばれている印を段で分ける）', async () => {
+  // オーナーの裁定: 決める操作は「かなり濃いオレンジに白抜き」で、選択中と見分けがつくこと。
+  // 濃さの向きが逆転する配色が1つでもあると、その配色で段の意味が反転して読めなくなる。
+  // 比の大きさは配色によって変わるが、向き（主が濃い側）はどの配色でも変わってはいけない。
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+  for (const key of THEME_KEYS) {
+    const declarations = new Map([...defaults, ...presetOverrides(key)]);
+    const primary = resolveVariable('--action-primary-fill', declarations);
+    const selected = resolveVariable('--state-selected-fill', declarations);
+    assert.ok(
+      relativeLuminance(primary) < relativeLuminance(selected),
+      `${key}: 主の操作の面(${primary})は選択中の面(${selected})より濃い`,
+    );
+  }
+});
+
+test('副の操作は押せそうな面を持つ（地・カード面・押せない状態のどれとも別の面）', async () => {
+  // オーナーの裁定: 輪郭だけのボタンは押せる部品に見えず、器の中の未選択の候補とも見分けがつかない。
+  // 面が地やカード面と同値だと、輪郭を消した瞬間に押せる部品だと読めなくなる。
+  // 押せない状態と同値だと、押せるものと押せないものが混ざる。
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+  const secondary = resolveVariable('--action-secondary-fill', defaults);
+  for (const [name, other] of [
+    ['地の面', '--surface-ground'],
+    ['カード面', '--surface-card'],
+    ['押せない状態の面', '--action-disabled-fill'],
+  ]) {
+    const value = resolveVariable(other, defaults);
+    assert.notEqual(secondary, value, `副の操作の面(${secondary})は${name}(${value})と同値ではない`);
+    const ratio = contrastRatio(secondary, value);
+    assert.ok(ratio >= 1.25, `副の操作の面と${name}の比は ${ratio.toFixed(2)} で、面だけで見分けがつく`);
+  }
+  // 触れたときに面が動く先も、素の面と別物であること（動いたと分かる最低限）。
+  const hover = resolveVariable('--action-secondary-fill-hover', defaults);
+  assert.ok(contrastRatio(secondary, hover) >= 1.15, `触れたときの面(${hover})は素の面(${secondary})から動く`);
 });
 
 // 文字だけの導線を出す5セレクタ（裁定 3.4節「常時下線を実際に付ける」の表）。
@@ -271,13 +341,15 @@ test('文字だけの導線は常時下線を持つ（押せることを示す�
 test('押せる部品の面と前景は同じプリセット群で追従する', async () => {
   const { primitives, roles } = await readTokenRoles();
   const defaults = new Map([...primitives, ...roles]);
+  // 主の操作はこの対から外す。面はアクセントの濃い側で追従するが、文字は固定の淡色に留める
+  // （明色テーマで --orange-ink が暗色になり、濃いアクセントの上で読めなくなるため）。
+  // 面と前景が別々に動く設計なので、代わりに直接コントラストを測る検査で守る（次のテスト）。
   const pairs = [
     ['--state-selected-fill', '--on-state-selected'],
     ['--state-idle-fill', '--on-state-idle'],
-    ['--action-commit-fill', '--on-action-commit'],
     ['--action-disabled-fill', '--on-action-disabled'],
     ['--action-destructive-fill', '--on-action-destructive'],
-    ['--action-neutral-fill', '--on-action-neutral'],
+    ['--action-secondary-fill', '--on-action-secondary'],
     ['--action-move-fill', '--on-action-move'],
   ];
   for (const [fill, foreground] of pairs) {
