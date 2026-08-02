@@ -76,8 +76,14 @@ async function openPanel(dateIso) {
   await page.waitForSelector('.ed-panel .ed-row', { timeout: 5000 });
 }
 
-function closePanel() {
-  return page.evaluate(() => { const c = document.querySelector('.ed-panel [data-act="cancel"]'); if (c) c.click(); });
+async function closePanel() {
+  await page.evaluate(() => { const c = document.querySelector('.ed-panel [data-act="cancel"]'); if (c) c.click(); });
+  // キャンセルは中身がある日では確認カードを出す（決定書3.2節）。テスト用クリーンアップとして
+  // カードが出ていれば「実行」を押して閉じ切る（中身が無ければカードは出ず、次の evaluate は無害）。
+  await page.evaluate(() => {
+    const dlg = document.getElementById('ed-cd');
+    if (dlg && !dlg.hidden) { const exec = document.getElementById('ed-cd-exec'); if (exec) exec.click(); }
+  });
 }
 
 // ── 静的アサーション（render() 出力・共有クライアントJSの文字列検査） ──────────────────────────
@@ -158,23 +164,27 @@ test('コーチが編集画面から「叩き台を読み込む」を実行で�
   await closePanel();
 });
 
-test('コーチが編集画面から「自動に戻す」を実行できる（確認ダイアログで誤操作防止・承諾後は削除フローに実際に入る）', async () => {
+test('コーチが編集画面から「自動に戻す」を実行できる（確認カードで誤操作防止・実行後は削除フローに実際に入る）', async () => {
   await openPanel(DATE);
 
-  // (1) 確認ダイアログを却下したら、削除フローに入らない（削除フロー特有のメッセージが出ない＝誤操作
-  //     防止ゲートが効く）。#ed-msg は直前のテストの一時メッセージが残っている場合があるため、
+  // (1) 確認カードで「やめる」を押すと、削除フローに入らない（削除フロー特有のメッセージが出ない＝
+  //     誤操作防止ゲートが効く）。#ed-msg は直前のテストの一時メッセージが残っている場合があるため、
   //     「空である」ではなく「削除フロー特有の文言が無い」で判定する。
-  page.once('dialog', (d) => d.dismiss());
   await page.click('.ed-panel [data-act="revert-auto"]');
+  await page.waitForSelector('#ed-cd:not([hidden])', { timeout: 3000 });
+  assert.equal(await page.locator('#ed-cd-h').textContent(), '手で入れた内容を捨てて自動生成に戻します。', '確認カードの見出しが決定書・モックの文言と一致する');
+  await page.click('#ed-cd .rc-cancel');
   await page.waitForTimeout(150);
-  const msgAfterDismiss = (await page.locator('#ed-msg').textContent()) || '';
-  assert.doesNotMatch(msgAfterDismiss, /バックエンド未接続|自動に戻して/, '確認ダイアログを却下すると削除フローに入らない');
+  assert.equal(await page.locator('#ed-cd').isHidden(), true, '「やめる」でカードが閉じる');
+  const msgAfterCancel = (await page.locator('#ed-msg').textContent()) || '';
+  assert.doesNotMatch(msgAfterCancel, /バックエンド未接続|自動に戻して/, '確認カードで「やめる」を押すと削除フローに入らない');
 
-  // (2) 承諾すると削除フローに実際に入る。このテストは file:// 実行でバックエンド無しのため、
-  //     最終的に「バックエンド未接続」の案内文が出ることをもって、
+  // (2) 「捨てて戻す」（実行）を押すと削除フローに実際に入る。このテストは file:// 実行でバックエンド
+  //     無しのため、最終的に「バックエンド未接続」の案内文が出ることをもって、
   //     サーバへの削除依頼(fetch)が確実に発火したことの証跡とする。
-  page.once('dialog', (d) => d.accept());
   await page.click('.ed-panel [data-act="revert-auto"]');
+  await page.waitForSelector('#ed-cd:not([hidden])', { timeout: 3000 });
+  await page.click('#ed-cd-exec');
   await page.waitForFunction(
     () => (document.getElementById('ed-msg')?.textContent || '').includes('バックエンド未接続'),
     { timeout: 5000 },

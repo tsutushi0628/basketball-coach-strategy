@@ -1,73 +1,137 @@
 
 /* 編集パネル外殻: surface面 + line-2 で囲う（border帯ではなく全周罫線） */
-.ed-panel{background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.ed-panel{background:var(--surface-card);border:1px solid var(--line-strong);border-radius:14px;padding:18px 20px;margin-bottom:14px}
 .ed-panel[hidden]{display:none}
-/* パネル見出し: H3段(17px) */
-.ed-h{font-size:17px;font-weight:700;color:var(--orange-deep);letter-spacing:-.01em;margin-bottom:12px}
+/* パネル見出し: H3段(17px)・押せない見出し */
+.ed-h{font-size:17px;font-weight:700;color:var(--on-surface);letter-spacing:-.01em;margin-bottom:12px}
 /* フィールド行 */
 .ed-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-.ed-lab{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em}
+.ed-lab{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em}
 /* 入力部品: 角丸・1px hair・surface背景の既存トーン */
-.ed-in,.ed-sel,.ed-time{appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:9px 12px;width:100%;line-height:1.4}
-.ed-in:focus,.ed-sel:focus,.ed-time:focus{outline:2px solid var(--orange);outline-offset:1px;border-color:var(--orange)}
+.ed-in,.ed-sel,.ed-time{appearance:none;font:inherit;font-size:14px;color:var(--on-surface);background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:9px 12px;width:100%;line-height:1.4}
+.ed-in:focus,.ed-sel:focus,.ed-time:focus{outline:2px solid var(--focus-ring);outline-offset:1px;border-color:var(--focus-ring)}
 /* 複数行テキスト（この日のねらい）。数行分の高さ＋縦リサイズだけ足す（見た目は .ed-in を踏襲） */
 textarea.ed-in{min-height:64px;resize:vertical}
 .ed-time{width:auto;min-width:108px;font-variant-numeric:tabular-nums}
 /* 時間行カード: bg面 + hair で囲う（全周罫線・帯にしない） */
-.ed-row{background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;margin-bottom:12px}
+.ed-row{background:var(--surface-ground);border:1px solid var(--line-hairline);border-radius:12px;padding:13px 15px;margin-bottom:12px}
+/* 行は tabindex="-1" で script から焦点を受けるが、Tabでは到達しない容器なので輪郭は出さない（決定書3.3節）。 */
+.ed-row:focus{outline:none}
 .ed-row-top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:10px}
+/* 行内の結果・中断理由（反転コピー等）を押した行の近くに出す。画面上部の共有欄(#ed-msg)とは別スコープ。
+ * 色は on-surface-muted のみ（新規色を足さない・押せない地の文と同じ扱い）。空のときは高さを持たない。 */
+.ed-row-msg{font-size:12px;line-height:1.5;color:var(--on-surface-muted);margin:0 0 10px}
+.ed-row-msg:empty{display:none;margin:0}
 .ed-times{display:inline-flex;align-items:center;gap:6px}
-.ed-times .ed-sep{color:var(--mute);font-size:14px}
+.ed-times .ed-sep{color:var(--on-surface-muted);font-size:14px}
+/* 行番号は押せない標識のアクセント（3.7節許可リスト）。直参照を維持 */
 .ed-rownum{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em}
-.ed-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;user-select:none}
-.ed-check input{width:16px;height:16px;accent-color:var(--orange);cursor:pointer}
+.ed-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--on-surface);cursor:pointer;user-select:none}
+/* accent-colorの参照はロールへ付け替え済み（値は不変）。component-spec.md:104-106が求める
+ * 「チェック箱は入力欄と同じ面+弱い罫線に描き、入った印は本文前景の鉤で示す」への構造変更
+ * （accent-color自体の撤去とチェックマーク描画の新設）は色参照の付け替えを超える改修のためスコープ外・別タスク。 */
+.ed-check input{width:16px;height:16px;accent-color:var(--state-selected-fill);cursor:pointer}
 /* セル束（男女2列 or 共通1列） */
 .ed-cells{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ed-cells.ed-cells-both{grid-template-columns:1fr}
 @media (max-width:580px){.ed-cells{grid-template-columns:1fr}}
-.ed-cell{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px}
+.ed-cell{background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:11px 13px}
 .ed-cell-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.ed-cell-team{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--mute);white-space:nowrap}
+.ed-cell-team{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--on-surface-muted);white-space:nowrap}
 /* 1ドリル=1行（グリップ｜ドリル名｜メモ｜ゴミ箱）。改行させず横一列に収める */
 .ed-item{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-bottom:6px}
 .ed-item .ed-name{flex:2 1 0;min-width:0}
 .ed-item .ed-note{flex:1 1 0;min-width:0}
-/* 小ボタン群（追加・削除）: btn と同じ surface+hair トーン（pill）。色帯にしない */
-.ed-mini{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--surface);color:var(--mute);border:1px solid var(--hair);border-radius:999px;padding:5px 11px;white-space:nowrap;transition:transform .14s ease,color .14s ease}
-.ed-mini:hover{transform:translateY(-1px);color:var(--orange)}
-.ed-mini:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-/* アイコンのみボタン（行右端のゴミ箱）。背景なし・色帯にしない */
-.ed-iconbtn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;margin-left:auto;flex:0 0 auto;background:transparent;border:1px solid transparent;border-radius:8px;color:var(--mute);transition:color .14s ease,background .14s ease}
-.ed-iconbtn:hover{background:var(--bg);color:var(--orange)}
-.ed-iconbtn:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+/* 小ボタン群（追加・削除）: 副の操作ロール（タン面）。色帯にしない。
+ * 反応表3.6節: 位置でなく面で返す。押したら1px沈む。 */
+.ed-mini{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;background:var(--action-secondary-fill);color:var(--on-action-secondary);border:1px solid var(--action-secondary-line);border-radius:999px;padding:5px 11px;white-space:nowrap;transition:transform .14s ease,background-color .14s ease}
+.ed-mini:hover{background:var(--action-secondary-fill-hover)}
+.ed-mini:active{transform:translateY(1px)}
+.ed-mini:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+/* アイコンのみボタン（行右端のゴミ箱）。破壊ロール（3.5節: .ed-iconbtnは製品内2箇所とも破壊個体）。
+ * 寸法（30px→44px正方・SVG16px→18px stroke1.8）は色を伴わない改修のためスコープ外・別タスク。枠色はロールへ付け替え。
+ * 反応表3.6節: 位置でなく面で返す（副と同一）。押したら1px沈む。 */
+.ed-iconbtn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;margin-left:auto;flex:0 0 auto;background:var(--action-destructive-fill);border:1px solid var(--action-destructive-line);border-radius:8px;color:var(--on-action-destructive);transition:color .14s ease,background .14s ease,transform .14s ease}
+.ed-iconbtn:hover{background:var(--action-destructive-fill-hover);color:var(--on-action-destructive)}
+.ed-iconbtn:active{transform:translateY(1px)}
+.ed-iconbtn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .ed-iconbtn svg{display:block;width:16px;height:16px}
-/* 並べ替えグリップ（掴む所）。行に入力欄があるので行全体ではなくハンドルで掴む */
-.ed-grip{appearance:none;cursor:grab;display:inline-flex;align-items:center;justify-content:center;padding:2px;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--mute);flex:0 0 auto;touch-action:none}
-.ed-grip:hover{color:var(--ink);background:var(--bg)}
-.ed-grip:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
-.ed-grip:active{cursor:grabbing}
+/* ── 削除口の出し方（決定書3.3節）: 既定では見えず、触れているものにだけ出す ──
+ * 行に触れたら行の削除口1つ、項目に触れたらその項目と行の2つが出る（項目は行の子孫なので、
+ * 項目に触れれば行にも触れている）。visibility/display は使わない（支援技術の読み上げ順から外れ、
+ * スワイプ移動で到達できなくなるため）。opacity:0 でも名前(aria-label)は常に読み上げに残る。
+ * 44pxの枠は現状(30px)のまま予約（寸法変更は色を伴わない改修のためスコープ外・別タスク）。
+ * 行側は子結合子（>）で .ed-row-top の直下に限定する。これが無いと項目の削除口が行の子孫として
+ * もう一度当たり、行に触れただけで項目の削除口まで一斉に出てしまう。 */
+.ed-row-top .ed-del,.ed-item .ed-del{opacity:0;pointer-events:none;transition:opacity .12s ease}
+.ed-row:hover>.ed-row-top .ed-del,
+.ed-row:focus-within>.ed-row-top .ed-del{opacity:1;pointer-events:auto}
+.ed-item:hover .ed-del,
+.ed-item:focus-within .ed-del{opacity:1;pointer-events:auto}
+/* 並べ替えグリップ（掴む所）。移動ロール（面を持たない・触れると面が現れる）。行に入力欄があるので
+ * 行全体ではなくハンドルで掴む。反応表3.6節: 押したら1px沈む（掴んでいるあいだのcursor:grabbingは維持）。 */
+.ed-grip{appearance:none;cursor:grab;display:inline-flex;align-items:center;justify-content:center;padding:2px;background:var(--action-move-fill);border:1px solid var(--action-move-line);border-radius:6px;color:var(--on-action-move);flex:0 0 auto;touch-action:none;transition:color .14s ease,background-color .14s ease,transform .14s ease}
+.ed-grip:hover{color:var(--on-action-move-hover);background:var(--action-move-fill-hover)}
+.ed-grip:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.ed-grip:active{cursor:grabbing;transform:translateY(1px)}
 .ed-grip svg{display:block;width:16px;height:16px}
 .ed-grip-row{margin-right:2px}
 .ed-grip-item{width:24px;height:28px}
 .ed-grip-item svg{width:14px;height:14px}
-/* ドラッグ中のプレースホルダ（着地位置）= SortableJS の ghost。点線で落ちる場所を示す */
-.ed-row.sortable-ghost,.ed-item.sortable-ghost{opacity:.45;background:var(--bg);outline:2px dashed var(--orange);outline-offset:-2px}
-.ed-row.sortable-chosen,.ed-item.sortable-chosen{background:var(--surface)}
+/* ドラッグ中のプレースホルダ（着地位置）= SortableJS の ghost。4.7節例外3種目（点線）でoutlineの
+ * アクセントは直参照を維持。背景は一般構造ロールへ付け替える。 */
+.ed-row.sortable-ghost,.ed-item.sortable-ghost{opacity:.45;background:var(--surface-ground);outline:2px dashed var(--orange);outline-offset:-2px}
+.ed-row.sortable-chosen,.ed-item.sortable-chosen{background:var(--surface-card)}
 .ed-row.sortable-drag,.ed-item.sortable-drag{opacity:.9}
-.ed-del{color:var(--terra)}
-.ed-del:hover{color:var(--orange-deep)}
+/* 破壊ロール（--terra参照を削除し破壊ロール経由にする。裁定4.3節） */
+.ed-del{color:var(--on-action-destructive)}
+.ed-del:hover{color:var(--on-action-destructive)}
 .ed-cell-actions{margin-top:4px}
 /* パネル操作（保存・キャンセル・行追加） */
-.ed-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:6px;padding-top:14px;border-top:1px solid var(--line)}
-/* 確認の小テキスト（書き出しコピー後など） */
-.ed-msg{font-size:12px;color:var(--orange-deep);font-weight:700;margin-left:4px;align-self:center}
+.ed-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:6px;padding-top:14px;border-top:1px solid var(--line-hairline)}
+/* 確認の小テキスト（書き出しコピー後など）。押せない見出しラベル */
+.ed-msg{font-size:12px;color:var(--on-label-accent);font-weight:700;margin-left:4px;align-self:center}
 .ed-msg:empty{display:none}
 /* 書き出しフォールバック用 textarea（クリップボード不可時のみ表示） */
-.ed-export-area{width:100%;min-height:160px;font:inherit;font-size:12px;line-height:1.5;color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:11px 13px;margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre}
+.ed-export-area{width:100%;min-height:160px;font:inherit;font-size:12px;line-height:1.5;color:var(--on-surface);background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:11px 13px;margin-top:10px;font-variant-numeric:tabular-nums;white-space:pre}
 .ed-export-area[hidden]{display:none}
 /* 他の日からコピーの行（セレクタ＋取り込みボタン） */
 .ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 /* コピー元が1件も無いときの案内文（border帯にせず既存 mute トーンの地の文で出す） */
-.ed-hint{font-size:12px;color:var(--mute);line-height:1.5;margin:0}
+.ed-hint{font-size:12px;color:var(--on-surface-muted);line-height:1.5;margin:0}
 /* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */
 .cal-go:disabled,.cal-go-week:disabled,.cal-go-dayweek:disabled,.cal-go-month:disabled,.lvtab:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* ── 確認カード（決定書3.2節・承認済みモック docs/specs/button-roles-20260730.html の移植）──
+ * 入力を失う操作は、色で警告せず、押した瞬間に失うものの名前を出して止める。
+ * 実行側も中立（副の操作）ロールを引き、破壊ロールを一切参照しない。1問の全選択肢を並べる場で、
+ * 2つの答えの強さを色で差をつけないため。差は記号（ゴミ箱と取消）と見出しの一文だけが担う。
+ * 覆いは --scrim-overlay（カード面との弁別比3.25・下限3:1を満たす）。 */
+.ed-cd{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center}
+.ed-cd[hidden]{display:none}
+.ed-cd-scrim{position:absolute;inset:0;background:var(--scrim-overlay)}
+.ed-cd-card{position:relative;z-index:1;width:calc(100% - 32px);max-width:360px;
+  background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:14px;
+  padding:18px 20px}
+/* カードの箱は開いたときに焦点を受けるが、押せる部品ではないので輪郭は出さない。 */
+.ed-cd-card:focus{outline:none}
+.ed-cd-h{font-size:17px;font-weight:700;color:var(--on-surface);letter-spacing:-.01em;line-height:1.45;margin-bottom:8px}
+.ed-cd-b{font-size:14px;font-weight:400;color:var(--on-surface);line-height:1.6;margin-bottom:16px}
+/* ボタン行は折り返さない。やめるが左、実行が右の横並びをどの幅でも変えない。
+ * 幅が足りないときに縮むのは実行ボタンの文字で、2行になって高さが伸びる（やめるは
+ * align-items:stretch で同じ高さに追従）。折り返すと見た目の上下とTab/読み上げの順が
+ * 逆転し、削除を止める画面で安全な選択肢の位置が目と操作で食い違うため。 */
+.rc-actions{display:flex;flex-wrap:nowrap;justify-content:flex-end;align-items:stretch;gap:8px}
+.rc-actions>.rc-cancel{flex:0 0 auto;white-space:nowrap}
+.rc-actions>.rc-exec{flex:0 1 auto;white-space:normal;text-align:center}
+/* 確認カードの2ボタン。どちらも副の操作の役割（タン面）で、強さの差は記号と一文だけが担う。 */
+.ed-cd-btn{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:44px;padding:0 16px;border-radius:8px;
+  background:var(--action-secondary-fill);border:1px solid var(--action-secondary-line);
+  color:var(--on-action-secondary);transition:background-color .12s ease,transform .12s ease}
+.ed-cd-btn:hover{background:var(--action-secondary-fill-hover)}
+.ed-cd-btn:active{transform:translateY(1px)}
+.ed-cd-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.ed-cd-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+@media print{.ed-cd{display:none!important}}

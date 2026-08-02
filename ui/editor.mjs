@@ -571,7 +571,9 @@ export function editorScript() {
     var flipBtn=(!isBoth&&!isOnly)
       ?'<button type="button" class="ed-mini" data-act="flip-copy" title="この行の男女を入れ替えた後半ブロックを直後に追加">反転コピー</button>'
       :'';
-    return '<div class="ed-row" data-ri="'+ri+'">'+
+    // tabindex="-1": Tabでは到達しないが、行の余白クリックで script から焦点を受けられる（決定書3.3節）。
+    // 行に焦点が入ると :focus-within で行の削除口だけが出る（項目の削除口には波及しない・子結合子で限定）。
+    return '<div class="ed-row" data-ri="'+ri+'" tabindex="-1">'+
       '<div class="ed-row-top">'+
         '<button type="button" class="ed-grip ed-grip-row" aria-label="この時間を並べ替え" title="ドラッグで並べ替え">'+gripSvg()+'</button>'+
         '<span class="ed-rownum">時間'+(ri+1)+'</span>'+
@@ -703,14 +705,39 @@ export function editorScript() {
     return row[side];
   }
 
+  // 行の余白・行番号に触れたら、その行へ焦点を入れる（決定書3.3節）。行は tabindex="-1" で
+  // Tab では到達しないが、script からは焦点を受けられる。焦点が入ると :focus-within で行の
+  // 削除口だけが出る（タッチ環境ではこれが1回目のタップ＝出現。2回目のタップで削除口自体を押す＝実行）。
+  // すでに行内の入力欄等に焦点があるとき（:focus-within）は奪わない。
+  // [data-act] を持つ押せる部品（削除口・グリップ・チェック・反転コピー等）自身へのクリックは対象外
+  // にする。それらは onPanelClick が個別に処理し、独自に焦点を動かすことがある（例: 削除口を押すと
+  // 確認カードへ焦点が移る）。ここで無条件に行へ再フォーカスすると、その焦点管理を上書きしてしまう。
+  function onPanelRowFocusClick(e){
+    if(e.target.closest('[data-act]'))return;
+    var row=e.target.closest('.ed-row');
+    if(!row)return;
+    if(!row.matches(':focus-within'))row.focus();
+  }
+
   // ── フォーム操作（委譲）──
   function onPanelClick(e){
     var btn=e.target.closest('[data-act]');if(!btn)return;
     var act=btn.getAttribute('data-act');
     if(act==='save'){doSave();return;}
-    if(act==='cancel'){closePanel();return;}
+    if(act==='cancel'){
+      collectInputs(); // DOMの最新入力値を取り込んでから「空」を判定する（change未発火の入力欄も拾う）
+      confirmThen({
+        isEmpty:!modelHasContent(),
+        h:'保存していない入力を捨てて編集を閉じます。',
+        b:'最後に保存した状態に戻ります。',
+        x:'捨てて閉じる',icon:'undo',
+        opener:btn,
+        onExec:closePanel
+      });
+      return;
+    }
     if(act==='export'){exportJson();return;}
-    if(act==='revert-auto'){revertAuto();return;}
+    if(act==='revert-auto'){revertAuto(btn);return;}
     if(act==='load-seed'){
       var seed=SEEDPREFILL[model.date];
       if(!seed){flash('この日の叩き台はありません');return;}
@@ -758,7 +785,24 @@ export function editorScript() {
     }
     var rowEl=btn.closest('.ed-row');
     var ri=rowEl?Number(rowEl.getAttribute('data-ri')):-1;
-    if(act==='del-row'){if(ri>=0)model.rows.splice(ri,1);if(model.rows.length===0)model.rows.push(blankRow());renderPanel();return;}
+    if(act==='del-row'){
+      if(ri<0)return;
+      var rowToDel=model.rows[ri];
+      var timeLabel=(rowToDel&&rowToDel.from&&rowToDel.to)?('（'+rowToDel.from+'〜'+rowToDel.to+'）'):'';
+      confirmThen({
+        isEmpty:rowIsEmpty(rowToDel),
+        h:'時間'+(ri+1)+timeLabel+'を削除します。',
+        b:'この時間に入れた項目もいっしょに消えます。',
+        x:'削除する',icon:'trash',
+        opener:btn,
+        onExec:function(){
+          model.rows.splice(ri,1);
+          if(model.rows.length===0)model.rows.push(blankRow());
+          renderPanel();
+        }
+      });
+      return;
+    }
     if(act==='flip-copy'){if(ri>=0)flipCopyRow(ri);return;}
     if(act==='add-item'){
       var cellEl=btn.closest('.ed-cell');var side=cellEl.getAttribute('data-side');
@@ -773,7 +817,23 @@ export function editorScript() {
     }
     if(act==='del-item'){
       var itEl=btn.closest('.ed-item');var sideD=itEl.getAttribute('data-side');var ii=Number(itEl.getAttribute('data-ii'));
-      var cellD=cellOf(model.rows[ri],sideD);if(cellD)cellD.items.splice(ii,1);renderPanel();return;
+      var cellD0=cellOf(model.rows[ri],sideD);
+      var itD=cellD0?cellD0.items[ii]:null;
+      if(!itD)return;
+      var nameLabel=(itD.name&&itD.name.trim())?itD.name.trim():((itD.note&&itD.note.trim())?itD.note.trim():'');
+      confirmThen({
+        isEmpty:itemIsEmpty(itD),
+        h:nameLabel?('この項目（'+nameLabel+'）を削除します。'):'この項目を削除します。',
+        b:'補足に書いた内容もいっしょに消えます。',
+        x:'削除する',icon:'trash',
+        opener:btn,
+        onExec:function(){
+          var cellD=cellOf(model.rows[ri],sideD);
+          if(cellD)cellD.items.splice(ii,1);
+          renderPanel();
+        }
+      });
+      return;
     }
   }
   function onPanelChange(e){
@@ -823,6 +883,21 @@ export function editorScript() {
     if(!cell)return false;
     if(cell.label&&cell.label.trim())return true;
     return (cell.items||[]).some(function(it){return it.name&&it.name.trim();});
+  }
+  // 行が「空」か（時刻も男女いずれの中身も無い）。空なら確認カードを出さず即削除する（決定書3.2節
+  // 「対象が空のときは確認を出さず即実行する」）。新規に足しただけでまだ何も入れていない行が対象。
+  function rowIsEmpty(row){
+    if(!row)return true;
+    if(row.from||row.to)return false;
+    if(cellHasContent(row.both))return false;
+    if(cellHasContent(row['男子']))return false;
+    if(cellHasContent(row['女子']))return false;
+    return true;
+  }
+  // 項目が「空」か（名前もメモも無い）。空なら確認カードを出さず即削除する。
+  function itemIsEmpty(it){
+    if(!it)return true;
+    return !(it.name&&it.name.trim())&&!(it.note&&it.note.trim());
   }
   // 2つの時刻区間 [aFrom,aTo) と [bFrom,bTo) が重なるか（分換算・不正時刻は重複扱いにしない）。
   function rangesOverlap(aFrom,aTo,bFrom,bTo){
@@ -1132,6 +1207,7 @@ export function editorScript() {
     renderPanel();
     panel.addEventListener('click',onPanelClick);
     panel.addEventListener('change',onPanelChange);
+    panel.addEventListener('click',onPanelRowFocusClick);
     setNavDisabled(true); // 編集中は日・週・月・レベルの移動を止める
     panel.scrollIntoView({behavior:'smooth',block:'start'});
   }
@@ -1146,22 +1222,32 @@ export function editorScript() {
   // ── 自動に戻す: サーバの上書きを削除→再読込（サーバが自動生成を再描画）──
   // 上部ツールバーから編集画面の中へ移設済み（2026-07-29）。編集中は対象の article が hidden 化されて
   // curDay()（hidden でない .day を探す）が拾えなくなるため、編集中は editingArticle を優先して使う。
-  function revertAuto(){
+  // opener: 押されたボタン（「やめる」/Escで閉じたときに焦点を返す先。確認カード経由の呼び出し用）。
+  function revertAuto(opener){
     var article=editingArticle||curDay();
     if(!article){flash('対象の日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
     if(!date){flash('この日は上書き編集の対象外です');return;}
-    // 破壊的操作（元に戻せない）のため、移設後の誤操作防止として確認を挟む。
-    if(!window.confirm('この日の手直しをサーバから削除し、自動生成に戻します。元に戻せません。よろしいですか？'))return;
-    flash('自動に戻しています…');
-    withAuth({'Content-Type':'application/json'})
-      .then(function(headers){return fetch(withTenantQ('/api/override/delete'),{method:'POST',headers:headers,body:JSON.stringify({date:date})});})
-      .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
-      .then(function(res){
-        if(res&&res.ok){ delete PREFILL[date]; location.reload(); }
-        else{ flash('戻せませんでした（'+((res&&res.error)||'サーバ応答エラー')+'）'); }
-      })
-      .catch(function(){ flash('バックエンド未接続のため戻せません（エミュレータ/本番URLで開いてください）'); });
+    // 破壊的操作（元に戻せない）のため、移設後の誤操作防止として確認カードを挟む（決定書3.2節）。
+    // 対象が空（この日に手で入れた内容が無い）なら確認カードを出さず即実行する。
+    confirmThen({
+      isEmpty:!modelHasContent(),
+      h:'手で入れた内容を捨てて自動生成に戻します。',
+      b:'この日に手で入れた時間と項目がすべて消えます。',
+      x:'捨てて戻す',icon:'undo',
+      opener:opener,
+      onExec:function(){
+        flash('自動に戻しています…');
+        withAuth({'Content-Type':'application/json'})
+          .then(function(headers){return fetch(withTenantQ('/api/override/delete'),{method:'POST',headers:headers,body:JSON.stringify({date:date})});})
+          .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
+          .then(function(res){
+            if(res&&res.ok){ delete PREFILL[date]; location.reload(); }
+            else{ flash('戻せませんでした（'+((res&&res.error)||'サーバ応答エラー')+'）'); }
+          })
+          .catch(function(){ flash('バックエンド未接続のため戻せません（エミュレータ/本番URLで開いてください）'); });
+      }
+    });
   }
 
   // 'YYYY-MM-DD'→曜日。書き出しの weekday 補完用。
@@ -1232,6 +1318,88 @@ export function editorScript() {
     el._msgTimer=setTimeout(function(){el.textContent='';},ROW_MSG_MS);
   }
 
+  // ── 確認カード（決定書3.2節・承認済みモック docs/specs/button-roles-20260730.html を実装へ移す）──
+  // 破壊は色で警告せず、押した瞬間に失うものの名前を出して止める。行の削除・項目の削除・
+  // 自動生成に戻す・キャンセルの4つがここを通る。対象が空のとき（消えるものが無いとき）は
+  // 確認カードを出さず即実行する（呼び出し側が isEmpty で判定して渡す）。
+  // 実行ボタンは中立（副の操作）ロールを引き、破壊ロールを一切参照しない（3.2節「実行ボタンが
+  // 破壊ロールを参照しないこと」＝1問の全選択肢を並べる場では、2つの答えの強さを色で差をつけない）。
+  var CD_TRASH='M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13';
+  var CD_UNDO='M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5';
+  var cdOnExec=null; // 開いている確認カードの「実行」で呼ぶコールバック
+  var cdOpener=null; // 「やめる」/Escで閉じたときに焦点を返す先
+  // 確認カードのDOM（無ければ1回だけ作って以後使い回す。ensureExportArea と同じ遅延生成の作法）。
+  function cdEnsure(){
+    var el=document.getElementById('ed-cd');
+    if(el)return el;
+    el=document.createElement('div');
+    el.id='ed-cd';el.className='ed-cd';el.hidden=true;el.setAttribute('data-print-hide','');
+    el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
+    el.setAttribute('aria-labelledby','ed-cd-h');el.setAttribute('aria-describedby','ed-cd-b');
+    el.innerHTML='<div class="ed-cd-scrim" data-cd-close></div>'+
+      '<div class="ed-cd-card" id="ed-cd-card" tabindex="-1">'+
+        '<p class="ed-cd-h" id="ed-cd-h"></p>'+
+        '<p class="ed-cd-b" id="ed-cd-b"></p>'+
+        '<div class="rc-actions">'+
+          '<button type="button" class="ed-cd-btn rc-cancel" data-cd-close>やめる</button>'+
+          '<button type="button" class="ed-cd-btn rc-exec" id="ed-cd-exec">'+
+            '<svg viewBox="0 0 24 24" aria-hidden="true" id="ed-cd-icon"></svg>'+
+            '<span id="ed-cd-execlabel"></span>'+
+          '</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(el);
+    el.addEventListener('click',function(e){
+      if(e.target.closest('[data-cd-close]')){cdClose();return;}
+      if(e.target.closest('#ed-cd-exec')){cdExecCurrent();return;}
+    });
+    document.addEventListener('keydown',cdOnKeydown);
+    return el;
+  }
+  function cdExecCurrent(){
+    var run=cdOnExec;
+    cdClose();
+    if(typeof run==='function')run();
+  }
+  /**
+   * 確認カードを開く（対象が空なら開かず即実行）。
+   * @param {{h:string,b:string,x:string,icon:'trash'|'undo',isEmpty:boolean,opener:Element,onExec:Function}} opts
+   */
+  function confirmThen(opts){
+    if(opts.isEmpty){opts.onExec();return;}
+    var el=cdEnsure();
+    document.getElementById('ed-cd-h').textContent=opts.h;
+    document.getElementById('ed-cd-b').textContent=opts.b;
+    document.getElementById('ed-cd-execlabel').textContent=opts.x;
+    document.getElementById('ed-cd-icon').innerHTML='<path d="'+(opts.icon==='undo'?CD_UNDO:CD_TRASH)+'"/>';
+    cdOnExec=opts.onExec;
+    cdOpener=opts.opener||document.activeElement;
+    el.hidden=false;
+    // 焦点はカードの箱に置き、やめるにも実行にも置かない（モックと同じ扱い。誤ってもう1打鍵で
+    // 抜けさせない・実行に焦点を置くと破壊色を避けた意図が焦点経由で戻ってしまうため）。
+    document.getElementById('ed-cd-card').focus();
+  }
+  function cdClose(){
+    var el=document.getElementById('ed-cd');
+    if(!el||el.hidden)return;
+    el.hidden=true;
+    cdOnExec=null;
+    if(cdOpener&&typeof cdOpener.focus==='function')cdOpener.focus();
+    cdOpener=null;
+  }
+  // Escで閉じる／開いている間はTabをカード内に閉じ込める（背後を操作させない）。
+  function cdOnKeydown(e){
+    var el=document.getElementById('ed-cd');
+    if(!el||el.hidden)return;
+    if(e.key==='Escape'){e.preventDefault();cdClose();return;}
+    if(e.key==='Tab'){
+      var focusables=el.querySelectorAll('button:not([tabindex="-1"])');
+      if(!focusables.length)return;
+      var first=focusables[0],last=focusables[focusables.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  }
 
   // ── ボタン結線 ──
   // 「自動で叩き台を入れる」「自動に戻す」「入力を書き出し」は編集画面の中へ移設済み（2026-07-29）。

@@ -62,6 +62,12 @@ async function openPanel() {
 
 async function closePanel() {
   await page.evaluate(() => { const c = document.querySelector('.ed-panel [data-act="cancel"]'); if (c) c.click(); });
+  // キャンセルは中身がある日では確認カードを出す（決定書3.2節）。テスト用クリーンアップとして
+  // カードが出ていれば「実行」を押して閉じ切る（中身が無ければカードは出ず、次の evaluate は無害）。
+  await page.evaluate(() => {
+    const dlg = document.getElementById('ed-cd');
+    if (dlg && !dlg.hidden) { const exec = document.getElementById('ed-cd-exec'); if (exec) exec.click(); }
+  });
 }
 
 test('(a) ねらい入力欄は textarea で、Enter で改行が入る', async () => {
