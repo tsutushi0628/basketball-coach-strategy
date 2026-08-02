@@ -865,6 +865,7 @@ hoverのオレンジは16箇所ある。
 | 新設 | `.ed-mini.ed-del` の破壊様式（3.5節） |
 | 新設 | 削除口の出現機構（3.3節） |
 | 新設 | 確認カードのCSS（3.2節） |
+| `ui/styles/pattern-timeline.css`（旧287-288行） | `.pk-off`・`.pk-off:hover` の削除。**この行はPdM決定として記録する（2026-08-03）**: 削除の根拠はこの決定書ではなく、引継書`docs/findings/handoff-20260802-button-color-system-v5-and-week-start.md`の残作業7（曜日ボタンの空タグ分岐が落ちて`.pk-off`が未使用になったため、ロール参照への付け替えの回に一緒に片付ける）にもとづく司令塔の明示指示である。実装時に`ui/pattern-timeline.mjs`を実測し`pk-off`の参照が0件であることを確認済み。 |
 
 ### 4.4 製品JS
 
@@ -989,6 +990,12 @@ hoverのオレンジは16箇所ある。
 | ブロック種別の着色 | `base.css:227`、`pattern-timeline.css:13,19,32,96,201,206`（`--t` 経由を含む） |
 | ドラッグ中の着地位置の点線 | `editor.css:54` |
 | 押せない標識のアクセント | 3.7節の12行 |
+| 押せる部品ではない直参照 | 失敗メッセージの`--terra`直参照4行（`auth-client.css`の`.ed-name-foot[data-kind="error"]`・`.tp-foot[data-kind="error"]`、`auth-page.css`の`.auth-status[data-kind="error"]`、`goal-editor.css`の`.ge-foot[data-kind="error"]`）、講義タグの`--terra-ink`直参照1行（`base.css`の`.tag-lec`）、進行中チップの女子インク1行（`base.css`の`.nowchip.girls`の`color`）、チーム色見本のインスタンス変数4行（`auth-client.css`の`.tp-swatches .sw[aria-pressed="true"]`の`border-color`・`.sw-dot .a`・`.sw-dot .b`・`.sw-check`） |
+
+**5つ目の例外（押せる部品ではない直参照）はPdM決定として追記する（2026-08-03）。**
+これらは押せる部品ではなく、押せる部品の色体系というこの決定書の対象範囲の外にある。
+色定義ファイル（`ui/styles/tokens.css`）自身の冒頭コメントが、`--terra`と`--terra-ink`の用途を「押せる部品からの参照はゼロ」と明記しており、`--sw-main`/`--sw-2nd`はJS側が16プリセットのプレビュー用に個体ごと注入するインスタンス変数でそもそも色プリミティブではない。
+新しいロールは起こさない。
 
 `pattern-timeline.css:305` はこの一覧に入れない。
 例外として直参照を認めるのではなく、付け替える色をそもそも持っていないからである。
@@ -1008,6 +1015,12 @@ hoverのオレンジは16箇所ある。
 
 生成物のHTML（`ui/index.html`、`ui/pattern-timeline.html`、`ui/_mock-day.html`、`ui/_mock-week.html`）はプリミティブの中身がインラインに複製されているので、付け替え後に再生成する。
 直接編集はしない。
+
+**手書きモック2本の対象外化はPdM決定として追記する（2026-08-03）。**
+完了条件10（6章）の「生成物のHTML4本」から`ui/_mock-day.html`と`ui/_mock-week.html`の2本を対象外とする。
+理由は、この2本には再生成スクリプトが存在せず（`ui/build.mjs`が対象にしているのは`ui/index.html`と`ui/pattern-timeline.html`の2本だけで、`ui/_mock-day.html`・`ui/_mock-week.html`を生成する仕組みはリポジトリのどこにも無い）、`ui/.gitignore`の`_*`パターンでGit管理外に置かれており、`docs/findings/button-inventory-20260730.md`と`docs/specs/design-system-migration-20260730.md`が既に「本番の配信経路に含まれない」と明記済みの手書きの旧モック（トークンの中身もT5フラット化以前のbox-shadow/inset基調で、`tokens.css`のTOKENSマーカー機構自体を使っていない）だからである。
+完了条件10の対象は`ui/index.html`と`ui/pattern-timeline.html`の2本＋モックのトークン（`docs/specs/button-roles-20260730-tokens.css`）とする。
+`ui/_mock-day.html`・`ui/_mock-week.html`はオーナーの削除可否判断が出るまで現状維持とする。
 
 ## 5. 4回目から変えた点と理由
 
