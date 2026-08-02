@@ -72,16 +72,19 @@ const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${S
 const timeToMin2 = (hm) => { const [h, m] = String(hm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 const fullDayLabel = (d) => `${d}曜`;
 
-// ── 実日付ヘルパー（週起点＝月曜から曜日オフセットで暦日を出す。UTC固定でTZズレを排除）──
-/** 曜日→週起点（月曜=0）からのオフセット日数。 */
-const WEEKDAY_OFFSET = { 月: 0, 火: 1, 水: 2, 木: 3, 金: 4, 土: 5, 日: 6 };
+// ── 実日付ヘルパー（週の識別キー＝その週(日〜土)に含まれる月曜のISO。保存フォーマット
+//    （config.week_start_date・goalOverrides.weeks の Firestore キー）は月曜ISOのまま不変。
+//    表示だけ日曜始まりにする＝月曜キーから曜日オフセットで暦日を出す。UTC固定でTZズレを排除）──
+/** 曜日→週の月曜キーからのオフセット日数。日だけ前日（-1）で、月曜キーの週の最初の曜日になる
+ * （日曜始まり週の中に月曜がちょうど1つだけ含まれる、という不変関係の実装）。 */
+const WEEKDAY_OFFSET = { 日: -1, 月: 0, 火: 1, 水: 2, 木: 3, 金: 4, 土: 5 };
 /** ISO日付(YYYY-MM-DD)に n 日加算した ISO を返す（UTCで安全に）。 */
 const addDaysISO = (iso, n) => {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
-/** 週起点(月曜ISO)と曜日名から、その曜日の実日付ISOを返す（未知の曜日は null）。 */
+/** 週の月曜キーと曜日名から、その曜日の実日付ISOを返す（未知の曜日は null）。 */
 const dayDateISO = (weekStartDate, dayName) => {
   if (!weekStartDate || !(dayName in WEEKDAY_OFFSET)) return null;
   return addDaysISO(weekStartDate, WEEKDAY_OFFSET[dayName]);
@@ -99,14 +102,22 @@ const diffDaysISO = (a, b) => {
   const db = new Date(`${b}T00:00:00Z`);
   return Math.round((db - da) / 86400000);
 };
-/** ISO日付が属する週の月曜ISO（週開始=月曜・UTC固定）。 */
+/** ISO日付が属する週（月〜日の暦週）の月曜ISO（UTC固定）。
+ * 「表示アンカー（今日を含む週へ何ブロック進めるか）」の位置決めだけに使う——曜日ボタン・週タブの
+ * 表示順（日曜始まり）とは別軸。日曜は「その週（月〜日）の最終日」のまま扱う（前の週へは戻さず、
+ * 直前の月曜まで6日戻る）。これは意図的な設計: 週タブの一覧は「今日を含む週」だけを先頭に出すの
+ * ではなく、前後の週を含めた範囲を保つ必要があり、その範囲の起点（先頭タブ）はこの関数の値を軸に
+ * 7日刻みで進む。「一覧のどのタブが今日の週として強調表示されるか」は、この関数の値とは独立に
+ * クライアント側（render-shared.mjs の週レベル自動選択）が決める（2026-08-02 PdM是正: 起点の意味と
+ * 強調表示の対象は別の関心事）。保存キー（config.week_start_date・goalOverrides.weeks の Firestore
+ * キー）は月曜ISOのまま不変で、ここが返す値もその文脈で使われる。 */
 const mondayOfISO = (iso) => {
   const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); // 0=日,1=月,...6=土
   const diffToMonday = dow === 0 ? -6 : 1 - dow;
   return addDaysISO(iso, diffToMonday);
 };
-/** 週の全7曜日（月始まり）の正規順。dayPicker・週グリッドの並び順の単一真実源。 */
-const FULL_WEEK_DAYS = ['月', '火', '水', '木', '金', '土', '日'];
+/** 週の全7曜日（日曜始まり）の正規順。dayPicker・週グリッドの並び順の単一真実源。 */
+const FULL_WEEK_DAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 // ── 期間モデル（週/月ピッカーの実切替＝複数期間生成）─────────────────────────────
 // 設計: 1回の generation は「1期間（1週＋その月のフェーズ）」を作る純粋な単位のまま。
@@ -122,8 +133,10 @@ const MONTHS_AHEAD = 6;
 
 /**
  * 週ピッカー用の期間リスト。アンカー週から現アーク月の週1..N を並べる。
- * 各週: 暦日は週起点+7日ずつ進め、current_month は固定（同一アーク月内）、week_of_month は+1ずつ。
+ * 各週: 保存キー（月曜ISO）は+7日ずつ進め、current_month は固定（同一アーク月内）、week_of_month は+1ずつ。
  * resolveWeekFocus(current_month, week_of_month) が週ごとに異なる焦点を返す＝中身が実際に変わる。
+ * key/label は表示専用（日曜始まり＝月曜キーの前日）。weekStartDate（月曜ISO・保存キー）は不変で
+ * goalKeys.weekKey 等はこちらを参照する。
  * @param {{currentMonth:number, weekOfMonth:number, weekStartDate:?string}} anchor
  * @returns {Array<{key:string,label:string,currentMonth:number,weekOfMonth:number,weekStartDate:?string}>}
  */
@@ -131,9 +144,11 @@ export function computeWeekPeriods(anchor) {
   const out = [];
   for (let i = 0; i < WEEKS_PER_ARC_MONTH; i++) {
     const weekStartDate = anchor.weekStartDate ? addDaysISO(anchor.weekStartDate, 7 * i) : null;
+    // 表示開始日＝日曜（月曜キーの前日）。保存キーである weekStartDate 自体は書き換えない。
+    const displayStart = weekStartDate ? dayDateISO(weekStartDate, '日') : null;
     out.push({
-      key: weekStartDate ? dateLabelYMD(weekStartDate) : `w${i}`,
-      label: weekStartDate ? `${dateLabelYMD(weekStartDate)}〜` : `第${(anchor.weekOfMonth ?? 1) + i}週`,
+      key: displayStart ? dateLabelYMD(displayStart) : `w${i}`,
+      label: displayStart ? `${dateLabelYMD(displayStart)}〜` : `第${(anchor.weekOfMonth ?? 1) + i}週`,
       currentMonth: anchor.currentMonth,
       weekOfMonth: (anchor.weekOfMonth ?? 1) + i,
       weekStartDate,
@@ -546,7 +561,7 @@ function buildDays(session) {
 }
 
 /**
- * schedule に無い曜日（既定は月・日）も入力できるよう、buildDays の結果を月始まり7曜日ぶんに
+ * schedule に無い曜日（既定は月・日）も入力できるよう、buildDays の結果を日曜始まり7曜日ぶんに
  * 埋める（表示専用の読み取り補完・保存済み schedule 自体は変更しない）。
  *
  * 背景: schedule.map() ベースのエンジンパイプラインは schedule に無い曜日の日を一件も生成しない
@@ -554,13 +569,13 @@ function buildDays(session) {
  * 増やさない限り月・日は「表示に出てこない」ままになる。この関数は欠けている曜日ぶんだけ
  * 「空状態専用」のプレースホルダ日（叩き台メニューを持たない・source は下流の
  * applyOverridesWithEmpty が 'empty' へ確定する）を挿入し、既存の schedule 日はそのまま通す。
- * 実日付はプレースホルダ側でも週起点から算出するので、コーチが入力すればその日付キーで
+ * 実日付はプレースホルダ側でも週の月曜キーから算出するので、コーチが入力すればその日付キーで
  * 上書きがちゃんと当たる（applyOverridesWithEmpty の実日付一致）。
  *
  * @param {Array} days buildDays の結果（schedule にある曜日ぶんのみ）
- * @param {?string} weekStartDate 週起点ISO（月曜）。未設定なら実日付を持たないプレースホルダになる
+ * @param {?string} weekStartDate 週の保存キー（月曜ISO）。未設定なら実日付を持たないプレースホルダになる
  *   （週起点未設定テナントの既存挙動＝date:null と同型）。
- * @returns {Array} 月始まり7曜日ぶんに整列した days（既存日はそのまま・欠けている曜日だけ挿入）
+ * @returns {Array} 日曜始まり7曜日ぶんに整列した days（既存日はそのまま・欠けている曜日だけ挿入）
  */
 function padToFullWeek(days, weekStartDate) {
   const byDay = new Map(days.map((d) => [d.day, d]));
@@ -916,9 +931,16 @@ function serverTodayISO() {
 
 /**
  * 表示アンカー（今日を含む週/月から開く）を解決する。保存アンカー（config.week_start_date 等）は
- * 一切書き換えない——週起点・アーク月・週番号を「今日を含む月曜」に向けて丸ごと何ブロックか
- * 進めた「表示専用」の値を返すだけ。呼び出し側はこの返り値を computeWeekPeriods /
- * computeMonthPeriods の入力に使う（保存値は config 側にそのまま残る）。
+ * 一切書き換えない——週起点・アーク月・週番号を「今日を含む週（月〜日の暦週）の月曜」に向けて
+ * 丸ごと何ブロックか進めた「表示専用」の値を返すだけ。呼び出し側はこの返り値を computeWeekPeriods /
+ * computeMonthPeriods の入力に使い、週タブ一覧の起点（先頭タブ）＝この関数の返り値になる。
+ *
+ * 起点の意味と強調表示の対象は別の関心事（2026-08-02 PdM是正）: ここが決めるのは週タブ一覧の
+ * 「先頭がどの週か」（＝前後の週を含む範囲の位置）だけで、「一覧のどのタブが今日の週として
+ * 選択中表示になるか」は決めない。後者は render-shared.mjs のクライアント側（日レベルで解決済みの
+ * 実日付から週を逆引きして .cal-go-week/.wkpanel を同期する）が担う。ここで日曜を「その週の
+ * 最終日」のまま（前の月曜へ戻す）扱うのはこのため——今日が日曜でも起点を翌週へ進めない＝
+ * 一覧の範囲が縮まない。
  *
  * 週起点未設定テナント（週の実日付を持たない）は「今日」と紐付けようがないため素通し。
  * 解決結果が原典（annual-plan）に存在しない月に落ちた場合は保存アンカーへフォールバックし、
@@ -933,8 +955,8 @@ function resolveDisplayAnchor(anchor, todayIso, annual) {
   if (!anchor.weekStartDate) return { ...anchor, warnings: [] };
   const todayMonday = mondayOfISO(todayIso);
   if (todayMonday === anchor.weekStartDate) return { ...anchor, warnings: [] };
-  // アンカー週起点から「今日を含む月曜」までの週数ぶん、アーク月・週番号を同じ歩幅で進める
-  // （4週=1アーク月の境界をまたぐぶんだけ currentMonth を繰り上げ/繰り下げる）。
+  // アンカー週の月曜から「今日を含む週」の月曜までの週数ぶん、アーク月・週番号を同じ歩幅で
+  // 進める（4週=1アーク月の境界をまたぐぶんだけ currentMonth を繰り上げ/繰り下げる）。
   const weeksDiff = Math.round(diffDaysISO(anchor.weekStartDate, todayMonday) / 7);
   const anchorIdx0 = (anchor.weekOfMonth ?? 1) - 1;
   const globalIdx0 = anchorIdx0 + weeksDiff;
@@ -1004,7 +1026,7 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
   const buildOneWeek = (period) => {
     const s = buildSession({ annual, drills, config, teamInput, period });
     // エンジン叩き台（自動入力ソース・表示しない）。schedule に無い曜日（既定は月・日）も
-    // 保存済みデータを変えずに入力可能にするため、月始まり7曜日ぶんへ表示専用で埋める。
+    // 保存済みデータを変えずに入力可能にするため、日曜始まり7曜日ぶんへ表示専用で埋める。
     const seedDays = padToFullWeek(buildDays(s), period.weekStartDate);
     // コーチ上書きは各週の週起点で実日付一致＝別週へ漏れない（applyOverrides 既存設計を踏襲）。
     const weekDays = applyOverridesWithEmpty(seedDays, overrides, period.weekStartDate);
@@ -1094,7 +1116,8 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
   applyGoalOverridesWithEmpty({ weeks, months, year, session }, goalOverrides);
 
   // 描画キー（編集導線が目標保存APIへ渡す scope/key の単一真実源）。
-  //   - weekKey: アンカー週の週起点ISO（無ければ null＝編集導線を出さない）。
+  //   - weekKey: アンカー週の保存キー（月曜ISO・無ければ null＝編集導線を出さない）。表示の
+  //     日曜始まりとは独立——週タブ・日ピッカーの表示日付を変えてもこのキーの値は動かない。
   //   - monthArcKey: アンカーの arc月（月/年の目標上書きの単一源キー）。
   const goalKeys = {
     weekKey: (weeks[0] && weeks[0].weekStartDate) || null,

@@ -788,20 +788,19 @@ const PATTERN_CSS = loadCss(import.meta.url, 'styles/pattern-timeline.css');
 
 export const meta = { id: 'timeline', name: 'タイムライン', tagline: '練習の流れを縦の比例タイムラインで・男女共通メニュー' };
 
-/** 日ピッカー: 日〜土の曜日ボタン。練習日のみ選択可（cal-go）、無い曜日はグレーアウト。日曜始まり。
- * days を渡せば任意の週の日ぶんを描ける（複数週の実切替用）。先頭が初期表示候補（on）。
- * cal-go は曜日(data-go)に加えて実ISO(data-date)も持つ。曜日だけだと別週の同曜日と衝突するため、
- * クライアントは data-date を起点に切り替える（showDayByDate）。 */
+/** 日ピッカー: 日〜土の曜日ボタン（日曜始まり）。7曜日すべて選択可（cal-go・予定に無い曜日も
+ * 入力できるようにするため）。
+ * days は常に plan-data.mjs の padToFullWeek で日曜始まり7曜日ぶんに整列済み（FULL_WEEK_DAYS が
+ * 単一の並び順定義元・各要素は必ず day を持つ）で渡ってくるので、その順をそのまま描くだけで、
+ * 表示専用の別配列は持たない（曜日順と実日付を別の配列で二重管理したことが「曜日ボタンは日曜
+ * 始まりなのに日付は月曜起点のまま」の不整合を生んだ反省・2026-08-02）。
+ * 先頭が初期表示候補（on）。cal-go は曜日(data-go)に加えて実ISO(data-date)も持つ。曜日だけだと
+ * 別週の同曜日と衝突するため、クライアントは data-date を起点に切り替える（showDayByDate）。 */
 function dayPicker(days) {
-  const WD = ['日', '月', '火', '水', '木', '金', '土'];
-  const pr = new Map();
-  days.forEach((d, i) => { if (d.day) pr.set(d.day, { dateLabel: d.dateLabel, date: d.date || '', first: i === 0 }); });
-  const btns = WD.map((w, i) => {
+  const btns = days.map((d, i) => {
     const wk = i === 0 ? ' sun' : i === 6 ? ' sat' : '';
-    const p = pr.get(w);
-    if (!p) return `<span class="pk pk-off${wk}">${w}</span>`;
-    const md = p.dateLabel ? p.dateLabel.slice(5) : '';
-    return `<button class="pk cal-go${p.first ? ' on' : ''}${wk}" data-go="${esc(w)}" data-date="${esc(p.date)}" type="button">${w}${md ? `<small>${esc(md)}</small>` : ''}</button>`;
+    const md = d.dateLabel ? d.dateLabel.slice(5) : '';
+    return `<button class="pk cal-go${i === 0 ? ' on' : ''}${wk}" data-go="${esc(d.day)}" data-date="${esc(d.date || '')}" type="button">${esc(d.day)}${md ? `<small>${esc(md)}</small>` : ''}</button>`;
   });
   return `<div class="picker" data-print-hide>${btns.join('')}</div>`;
 }

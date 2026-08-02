@@ -15,11 +15,15 @@ import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 test('週ピッカー: 現アーク月の4週を暦日+7日・週番号+1で並べる', () => {
   const weeks = computeWeekPeriods({ currentMonth: 7, weekOfMonth: 1, weekStartDate: '2026-06-22' });
   assert.equal(weeks.length, 4, '現アーク月=4週ぶん生成する');
-  assert.deepEqual(weeks.map((w) => w.weekStartDate), ['2026-06-22', '2026-06-29', '2026-07-06', '2026-07-13'], '週起点は+7日ずつ');
+  // 保存キー（weekStartDate＝月曜ISO）は不変。表示日曜始まりへの変更（2026-08-02）でも
+  // Firestore の goalOverrides.weeks キーは書き換わらない。
+  assert.deepEqual(weeks.map((w) => w.weekStartDate), ['2026-06-22', '2026-06-29', '2026-07-06', '2026-07-13'], '週起点（保存キー・月曜ISO）は+7日ずつ');
   assert.deepEqual(weeks.map((w) => w.weekOfMonth), [1, 2, 3, 4], '週番号は+1ずつ（焦点が型→反復で変わる軸）');
   assert.ok(weeks.every((w) => w.currentMonth === 7), 'アーク駆動月は同一月内で固定');
-  assert.equal(weeks[0].key, '2026/06/22', 'key はパネル対応用の yyyy/mm/dd');
-  assert.equal(weeks[1].label, '2026/06/29〜', 'label はピッカー表示用');
+  // key/label は表示専用で日曜始まり（月曜キーの前日）。業務意図の変更（2026-08-02・週始まり日曜統一）
+  // により、表示日付は保存キーの月曜そのものではなく、その前日の日曜になる。
+  assert.equal(weeks[0].key, '2026/06/21', 'key はパネル対応用の yyyy/mm/dd（表示は日曜始まり＝月曜キーの前日）');
+  assert.equal(weeks[1].label, '2026/06/28〜', 'label はピッカー表示用（日曜始まり）');
 });
 
 test('週ピッカー: 週起点未設定（CLI fallback）でも週番号で4週並ぶ', () => {
