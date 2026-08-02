@@ -12,8 +12,11 @@
  *
  * 意味ロール層（ui/styles/tokens.css）を守る検査3本（migration計画 §8.2、component-spec.md「アクセント塗りの意味」節）:
  *   - 形: ロール層の全宣言は var() 参照か、面を持たない役割の transparent のどちらかである（リテラル色値・宙ぶらりん参照・循環参照はゼロ）。
- *   - 追従性: 16プリセットでチームカラーに連動して動く意味ロールは、状態・確定・識別・文字導線・焦点リングの5群だけで、
+ *   - 追従性: 16プリセットでチームカラーに連動して動く意味ロールは、状態・確定・識別・焦点リングの4群だけで、
  *     破壊・中立操作・移動の3群は一切動かない（押せる部品の5役割のうち色で連動するのは状態と確定だけ、という設計の固定）。
+ *   - 押せる文字は色でなく下線で示す: 文字だけの導線（--on-link）と押せない見出しラベル（--on-label-accent）は
+ *     チームカラーに追従しない。押せることは常時下線が担うので色に仕事が残らない、という裁定
+ *     （docs/specs/button-color-system-20260802-ruling-v5.md 3.4節）の固定。この2本がアクセントを引き直すと落ちる。
  *   - 面と前景の対: 押せる部品の面ロールが追従するなら、その面に乗る前景ロールも同じプリセット群で追従する
  *     （面だけ動いて文字色が既定に固定される＝特定配色で文字が読めなくなる故障を検出する）。
  *
@@ -52,14 +55,14 @@ const EXPECTED_THEME_FOLLOWING_ROLES = [
   '--action-commit-line',
   '--focus-ring',
   '--on-action-commit',
-  '--on-label-accent',
-  '--on-link',
   '--on-state-selected',
   '--state-selected-fill',
   '--state-selected-ring',
   '--team-boys-fill',
   '--team-girls-fill',
 ].sort();
+// 押せる文字と押せない見出しラベルの色。押せることは常時下線が担うので、色はテーマに追従させない。
+const TEXT_ROLES_THAT_MUST_NOT_FOLLOW = ['--on-link', '--on-label-accent'];
 // 押せない状態の色は役割を問わず全系統共通のこの3本だけ（component-spec.md「押せない（全系統共通）」節）。
 const DISABLED_ROLES = ['--action-disabled-fill', '--action-disabled-line', '--on-action-disabled'].sort();
 
@@ -197,7 +200,7 @@ test('意味ロール層は参照だけで構成され、transparent は面を�
   });
 });
 
-test('16プリセットで追従する意味ロールは状態・確定・識別・文字導線・焦点リングだけ', async () => {
+test('16プリセットで追従する意味ロールは状態・確定・識別・焦点リングだけ', async () => {
   const { primitives, roles } = await readTokenRoles();
   const defaults = new Map([...primitives, ...roles]);
   const baseline = new Map([...roles.keys()].map((name) => [name, resolveVariable(name, defaults)]));
@@ -214,11 +217,54 @@ test('16プリセットで追従する意味ロールは状態・確定・識別
     状態: /^--state-|^--on-state-/,
     '確定': /^--action-commit-|^--on-action-commit$/,
     識別: /^--team-|^--on-team-label$/,
-    文字導線: /^--on-label-accent$|^--on-link$/,
     焦点リング: /^--focus-ring$/,
   };
   for (const [group, pattern] of Object.entries(groups)) {
     assert.ok([...followedByAnyPreset].some((name) => pattern.test(name)), `${group} のロールが少なくとも1つ追従する`);
+  }
+});
+
+test('押せる文字の色はチームカラーに追従しない（押せることは色でなく常時下線が示す）', async () => {
+  // 裁定 3.4節: 押せる文字からアクセントを落とし、押せることは常時下線に一本化した。
+  // 色に仕事が残っていない以上、配色を変えても押せる文字の色は動いてはいけない。
+  // この2本をアクセント（--orange 系）へ引き直すと、下線と色の二重の手掛かりが復活して落ちる。
+  const { primitives, roles } = await readTokenRoles();
+  const defaults = new Map([...primitives, ...roles]);
+
+  for (const name of TEXT_ROLES_THAT_MUST_NOT_FOLLOW) {
+    assert.ok(roles.has(name), `${name} がロール層に存在する`);
+    const moved = THEME_KEYS.filter((key) => {
+      const declarations = new Map([...defaults, ...presetOverrides(key)]);
+      return resolveVariable(name, declarations) !== resolveVariable(name, defaults);
+    });
+    assert.deepEqual(moved, [], `${name} はチームカラーのどのプリセットでも値が変わらない`);
+  }
+});
+
+// 文字だけの導線を出す5セレクタ（裁定 3.4節「常時下線を実際に付ける」の表）。
+// 押せる文字からアクセントを落としたので、常時下線がこの5つの押せることを示す唯一の手掛かりになる。
+const UNDERLINE_SELECTORS = [
+  ['styles/base.css', '.drill-trig'],
+  ['styles/base.css', '.vid'],
+  ['styles/pattern-timeline.css', '.drill-anchor'],
+  ['styles/pattern-timeline.css', '.drill-close'],
+  ['styles/pattern-timeline.css', '.dp-link'],
+];
+
+test('文字だけの導線は常時下線を持つ（押せることを示す唯一の手掛かり）', {
+  skip:
+    '対象の5セレクタは、いずれも部品CSSのロール参照への付け替え（裁定 4.7節）と同じフェーズで下線を付ける。'
+    + 'いまは text-decoration:none のままなので、この検査を動かすと落ちる。'
+    + '色を落としたあとに下線まで外れると押せることを示すものが1つも無くなるため、'
+    + '歯止めとして先に置いておく。付け替えが済んだらこの skip を外して緑にする'
+    + '（裁定 6章の実装フェーズの完了条件に項目として入れてある）。',
+}, async () => {
+  for (const [file, selector] of UNDERLINE_SELECTORS) {
+    const css = await readFile(new URL(`./${file}`, import.meta.url), 'utf8');
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rule = css.match(new RegExp(`(?:^|[},])\\s*${escaped}\\s*\\{([^}]*)\\}`, 'm'));
+    assert.ok(rule, `${file} に ${selector} の規則がある`);
+    assert.match(rule[1], /text-decoration\s*:\s*underline/, `${selector} は常時下線を持つ`);
   }
 });
 

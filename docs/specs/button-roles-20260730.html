@@ -9,7 +9,9 @@
 <!-- 色は製品の意味ロール層から受ける。生成物で、値の正本は ui/styles/tokens.css。 -->
 <link rel="stylesheet" href="./button-roles-20260730-tokens.css">
 <style>
-/* 役割別の見た目。色は意味ロール経由でのみ当てる（生の色トークンを直参照しない）。 */
+/* 役割別の見た目。色は意味ロール経由でのみ当てる（生の色トークンを直参照しない）。
+ * 押せる部品に出る色は2系統だけ。アクセント（選ばれている、決める）と、
+ * 無彩に近い暖色の階調（それ以外の全部）である。 */
 
 .r-wrap{max-width:900px;margin:0 auto;padding:28px 16px 72px}
 .r-doc-h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
@@ -17,8 +19,8 @@
 .r-doc-h2{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--on-label-accent);margin:30px 0 10px}
 
 /* --- 役割2 確定 ---
- * アクセントの塗り。塗りは「選ぶ・決める」の意味で、器の中なら印、単独ならチェック印つきの確定。
- * 弁別は単独配置と角丸四角の形とチェック印の3点で行う。 */
+ * アクセントの塗り。塗りは「選ぶ、決める」の意味で、選択中と確定を分けるのは
+ * 形とチェック印が主、単独配置が従。確定は角丸四角にチェック印が付く。 */
 .r-commit{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:700;
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   letter-spacing:.04em;min-height:44px;padding:0 22px;border-radius:8px;white-space:nowrap;
@@ -26,7 +28,8 @@
   color:var(--on-action-commit);transition:transform .16s ease}
 .r-commit svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
-.r-commit:hover{transform:translateY(-1px)}
+/* hover は位置が2px動く（最小量の条項3）。1pxでは知覚できないので状態と揃えて2pxにする。 */
+.r-commit:hover:not(:disabled){transform:translateY(-2px)}
 .r-commit:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-commit:disabled{cursor:not-allowed;transform:none;
   background:var(--action-disabled-fill);
@@ -40,22 +43,25 @@
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
   background:var(--action-neutral-fill);border:1px solid var(--action-neutral-line);
-  color:var(--on-action-neutral);transition:background .16s ease}
-.r-neutral:hover{background:var(--action-neutral-fill-hover)}
+  color:var(--on-action-neutral);transition:border-color .16s ease}
+/* hover は枠の色が面比6.14から15.31へ動く（最小量の条項1）。
+ * 面だけを動かす hover は持たない。カード面から地の面への変化は弁別比1.043で知覚できない。 */
+.r-neutral:hover{border-color:var(--on-surface)}
 .r-neutral:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-neutral--icon{width:44px;padding:0}
 .r-neutral svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
   stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 
 /* --- 役割3 破壊 ---
- * 中立操作と同じ形（カード面・角丸8px・同じ内側余白）にし、形では分けない。
- * 分けるのはゴミ箱と取消の記号、行の右端という置き場所、添える一文。赤茶の色は気づきを速める補助で、弁別には数えない。 */
+ * 中立操作と同じ形（カード面、角丸8px、同じ内側余白）にし、形では分けない。
+ * 色も中立と同じ値になる。強さで分けないと決めた以上、色でも分かれないのが正しい。
+ * 分けるのはゴミ箱と取消の記号、行の右端という置き場所、添える一文の3点だけである。 */
 .r-destroy{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   min-height:44px;padding:0 16px;border-radius:8px;white-space:nowrap;
   background:var(--action-destructive-fill);border:1px solid var(--action-destructive-line);
-  color:var(--on-action-destructive);transition:background .16s ease}
-.r-destroy:hover{background:var(--action-destructive-fill-hover)}
+  color:var(--on-action-destructive);transition:border-color .16s ease}
+.r-destroy:hover{border-color:var(--on-surface)}
 .r-destroy:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-destroy--icon{width:44px;padding:0}
 .r-destroy svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
@@ -69,8 +75,9 @@
   display:inline-flex;align-items:center;justify-content:center;
   width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;
   background:var(--action-move-fill);border:1px solid var(--action-move-line);
-  color:var(--on-action-move);transition:color .16s ease,background .16s ease}
-.r-move:hover{color:var(--on-action-move-hover);background:var(--action-move-fill-hover)}
+  color:var(--on-action-move);transition:color .16s ease}
+/* hover は文字の色が面比6.14から15.31へ動く（最小量の条項1）。面は動かさない。 */
+.r-move:hover{color:var(--on-action-move-hover)}
 .r-move:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-move svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
@@ -82,21 +89,26 @@
  * 形はピル（確定の角丸四角と分ける）。選択中は面に加えてアクセント深色の輪郭を必ず持つ。
  * 面だけだと明るいチームカラーで未選択の面と1.63しか離れないが、輪郭なら全配色で5.62以上。
  * 状態の部品は必ず兄弟と同じ器（トラック）に入る。単独で置かない。 */
-/* 器（状態の部品を入れる唯一の入れ物）。角丸20px・地色の面・濃い側の罫線・内側余白5px。
+/* 器（状態の部品を入れる唯一の入れ物）。角丸20px、地色の面、濃い側の罫線、内側余白5px。
  * 中身は同じ形の兄弟だけ。角丸20pxは器以外の入れ物（10/12/14px）に現れない値なので、
- * 面と罫線に加えて形でも器を一意に判定できる。幅による例外は置かない。 */
+ * 面と罫線に加えて形でも器を一意に判定できる。幅による例外は置かない。
+ * 器は選択中と確定を分ける軸の主ではなく、群の範囲を示す従の手掛かりである。 */
 .r-track{display:flex;gap:6px;padding:5px;border-radius:20px;
   background:var(--surface-ground);border:1px solid var(--line-strong)}
 .r-tabs{margin-bottom:14px}
 .r-tab{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;text-align:center;
   flex:1 1 0;min-width:0;min-height:44px;padding:0 4px;border-radius:999px;
   background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
-  transition:background .16s ease}
+  transition:transform .16s ease}
+.r-tab:hover:not(:disabled){transform:translateY(-2px)}
 .r-tab:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
 .r-tab.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700}
 
 /* 曜日の帯。7日すべてを常時見せる（狭い幅では2段に折り返す。横スクロールに隠さない）。
+ * 並びは日曜始まり。1段のとき左端が日曜、右端が土曜になり、紙のカレンダーと読み替えが要らない。
+ * 週末を伝えるのは土と日の文字だけで、帯の端の位置は使わない。
+ * 2段に折り返すと視覚上の端が4つできて、その半分が平日を指すためである。
  * 左右の送りは週送りなので語ラベルを添える。両端に留め、上下に分断させない。 */
 .r-daynav{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;flex:0 1 auto}
 .r-daytrack{flex:1 1 auto;min-width:0}
@@ -115,9 +127,6 @@
 .r-day:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .r-day.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700}
-.r-day.is-sat{color:var(--on-saturday)}
-.r-day.is-sun{color:var(--on-sunday)}
-.r-day.is-on.is-sat,.r-day.is-on.is-sun{color:var(--on-state-selected)}
 
 /* 対象3択。器の中に横一列で固定し、狭い幅でも折り返さず等分で縮める */
 .r-seg{display:flex;gap:5px;width:100%;padding:5px;border-radius:20px;
@@ -125,17 +134,19 @@
 .r-seg-b{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;
   flex:1 1 0;min-width:0;min-height:44px;padding:0 6px;white-space:nowrap;border-radius:999px;
   background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);
-  transition:background .16s ease}
+  transition:transform .16s ease}
+.r-seg-b:hover:not(:disabled){transform:translateY(-2px)}
 .r-seg-b:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;z-index:1}
 .r-seg-b.is-on{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);
   color:var(--on-state-selected);font-weight:700;z-index:1}
 /* 押せない状態ピル。押せない確定と同じ死に方で、枠も --mute-2 の単色に落とす
- * （枠幅は押せる側の未選択と同一の1px）。 */
-.r-seg-b:disabled{cursor:not-allowed;background:var(--action-disabled-fill);border:1px solid var(--action-disabled-line);color:var(--on-action-disabled)}
+ * （枠幅は押せる側の未選択と同一の1px）。hover の変形は持たない。 */
+.r-seg-b:disabled{cursor:not-allowed;transform:none;background:var(--action-disabled-fill);border:1px solid var(--action-disabled-line);color:var(--on-action-disabled)}
 
 /* --- 文字だけの導線 --- */
-/* 文字導線は常時下線。下線の有無だけが「押せるオレンジ文字」と「押せない見出し」を分ける。
- * 大きさは置かれた本文と同寸、太さ400。hoverは下線を太くするだけ。 */
+/* 常時下線。下線の有無だけが押せる文字と押せない見出しを分ける。
+ * 押せる文字はテーマに追従する色を持たない（下線が押せることを担うので色に仕事が残らない）。
+ * 大きさは置かれた本文と同寸、太さ400。hover は下線を1pxから2pxへ太らせる（最小量の条項2）。 */
 .r-link{color:var(--on-link);text-decoration:underline;text-underline-offset:2px;
   font-weight:400;font-size:inherit}
 .r-link:hover{text-decoration-thickness:2px}
@@ -150,7 +161,7 @@
 .r-team.is-boys::before{background:var(--team-boys-fill)}
 .r-team.is-girls::before{background:transparent;
   box-shadow:inset 0 0 0 3px var(--team-girls-fill)}
-/* 進行中チップは素の識別チップと同形にする（専用の面・枠・内側余白を持たない） */
+/* 進行中チップは素の識別チップと同形にする（専用の面、枠、内側余白を持たない） */
 
 /* --- 面と入力 --- */
 .r-pagehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
@@ -162,14 +173,15 @@
  * 900px以上でだけ操作列を曜日帯と同じ段の右端へ上げる。曜日帯の寸法には触れない。 */
 .r-toolbar{display:flex;align-items:flex-start;justify-content:space-between;
   flex-wrap:wrap;column-gap:14px;row-gap:10px;margin:14px 0 20px}
-/* 印刷・コピー・編集は連結せず独立した3ボタン。左からコピー・印刷・編集で編集が最右端。
- * 899px以下は曜日帯の直下の専用段・右端揃え、900px以上は曜日帯と同じ段の右端。
- * ボタンの内側余白・間隔・語ラベル・曜日帯の寸法は一切動かさない。 */
+/* 印刷、コピー、編集は連結せず独立した3ボタン。左からコピー、印刷、編集で編集が最右端。
+ * 899px以下は曜日帯の直下の専用段の右端揃え、900px以上は曜日帯と同じ段の右端。
+ * ボタンの内側余白、間隔、語ラベル、曜日帯の寸法は一切動かさない。 */
 .r-ops{flex:1 1 100%;display:flex;justify-content:flex-end;gap:8px}
 .r-panel{background:var(--surface-card);border:1px solid var(--line-hairline);
   border-radius:14px;padding:18px 20px}
-/* その日の見出し。チップは見出しの直後に置き、幅が足りなければ折り返して左揃えの単独行になる */
-.r-panel-h{font-size:17px;font-weight:700;color:var(--on-label-accent);
+/* その日の見出し。17px以上の見出しは本文色で置く（アクセントは押せる文字と紛れるため使わない）。
+ * チップは見出しの直後に置き、幅が足りなければ折り返して左揃えの単独行になる。 */
+.r-panel-h{font-size:17px;font-weight:700;color:var(--on-surface);
   letter-spacing:-.01em;margin-bottom:16px;
   display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .r-panel-h .r-team{white-space:nowrap}
@@ -189,8 +201,13 @@ textarea.r-input{min-height:64px;resize:vertical}
 .r-nowrap{flex-wrap:nowrap;flex:0 0 auto}
 .r-row{background:var(--surface-card);border:1px solid var(--line-hairline);
   border-radius:12px;padding:12px 14px;margin-bottom:12px}
+/* 行は tabindex="-1" で焦点を受けるが、Tab では到達しない容器なので輪郭は出さない。 */
+.r-row:focus{outline:none}
 .r-row-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.r-rownum{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em}
+/* 行番号は押せない標識。正本「生の色プリミティブを直参照してよい場合」の第4種（押せない標識の
+ * アクセント）にあたるため、ロールではなくプリミティブを引く。押せる部品ではないので、
+ * 押せる部品の色を2系統に絞る規律の外側にある。 */
+.r-rownum{font-size:12px;font-weight:700;color:var(--orange-deep);letter-spacing:.04em}
 .r-time{width:auto;min-width:104px}
 /* チェック箱は入力部品。状態ロール（アクセント面塗り）を借りない。面と枠は入力欄と揃える */
 .r-check{display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;
@@ -216,11 +233,30 @@ textarea.r-input{min-height:64px;resize:vertical}
 .r-item{flex-wrap:wrap}
 .r-item-fields{display:flex;gap:6px;flex-wrap:wrap;flex:1 1 0;min-width:0}
 .r-item-name{flex:2 1 120px;min-width:0}
+/* 補足欄は基準幅110pxで伸縮する。基準幅0だと隣が詰まったときに潰れて「メモ（」で切れる。
+ * 製品の項目行は折返し禁止なので、min-width で下限を作ると行が視口の外へ押し出される。 */
 .r-item-note{flex:1 1 110px;min-width:0}
 .r-cell-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
 /* 削除は必ず行の右端に固定幅で置く（行ごとに位置を変えない） */
 .r-row-del{margin-left:auto;flex:0 0 44px}
 .r-spacer{flex:1 1 auto}
+
+/* --- 削除口の出し方 ---
+ * 既定では見えず、触れているものにだけ出す。行に触れたら行の1つ、項目に触れたら
+ * その項目と行の2つが出る。項目は行の子孫なので、項目に触れれば行にも触れているためで、
+ * どちらも指を置いている対象を指す。出る数は最大2つで、これを仕様とする。
+ * 行側は子結合子で .r-row-top の直下に限定する。これがないと項目の削除口が
+ * 行の子孫としてもう一度当たり、行に触れただけで項目の削除口まで一斉に出る。
+ * visibility と display は使わない。支援技術の読み上げ順から外れ、
+ * スワイプ移動で削除口に到達できなくなるためである。
+ * 44pxの枠は予約したままにして、出現でレイアウトが動かないようにする。
+ * タッチでは1回目のタップが出現、2回目が実行になる。 */
+.r-row-top .r-destroy--icon,.r-item .r-destroy--icon{opacity:0;pointer-events:none;
+  transition:opacity .12s ease}
+.r-row:hover>.r-row-top .r-destroy--icon,
+.r-row:focus-within>.r-row-top .r-destroy--icon{opacity:1;pointer-events:auto}
+.r-item:hover .r-destroy--icon,
+.r-item:focus-within .r-destroy--icon{opacity:1;pointer-events:auto}
 
 /* 確定の節。確定と破壊を同じ列に並べず段で分ける */
 .r-confirm{display:flex;flex-direction:column;gap:12px}
@@ -228,6 +264,37 @@ textarea.r-input{min-height:64px;resize:vertical}
 .r-confirm-sub{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   padding-top:12px;border-top:1px solid var(--line-hairline)}
 .r-confirm-sub .r-hint{flex:1 1 160px}
+
+/* --- 確認カード ---
+ * 入力を失う操作は、色で警告せず、押した瞬間に失うものの名前を出して止める。
+ * 実行側も中立ロールを引き、破壊ロールを参照しない。カードは1問の全選択肢を並べる場で、
+ * 2つの答えの強さを色で差をつけないからである。差は記号と見出しの一文だけが担う。
+ * 覆いはカード面との弁別比が3.25で、正本の面と面の下限3:1を満たす。 */
+.r-dialog{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center}
+.r-dialog[hidden]{display:none}
+.r-dialog-scrim{position:absolute;inset:0;background:var(--scrim-overlay)}
+.r-dialog-card{position:relative;z-index:1;width:calc(100% - 32px);max-width:360px;
+  background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:14px;
+  padding:18px 20px}
+/* カードの箱は開いたときに焦点を受けるが、押せる部品ではないので輪郭は出さない。
+ * どちらの答えにも焦点を置かないのは、止めるための画面を1打鍵で抜けさせないためと、
+ * 焦点の輪郭がアクセント色なので、実行ボタンに焦点を置くとカードの中で削除だけが
+ * アクセントをまとい、実行に破壊の色を当てなかった理由が焦点経由で戻るためである。
+ * 見出しと本文は role="dialog" と aria-labelledby と aria-describedby で読み上げる。 */
+.r-dialog-card:focus{outline:none}
+.r-dialog-h{font-size:17px;font-weight:700;color:var(--on-surface);letter-spacing:-.01em;
+  line-height:1.45;margin-bottom:8px}
+.r-dialog-b{font-size:14px;font-weight:400;color:var(--on-surface);line-height:1.6;margin-bottom:16px}
+/* ボタン行は折り返さない。やめるが左、実行が右の横並びをどの幅でも変えない。
+ * 幅が足りないときに縮むのは実行ボタンの文字で、2行になって高さが伸びる。
+ * やめるは align-items:stretch で同じ高さに追従する。
+ * 折り返すと見た目の上下と、Tabキーと読み上げが進む順が逆転し、削除を止めるための画面で
+ * 安全な選択肢の位置が目と操作で食い違う。
+ * 320pxの視口にスクロールバー17pxが出た状態でも、使える231pxに対して所要227pxで収まる
+ * （やめる76px、gap8px、実行143px。枠2pxと記号のgap7pxを計上した値）。 */
+.rc-actions{display:flex;flex-wrap:nowrap;justify-content:flex-end;align-items:stretch;gap:8px}
+.rc-actions>.rc-cancel{flex:0 0 auto;white-space:nowrap}
+.rc-actions>.rc-exec{flex:0 1 auto;white-space:normal;text-align:center}
 
 /* 役割の見分け表 */
 .r-legend{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));
@@ -238,7 +305,7 @@ textarea.r-input{min-height:64px;resize:vertical}
 .r-legend-k{font-size:12px;font-weight:700;color:var(--on-surface-muted);letter-spacing:.04em}
 
 /* 暗いチーム色の実演 */
-/* 器以外の入れ物は角丸四角＋カード面＋淡い罫線。器（角丸20px＋地色の面＋濃い側の罫線）と3点で別物にする。
+/* 器以外の入れ物は角丸四角、カード面、淡い罫線。器（角丸20px、地色の面、濃い側の罫線）と3点で別物にする。
  * 器以外は10pxから14pxの角丸を使い、器の20pxはこの集合に現れない。 */
 .r-theme{background:var(--surface-card);border:1px solid var(--line-hairline);
   border-radius:12px;padding:14px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -272,7 +339,9 @@ textarea.r-input{min-height:64px;resize:vertical}
 
   <h1 class="r-doc-h1">押せる部品の5役割を当てた練習計画画面</h1>
   <p class="r-doc-note">
-    覚える規則は4つ。オレンジの塗りは「いま選ばれている・決める」。縁取りの箱は「道具」で、ゴミ箱か取消の記号が付いたものだけ消える・戻る。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。規則のほかに、状態の見方が1つある。文字も枠も灰色に沈んだものは、いま押せないだけである。下の見分け表の7升は、4つの規則と状態の見方1つの内訳である。塗りが2升（器の中の印、単独の確定）、縁取りの箱が2升（道具、破壊）、記号が1升、下線が1升、押せないが1升。
+    押せる部品に出る色は2つだけである。アクセント（いま選ばれている、決める）と、無彩に近い暖色の階調（それ以外の全部）。
+    覚える規則は4つ。オレンジの塗りは「いま選ばれている、決める」。縁取りの箱は「道具」で、ゴミ箱か取消の記号が付いたものだけが消すか戻す。枠のない記号は「見る場所を動かす」。下線の付いた文字は「別の場所へ跳ぶ」。規則のほかに、状態の見方が1つある。文字も枠も灰色に沈んだものは、いま押せないだけである。下の見分け表の7升は、4つの規則と状態の見方1つの内訳である。塗りが2升（ピル形の選択中、チェック印つきの確定）、縁取りの箱が2升（道具、破壊）、記号が1升、下線が1升、押せないが1升。
+    道具と破壊は同じ色になる。強さで分けないと決めたので、分けるのは記号と置き場所と添える一文だけである。
     男子と女子の識別ドットも同じチーム色を使うが、これは押せない標識なので押せる部品の規律の外にある。
     色はすべて製品の意味ロール層から取っており、このページに色の実値は書いていない。
   </p>
@@ -349,13 +418,13 @@ textarea.r-input{min-height:64px;resize:vertical}
       </button>
       <div class="r-daytrack r-track">
         <div class="r-days">
+          <button type="button" class="r-day">日<small>07-26</small></button>
           <button type="button" class="r-day">月<small>07-27</small></button>
           <button type="button" class="r-day is-on">火<small>07-28</small></button>
           <button type="button" class="r-day">水<small>07-29</small></button>
           <button type="button" class="r-day">木<small>07-30</small></button>
           <button type="button" class="r-day">金<small>07-31</small></button>
-          <button type="button" class="r-day is-sat">土<small>08-01</small></button>
-          <button type="button" class="r-day is-sun">日<small>08-02</small></button>
+          <button type="button" class="r-day">土<small>08-01</small></button>
         </div>
       </div>
       <button type="button" class="r-move r-weekgo" aria-label="次の週へ">
@@ -429,8 +498,11 @@ textarea.r-input{min-height:64px;resize:vertical}
 
     <section class="r-sec">
       <h3 class="r-sec-t">3　時間割</h3>
+      <p class="r-hint" style="margin-bottom:12px">
+        削除口は触れているものにだけ出る。行に触れると行の削除が1つ、項目に触れるとその項目と行の2つが出る。
+      </p>
 
-      <div class="r-row">
+      <div class="r-row" tabindex="-1">
         <div class="r-row-top">
           <button type="button" class="r-move r-grip" aria-label="この時間を並べ替え">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>
@@ -442,7 +514,8 @@ textarea.r-input{min-height:64px;resize:vertical}
             <input class="r-input r-time" value="16:20">
           </span>
           <label class="r-check"><input type="checkbox" checked>男女共通</label>
-          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除">
+          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除"
+                  data-confirm="del-row">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
           </button>
         </div>
@@ -460,7 +533,8 @@ textarea.r-input{min-height:64px;resize:vertical}
               <span class="r-sublab">補足</span>
               <input class="r-input r-item-note" value="8分・肩と股関節">
             </span>
-            <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+            <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除"
+                    data-confirm="del-item">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
             </button>
           </div>
@@ -470,7 +544,7 @@ textarea.r-input{min-height:64px;resize:vertical}
         </div>
       </div>
 
-      <div class="r-row">
+      <div class="r-row" tabindex="-1">
         <div class="r-row-top">
           <button type="button" class="r-move r-grip" aria-label="この時間を並べ替え">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>
@@ -482,7 +556,8 @@ textarea.r-input{min-height:64px;resize:vertical}
             <input class="r-input r-time" value="16:50">
           </span>
           <label class="r-check"><input type="checkbox">男女共通</label>
-          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除">
+          <button type="button" class="r-destroy r-destroy--icon r-row-del" aria-label="この時間を削除"
+                  data-confirm="del-row">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
           </button>
         </div>
@@ -500,7 +575,8 @@ textarea.r-input{min-height:64px;resize:vertical}
                 <span class="r-sublab">補足</span>
                 <input class="r-input r-item-note" value="3人組・両サイド">
               </span>
-              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除"
+                      data-confirm="del-item">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
               </button>
             </div>
@@ -521,7 +597,8 @@ textarea.r-input{min-height:64px;resize:vertical}
                 <span class="r-sublab">補足</span>
                 <input class="r-input r-item-note" value="2人組・コーナー">
               </span>
-              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除">
+              <button type="button" class="r-destroy r-destroy--icon" aria-label="項目を削除"
+                      data-confirm="del-item">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13"/></svg>
               </button>
             </div>
@@ -546,7 +623,7 @@ textarea.r-input{min-height:64px;resize:vertical}
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
             保存
           </button>
-          <button type="button" class="r-destroy">
+          <button type="button" class="r-destroy" data-confirm="cancel">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5"/></svg>
             キャンセル
           </button>
@@ -557,7 +634,7 @@ textarea.r-input{min-height:64px;resize:vertical}
           <p class="r-hint">書き出しは今の入力を読み取るだけで、内容は変わりません。</p>
         </div>
         <div class="r-confirm-sub">
-          <button type="button" class="r-destroy">
+          <button type="button" class="r-destroy" data-confirm="revert-auto">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5"/></svg>
             自動生成に戻す
           </button>
@@ -567,11 +644,27 @@ textarea.r-input{min-height:64px;resize:vertical}
     </section>
   </div>
 
+  <h2 class="r-doc-h2">失うものを確認するカード</h2>
+  <p class="r-doc-note">
+    入力を失う操作は、色で警告せず、押した瞬間に失うものの名前を出して止める。
+    実行側も中立の箱で、破壊の色は使わない。1問の全選択肢を並べる場なので、2つの答えの強さを色で差をつけない。
+    差は記号（ゴミ箱と取消）と見出しの一文だけが担う。
+    やめるが左、実行が右の横並びはどの幅でも変わらない。幅が足りないときに縮むのは実行ボタンの文字で、2行になって高さが伸びる。
+    上の時間割の削除口と、確定の節のキャンセルと自動生成に戻すからも同じカードが開く。
+  </p>
+  <div class="r-inline" style="margin-bottom:8px">
+    <button type="button" class="r-neutral" data-confirm="del-row">行の削除を見る</button>
+    <button type="button" class="r-neutral" data-confirm="del-item">項目の削除を見る</button>
+    <button type="button" class="r-neutral" data-confirm="revert-auto">自動生成に戻すを見る</button>
+    <button type="button" class="r-neutral" data-confirm="cancel">キャンセルを見る</button>
+  </div>
+
   <h2 class="r-doc-h2">まだ何も入っていない日</h2>
   <p class="r-doc-note">
     叩き台の読み込みと他の日からの取り込みは、中身の有無に関わらず常に中立操作の見た目にする。
     見た目が状態で変わると、同じボタンが日によって別物に見えてしまう。
     置き換えの保護は見た目ではなく実行時の確認に置き、中身があるときだけ確認を出す。
+    対象が空のときは確認を出さず即実行する。確認が意味を持つのは失うものがあるときだけである。
   </p>
   <div class="r-panel">
     <div class="r-panel-h">7/30（木）の練習を編集</div>
@@ -612,9 +705,11 @@ textarea.r-input{min-height:64px;resize:vertical}
   <h2 class="r-doc-h2">チーム色を変えたとき（最悪の2配色）</h2>
   <p class="r-doc-note">
     16通りのチーム色のうち、いちばん見分けにくくなる2つを並べた。
-    選択中も確定も同じオレンジの塗りになる。塗りの意味が「選ぶ・決める」で共通だからで、
-    見分けるのは置かれ方である。器の中に兄弟と並んでいれば印、単独でチェック印が付いていれば確定。
+    選択中も確定も同じオレンジの塗りになる。塗りの意味が「選ぶ、決める」で共通だからで、
+    見分けるのは形とチェック印である。ピル形で兄弟と並んでいれば印、チェック印つきの角丸四角なら確定。
     上はチャコール、下はライムで、どちらもチーム色が既定から大きく離れる配色にあたる。
+    チャコールはアクセントの彩度が無彩に近い階調の中まで落ちる唯一の配色で、この配色では
+    選択中と未選択を分けるのは塗りの有無と輪郭だけになる（面の弁別比は10.20あるので十分に立つ）。
     ライムは選択中の面と未選択の面がもっとも近づく配色（面だけで比べると1.63）だが、
     選択中にはチーム色の濃い側で輪郭が付くので、面が近くても輪郭が5.97離れて印だと分かる。
     識別のラベルはどちらの配色でも語が主で、色は補助に留めている。
@@ -673,5 +768,73 @@ textarea.r-input{min-height:64px;resize:vertical}
   </div>
 
 </div>
+
+<!-- 確認カード。4つの場面で見出しと本文と実行ラベルと記号だけが差し替わる。 -->
+<div class="r-dialog" id="r-dialog" hidden role="dialog" aria-modal="true"
+     aria-labelledby="r-dialog-h" aria-describedby="r-dialog-b">
+  <div class="r-dialog-scrim" data-dialog-close></div>
+  <div class="r-dialog-card" id="r-dialog-card" tabindex="-1">
+    <p class="r-dialog-h" id="r-dialog-h"></p>
+    <p class="r-dialog-b" id="r-dialog-b"></p>
+    <div class="rc-actions">
+      <button type="button" class="r-neutral rc-cancel" data-dialog-close>やめる</button>
+      <button type="button" class="r-neutral rc-exec" id="r-dialog-exec">
+        <svg viewBox="0 0 24 24" aria-hidden="true" id="r-dialog-icon"></svg>
+        <span id="r-dialog-execlabel"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var TRASH='M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13';
+  var UNDO='M9 14L4 9l5-5M4 9h11a5.5 5.5 0 0 1 0 11h-5';
+  // 見出しは失う対象の名前、本文はその範囲。実行ラベルの最長は「捨てて閉じる」の6字で、
+  // 320pxでスクロールバーが出た状態でも横並びのまま収まる。
+  var WORDS={
+    'del-row':{h:'時間1（16:00〜16:20）を削除します。',b:'この時間に入れた項目もいっしょに消えます。',x:'削除する',i:TRASH},
+    'del-item':{h:'この項目（動的ストレッチ）を削除します。',b:'補足に書いた内容もいっしょに消えます。',x:'削除する',i:TRASH},
+    'revert-auto':{h:'手で入れた内容を捨てて自動生成に戻します。',b:'この日に手で入れた時間と項目がすべて消えます。',x:'捨てて戻す',i:UNDO},
+    'cancel':{h:'保存していない入力を捨てて編集を閉じます。',b:'最後に保存した状態に戻ります。',x:'捨てて閉じる',i:UNDO}
+  };
+  var dialog=document.getElementById('r-dialog');
+  var opener=null;
+  function open(key){
+    var w=WORDS[key];
+    if(!w) return;
+    document.getElementById('r-dialog-h').textContent=w.h;
+    document.getElementById('r-dialog-b').textContent=w.b;
+    document.getElementById('r-dialog-execlabel').textContent=w.x;
+    document.getElementById('r-dialog-icon').innerHTML='<path d="'+w.i+'"/>';
+    dialog.hidden=false;
+    // 焦点はカードの箱に置き、やめるにも実行にも置かない。
+    // 実行に置くと、削除口をEnterで押した直後のもう1打鍵で止めるための画面を抜けてしまう。
+    // Tabを1回押すと文書順どおり「やめる」、もう1回で「実行」に入る。
+    document.getElementById('r-dialog-card').focus();
+  }
+  function close(){
+    dialog.hidden=true;
+    if(opener) opener.focus();
+  }
+  document.addEventListener('click',function(e){
+    var trigger=e.target.closest('[data-confirm]');
+    if(trigger){ opener=trigger; open(trigger.getAttribute('data-confirm')); return; }
+    if(e.target.closest('[data-dialog-close]')){ close(); return; }
+    if(e.target.closest('#r-dialog-exec')){ close(); return; }
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!dialog.hidden) close();
+  });
+  // 行の余白に触れたときも行の削除口が出るように、行へ焦点を入れる。
+  // pointerdown はブラウザ既定の焦点処理に剥がされるので click を使う。
+  Array.prototype.forEach.call(document.querySelectorAll('.r-row'),function(row){
+    row.addEventListener('click',function(){
+      if(!row.matches(':focus-within')) row.focus();
+    });
+  });
+})();
+</script>
 </body>
 </html>
