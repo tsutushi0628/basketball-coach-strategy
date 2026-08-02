@@ -468,23 +468,33 @@ export function clientScript() {
   // 日付(ISO)を唯一の起点にして切り替える。曜日名は別週の同曜日と衝突するため使わない。──
   var dts=document.querySelectorAll('.cal-go');           // 各週の日ピッカーのボタン（data-date付き）
   var dws=document.querySelectorAll('.cal-go-dayweek');   // 日レベルの週セレクタ（data-dayweek）
+  var wts=document.querySelectorAll('.cal-go-week');      // 週レベルの週タブ（data-go）
   // ある .day[data-date] が属する .daywk[data-week] のキーを返す。
   function weekKeyOfDay(node){
     var wk=node&&node.closest?node.closest('.daywk'):null;
     return wk?wk.getAttribute('data-week'):null;
   }
-  // 指定ISOの日だけを可視にする（全 .day を一旦 hidden→該当1つだけ表示）。属する週グループも揃える。
+  // 選んでいる週を単一の持ち場（この関数）に集約する。日レベル(.daywk/.daywk-picker/
+  // .cal-go-dayweek)と週レベル(.wkpanel/.cal-go-week)のどちらを動かすときも必ずこの関数を経由させ、
+  // 両方へ同時に反映する。片方向の追従（例: 日→週だけ）だと逆向き（週→日）で同じ食い違いが残るため、
+  // 状態の持ち場をここ1箇所に集約する（2026-08-02 QA差し戻し是正: 日と週を行き来すると選択が食い違う）。
+  function selectWeek(weekKey){
+    if(!weekKey)return;
+    // .daywk（goalsBar+タイムライン）と .daywk-picker（7曜日ピッカー・row2左側）は別要素だが同じ
+    // data-week キーを共有するグループなので、両方まとめて切り替える（週切替時の表示ズレを防ぐ）。
+    document.querySelectorAll('.daywk[data-week],.daywk-picker[data-week]').forEach(function(g){g.hidden=g.getAttribute('data-week')!==weekKey;});
+    dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===weekKey);});
+    document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==weekKey;});
+    wts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===weekKey);});
+  }
+  // 指定ISOの日だけを可視にする（全 .day を一旦 hidden→該当1つだけ表示）。属する週（日レベル・
+  // 週レベルの両方）は selectWeek で同時に揃える。
   function showDayByDate(iso){
     if(!iso)return;
     var target=document.querySelector('.day[data-date="'+iso+'"]');
     if(!target)return;
     document.querySelectorAll('.day[data-date]').forEach(function(p){p.hidden=p.getAttribute('data-date')!==iso;});
-    var wkKey=weekKeyOfDay(target);
-    // 対象日が属する週グループだけ表示（他は隠す）。週セレクタの on も同期。
-    // .daywk（goalsBar+タイムライン）と .daywk-picker（7曜日ピッカー・row2左側）は別要素だが同じ
-    // data-week キーを共有するグループなので、両方まとめて切り替える（週切替時の表示ズレを防ぐ）。
-    document.querySelectorAll('.daywk[data-week],.daywk-picker[data-week]').forEach(function(g){g.hidden=g.getAttribute('data-week')!==wkKey;});
-    dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===wkKey);});
+    selectWeek(weekKeyOfDay(target));
     // 日ピッカーの on は「いま見えている日＝同じISO」のボタンだけ。
     dts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-date')===iso);});
     window.__curDay=target.getAttribute('data-day'); // 既存コピー導線の互換（表示中の曜日）
@@ -518,12 +528,18 @@ export function clientScript() {
     for(var i=0;i<days.length;i++){if(days[i].getAttribute('data-date')===todayIso)return todayIso;}
     return days.length?days[0].getAttribute('data-date'):null;
   }
-  // 週セレクタ: その週グループを表示し、その週の既定日（今日 or 先頭練習日）を出す。
-  dws.forEach(function(b){b.addEventListener('click',function(){
-    var wkKey=b.getAttribute('data-dayweek');
-    var iso=defaultDateOfWeek(wkKey,todayISO());
-    if(iso)showDayByDate(iso);
-  });});
+  // 週を切り替える単一の入口（日レベルの週セレクタ・週レベルの週タブの両方がここを呼ぶ）。
+  // その週の既定日（今日 or 先頭練習日）があれば showDayByDate（内部で selectWeek も揃う）、
+  // 無ければ selectWeek だけで週の状態を合わせる（週起点未設定等・実運用ではまず通らない経路）。
+  function goToWeek(weekKey){
+    var iso=defaultDateOfWeek(weekKey,todayISO());
+    if(iso){showDayByDate(iso);}else{selectWeek(weekKey);}
+  }
+  // 週セレクタ（日レベル）: 選んだ週へ切り替える。
+  dws.forEach(function(b){b.addEventListener('click',function(){goToWeek(b.getAttribute('data-dayweek'));});});
+  // 週タブ（週レベル）: 選んだ週へ切り替える。日レベルの週セレクタと同じ goToWeek 入口を通すことで、
+  // どちらから切り替えても日・週両方の状態が揃う（食い違いを構造的に防ぐ）。
+  wts.forEach(function(b){b.addEventListener('click',function(){goToWeek(b.getAttribute('data-go'));});});
   // レベルを day に切替＋指定日を出す（週グリッドの曜日ヘッダ・他導線からの遷移）。
   function jumpToDate(iso){
     if(!iso)return;
@@ -557,11 +573,6 @@ export function clientScript() {
     var past=candidates.filter(function(d){return d<iso;}).sort();
     showDayByDate(past.length?past[past.length-1]:candidates.sort()[0]);
   })();
-  // 週ピッカー実切替: 押下した週の wkpanel だけ出す（日切替と同型）。
-  var wts=document.querySelectorAll('.cal-go-week');
-  function showWeek(t){document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==t;});
-    wts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===t);});window.__curWeek=t;}
-  wts.forEach(function(b){b.addEventListener('click',function(){showWeek(b.getAttribute('data-go'));});});
   // 月ピッカー実切替: 押下した月の mopanel だけ出す。
   var mts=document.querySelectorAll('.cal-go-month');
   function showMonth(t){document.querySelectorAll('.mopanel[data-month]').forEach(function(p){p.hidden=p.getAttribute('data-month')!==t;});
