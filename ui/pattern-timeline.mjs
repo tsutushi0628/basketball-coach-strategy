@@ -879,6 +879,7 @@ export function render(data) {
     </div>
 
     <div class="level" data-level="day">
+      ${dayWeekSelector(dayWeeks)}
       <div class="daytoolbar">
         <div class="daytoolbar-picker">${dayPickerGroups}</div>
         <div class="daytoolbar-ops" data-print-hide>
@@ -890,7 +891,6 @@ export function render(data) {
           <span class="ed-msg" id="ed-msg" data-print-hide></span>
         </div>
       </div>
-      ${dayWeekSelector(dayWeeks)}
       ${dayGroups}
     </div>
 
