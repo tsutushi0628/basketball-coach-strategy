@@ -10,7 +10,7 @@ import {
   esc, modeTag, modeMark, altLine, videoLink, plainText, BLOCK_TINT,
   dayHeader, partHeader,
   goalsSection, monthSection, yearSection, assumptionsNote, goalsBar,
-  genderChip, VIDEO_SVG, emptyState, emptyDayActions,
+  genderChip, VIDEO_SVG, emptyState, emptyDayActions, noRecordDayActions,
   PRINT_SVG, COPY_SVG,
 } from './render-shared.mjs';
 import { EDITOR_CSS, editorToolbar, editorDataIsland, editorScript } from './editor.mjs';
@@ -597,8 +597,8 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
   const focusAttr = weekKey ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(focus || '')}"` : '';
   // 今週の焦点: コーチ入力があればそれ／無ければ「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
   const focusNote = focus
-    ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>`
-    : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline">未入力</span></p>` : '');
+    ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span data-goal-val>${esc(focus)}</span></p>`
+    : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline" data-goal-val>未入力</span></p>` : '');
   if (!realAxis && !hasDatedDay) {
     return `<h3 class="lvh">この週の練習</h3>${focusNote}${emptyState({ text: 'この週はまだ入力がありません。各曜日の入力は「日」タブから、自動の叩き台もそこから入れられます。' })}`;
   }
@@ -745,10 +745,15 @@ function dayTimeline(data, pd, visible) {
   if (pd.source === 'empty') {
     const dateHead = pd.dateLabel ? `${esc(pd.dateLabel)}（${esc(pd.day)}）` : `${data.month}月 ${esc(pd.dayLabel)}`;
     const court = pd.court ? `<span class="dh-court">${esc(pd.court)}${pd.coachPresent ? '' : '・コーチ不在'}</span>` : '';
-    const actions = pd.date ? emptyDayActions() : '';
+    let emptyText = 'まだ入力がありません。この日の練習を入力してください。';
+    let actions = pd.date ? emptyDayActions() : '';
+    if (pd.noRecord) {
+      emptyText = 'この日の記録はありません。';
+      actions = pd.date ? noRecordDayActions() : '';
+    }
     return `<article class="day pageb" data-day="${esc(pd.day)}" data-date="${esc(pd.date || '')}"${hiddenAttr}>
     <div class="dayhead"><div class="dh-main"><div class="dh-t">${dateHead}${court}</div></div></div>
-    ${emptyState({ text: 'まだ入力がありません。この日の練習を入力してください。', actions })}
+    ${emptyState({ text: emptyText, actions })}
     <pre class="plain" hidden></pre>
   </article>`;
   }
@@ -805,24 +810,42 @@ function dayPicker(days) {
   return `<div class="picker" data-print-hide>${btns.join('')}</div>`;
 }
 
-/** 日レベルの週セレクタ: 編集できる「日」画面を週ごとに切り替えるハンドル（.daywk グループの切替）。
- * 週ピッカー(cal-go-week)と同じ見た目だが別系統（data-dayweek）。data.weeks が1件なら出さない。 */
-function dayWeekSelector(weeks) {
-  if (!weeks || weeks.length <= 1) return '';
-  const items = weeks.map((w, i) =>
-    `<button class="pk cal-go-dayweek${i === 0 ? ' on' : ''}" data-dayweek="${esc(w.key)}" type="button">${esc(w.label)}</button>`
+/** 過去から未来までの週を4枠の窓で移動する共通ナビ。allWeeks は古い順。 */
+function weekNav({ allWeeks, todayKey, jumpMonths, tabClass, tabAttr, idSuffix }) {
+  if (!allWeeks || allWeeks.length <= 1) return '';
+  const todayIndex = allWeeks.findIndex((w) => w.key === todayKey);
+  if (todayIndex < 0) throw new Error(`週ナビの今週キーが見つかりません: ${todayKey}`);
+  const windowEnd = todayIndex + 4;
+  const options = (jumpMonths || []).map((m) =>
+    `<option value="${esc(m.ym)}" data-week="${esc(m.weekKey)}">${esc(m.label)}</option>`
   ).join('');
-  return `<div class="picker" data-print-hide>${items}</div>`;
+  const tabs = allWeeks.map((w, i) => {
+    const onClass = w.key === todayKey ? ' on' : '';
+    const hiddenAttr = i < todayIndex || i >= windowEnd ? ' hidden' : '';
+    return `<button class="pk ${tabClass}${onClass}" ${tabAttr}="${esc(w.key)}" type="button"${hiddenAttr}>${esc(w.label)}</button>`;
+  }).join('');
+  return `<div class="wknav" data-print-hide data-today-week="${esc(todayKey)}">
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="wk-jump-${idSuffix}">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="wk-jump-${idSuffix}" aria-label="年月で飛ぶ">${options}</select>
+      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"${todayIndex === 0 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">${tabs}</div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週" disabled>次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>`;
 }
 
-/** 週ピッカー: 生成済みの各週（data.weeks）を「yyyy/mm/dd〜」で実選択できるボタンで並べる。先頭=表示中。 */
-function weekPicker(data) {
-  const weeks = data.weeks || [];
-  if (weeks.length <= 1) return ''; // 単一週なら切替不要＝ピッカー非表示
-  const items = weeks.map((w, i) =>
-    `<button class="pk cal-go-week${i === 0 ? ' on' : ''}" data-go="${esc(w.key)}" type="button">${esc(w.label)}</button>`
-  ).join('');
-  return `<div class="picker" data-print-hide>${items}</div>`;
+/** 日レベルの週セレクタ。 */
+function dayWeekSelector(data, allWeeks, todayKey) {
+  return weekNav({ allWeeks, todayKey, jumpMonths: data.jumpMonths, tabClass: 'cal-go-dayweek', tabAttr: 'data-dayweek', idSuffix: 'day' });
+}
+
+/** 週レベルの週セレクタ。 */
+function weekPicker(data, allWeeks, todayKey) {
+  return weekNav({ allWeeks, todayKey, jumpMonths: data.jumpMonths, tabClass: 'cal-go-week', tabAttr: 'data-go', idSuffix: 'week' });
 }
 
 /** 月ピッカー: 生成済みの各月（data.months）を「yyyy/mm」で実選択できるボタンで並べる。先頭=今月。 */
@@ -840,9 +863,13 @@ export function render(data) {
   // weeks が空でも後方互換: 先頭週=top-level days の単一週にフォールバック（週レベルと同じ正規化）。
   // フォールバック週も focus（アンカー週の焦点）と weekStartDate（アンカー週の週起点ISO）を持たせ、
   // 単一週でも週の目標バーが従来どおりアンカー値を出す（per-group goalsBar の引数源を欠かさない）。
-  const dayWeeks = (data.weeks && data.weeks.length)
+  const weeks = (data.weeks && data.weeks.length)
     ? data.weeks
     : [{ key: '', days: data.days, focus: data.session.goals.week, weekStartDate: (data.goalKeys && data.goalKeys.weekKey) || null }];
+  const pastWeeks = Array.isArray(data.pastWeeks) ? data.pastWeeks : [];
+  const dayWeeks = [...weeks, ...pastWeeks];
+  const navWeeks = [...pastWeeks, ...weeks];
+  const todayKey = weeks[0].key;
 
   // 可視は常に1日（単一可視日の不変条件）。markup 上の初期可視は全週通しで先頭週・先頭日の1つだけ。
   // 読み込み後にクライアント（showDayByDate）が今日へ寄せ、無ければこの初期可視に留まる。
@@ -862,8 +889,8 @@ export function render(data) {
       .map((d, di) => dayTimeline(data, d, wi === 0 && di === 0))
       .join('\n');
     // 先頭週以外の日グループは hidden（クライアントが週セレクタ・既定日で切替）。
-    return `<div class="daywk" data-week="${esc(w.key)}"${wi === 0 ? '' : ' hidden'}>
-      ${goalsBar(data, { text: w.focus || '', key: w.weekStartDate || '' })}
+    return `<div class="daywk" data-week="${esc(w.key)}"${w.past ? ' data-past=""' : ''}${wi === 0 ? '' : ' hidden'}>
+      ${goalsBar(data, { text: w.focus || '', key: w.weekStartDate || '', month: w.monthArcKey == null ? null : { key: w.monthArcKey, text: w.monthGoal } })}
       ${timelines}
     </div>`;
   }).join('\n');
@@ -879,7 +906,7 @@ export function render(data) {
     </div>
 
     <div class="level" data-level="day">
-      ${dayWeekSelector(dayWeeks)}
+      ${dayWeekSelector(data, navWeeks, todayKey)}
       <div class="daytoolbar">
         <div class="daytoolbar-picker">${dayPickerGroups}</div>
         <div class="daytoolbar-ops" data-print-hide>
@@ -894,7 +921,7 @@ export function render(data) {
       ${dayGroups}
     </div>
 
-    <div class="level" data-level="week" hidden>${weekPicker(data)}${(data.weeks && data.weeks.length ? data.weeks : [{ key: '', days: data.days, focus: '', weekStartDate: null }]).map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus, w.weekStartDate || '')}</div>`).join('')}</div>
+    <div class="level" data-level="week" hidden>${weekPicker(data, navWeeks, todayKey)}${dayWeeks.map((w, i) => `<div class="wkpanel" data-week="${esc(w.key)}"${i === 0 ? '' : ' hidden'}>${weekLevel(data, w.days, w.focus, w.weekStartDate || '')}</div>`).join('')}</div>
     <div class="level" data-level="month" hidden>${monthPicker(data)}${(data.months && data.months.length ? data.months : [{ key: '', month: data.session.month, displayMonth: data.month, arcMonth: data.session.month.arcMonth }]).map((m, i) => `<div class="mopanel" data-month="${esc(m.key)}"${i === 0 ? '' : ' hidden'}>${monthSection(data, m.month, m.displayMonth, m.arcMonth)}${i === 0 ? goalsSection(data) : ''}</div>`).join('')}</div>
     <div class="level" data-level="year" hidden>${yearSection(data)}${assumptionsNote(data)}</div>
     ${drillDetailPanels(data)}

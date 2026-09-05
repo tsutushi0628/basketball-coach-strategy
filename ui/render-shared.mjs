@@ -144,6 +144,11 @@ export function emptyDayActions() {
     `<button type="button" class="btn" data-empty-act="seed" data-print-hide>自動で叩き台を入れる</button>`;
 }
 
+/** 過去日の記録なし状態の導線。過去には自動の叩き台を生成しない。 */
+export function noRecordDayActions() {
+  return `<button type="button" class="btn" data-empty-act="blank" data-print-hide>この日の記録を入力する</button>`;
+}
+
 /** 日ヘッダ（曜日・コート・時間・本日の狙い）。印刷時は右側に月/週の目標を横並びにして行を稼ぐ。 */
 export function dayHeader(pd, month, goals) {
   // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
@@ -258,34 +263,39 @@ function kpiCard(label, gender, g) {
   return `<div class="kteam"><div class="kth">${genderChip(gender)}の指標</div><div class="kpis">${meters}</div></div>`;
 }
 
-/** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。
- * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。月はアンカーarc月キー、週はアンカー
- * 週起点ISOキー（週起点が無ければ週セルには編集属性を付けない＝保存キーが作れないため）。
+/** 月/週の目標バー（この日の狙いの上に置くボックス）。
+ * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。週起点が無ければ週セルには
+ * 編集属性を付けない。学校年度外の週は month:null を受け、月セルを描かない。
  *
  * 週セルは「表示中の週」に追従させる必要がある（日レベルは全週ぶんの .daywk グループを描き、表示中の
- * 週だけが見える）。そのため週のテキスト・編集キーは引数 week で差し替えられる。week 省略時はアンカー週
- * （session.goals.week ＋ goalKeys.weekKey）にフォールバック（既存の単一週呼び出しと後方互換）。
- * 月/定性/KPIは同一アーク月内で不変なので常にアンカー値（month は引数化しない）。
+ * 週だけが見える）。そのため週と月のテキスト・編集キーは引数 week で差し替えられる。week 省略時は
+ * session.goals と goalKeys のアンカー値にフォールバックし、従来の呼び出しと後方互換にする。
  * @param {object} data buildPlanData の戻り値
- * @param {{text:string, key:?string}} [week] 表示する週の {週の焦点テキスト, 週起点ISOキー}
+ * @param {{text:string, key:?string, month:({text:string, key:(string|number)}|null)}} [week]
  */
 export function goalsBar(data, week) {
   const g = data.session.goals;
   const keys = data.goalKeys || {};
   const weekText = week ? week.text : g.week;
   const weekKey = week ? week.key : keys.weekKey;
-  const monthAttr = (keys.monthArcKey != null)
-    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(keys.monthArcKey))}" data-goal-text="${esc(g.monthMain || '')}"`
+  const month = week && Object.prototype.hasOwnProperty.call(week, 'month')
+    ? week.month
+    : { key: keys.monthArcKey, text: g.monthMain };
+  const monthAttr = (month && month.key != null)
+    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(month.key))}" data-goal-text="${esc(month.text || '')}"`
     : '';
   const weekAttr = weekKey
     ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(weekText || '')}"`
     : '';
   // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
   const valHtml = (v) => v
-    ? `<span class="gb-val">${esc(v)}</span>`
-    : `<span class="gb-val es-inline">未入力</span>`;
-  return `<div class="goalbar">
-    <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span>${valHtml(g.monthMain)}</div>
+    ? `<span class="gb-val" data-goal-val>${esc(v)}</span>`
+    : `<span class="gb-val es-inline" data-goal-val>未入力</span>`;
+  const monthCell = month === null
+    ? ''
+    : `<div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span>${valHtml(month.text)}</div>`;
+  return `<div class="goalbar${month === null ? ' goalbar--week-only' : ''}">
+    ${monthCell}
     <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span>${valHtml(weekText)}</div>
   </div>`;
 }
@@ -293,16 +303,23 @@ export function goalsBar(data, week) {
 /** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
 export function goalsSection(data) {
   const g = data.session.goals;
+  const keys = data.goalKeys || {};
   const qual = g.qualitative.map((q) => `・${esc(q)}`).join('<br>');
+  const monthViewAttr = keys.monthArcKey != null
+    ? ` data-goal-view="month:${esc(String(keys.monthArcKey))}"`
+    : '';
+  const weekViewAttr = keys.weekKey
+    ? ` data-goal-view="week:${esc(keys.weekKey)}"`
+    : '';
   // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（goalsBar と同じ非対称解消）。
   // 空欄のままだと「壊れて見える」（質行が || '—' で守られているのと同じ守りを今月/今週にも揃える）。
   const goalTxt = (v) => v
-    ? `<span class="txt">${esc(v)}</span>`
-    : `<span class="txt es-inline">未入力</span>`;
+    ? `<span class="txt" data-goal-val>${esc(v)}</span>`
+    : `<span class="txt es-inline" data-goal-val>未入力</span>`;
   return `<section class="goals">
     <h3>目標（チェックする数字は各チーム別）</h3>
-    <div class="gline"><span class="lab">今月</span>${goalTxt(g.monthMain)}</div>
-    <div class="gline"><span class="lab">今週</span>${goalTxt(g.week)}</div>
+    <div class="gline"${monthViewAttr}><span class="lab">今月</span>${goalTxt(g.monthMain)}</div>
+    <div class="gline"${weekViewAttr}><span class="lab">今週</span>${goalTxt(g.week)}</div>
     <div class="gline"><span class="lab">質</span><span class="txt">${qual || '—'}</span></div>
     <div class="kgrid">
       ${kpiCard('男子', '男子', data.boysGoals)}
@@ -333,7 +350,7 @@ export function yearSection(data) {
         // 狭セルなので data-goal-overlay で画面下オーバーレイ編集にする（セル内インライン展開だと行が崩れる）。
         const goalAttr = gender === 'boys'
           ? ` data-goal-edit data-goal-overlay="1" data-goal-scope="month" data-goal-key="${esc(String(a.month))}" data-goal-text="${esc(a.headline)}" data-goal-title="${esc(String(a.month))}月の目標"`
-          : '';
+          : ` data-goal-view="month:${esc(String(a.month))}"`;
         return `<div class="arccell${peakCls}${isNow ? ' arccell-now' : ''}"${goalAttr} title="${esc(a.headline)}">
           <span class="am">${a.month}月</span>
           <span class="ap">${shortPhase}</span>
@@ -377,8 +394,8 @@ export function monthSection(data, m = data.session.month, displayMonth = data.m
     : '';
   // 未入力（既定空白）はエンジン既定見出しを出さず「未入力」を淡色で示す（編集導線はそのまま）。
   const aimHtml = m.headline
-    ? `<div class="mc-aim"${aimAttr}>${esc(m.headline)}</div>`
-    : `<div class="mc-aim es-inline"${aimAttr}>今月の目標は未入力</div>`;
+    ? `<div class="mc-aim"${aimAttr}><span data-goal-val data-goal-empty="今月の目標は未入力">${esc(m.headline)}</span></div>`
+    : `<div class="mc-aim"${aimAttr}><span class="es-inline" data-goal-val data-goal-empty="今月の目標は未入力">今月の目標は未入力</span></div>`;
   return `<h3 class="lvh">${displayMonth}月にやること</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${displayMonth}月</span><span class="mc-phase">${esc(m.phase)}</span></div>
@@ -469,6 +486,59 @@ export function clientScript() {
   var dts=document.querySelectorAll('.cal-go');           // 各週の日ピッカーのボタン（data-date付き）
   var dws=document.querySelectorAll('.cal-go-dayweek');   // 日レベルの週セレクタ（data-dayweek）
   var wts=document.querySelectorAll('.cal-go-week');      // 週レベルの週タブ（data-go）
+  var weekNavNodes=document.querySelectorAll('.wknav');
+  var firstWeekNav=weekNavNodes.length?weekNavNodes[0]:null;
+  var firstWeekTabs=firstWeekNav?firstWeekNav.querySelectorAll('.picker .pk'):[];
+  var orderAttr=firstWeekTabs.length&&firstWeekTabs[0].hasAttribute('data-dayweek')?'data-dayweek':'data-go';
+  var ORDER=[];
+  for(var oi=0;oi<firstWeekTabs.length;oi++){ORDER.push(firstWeekTabs[oi].getAttribute(orderAttr));}
+  var WIN=4;
+  var TODAY_KEY=firstWeekNav?firstWeekNav.getAttribute('data-today-week'):null;
+  var TODAY_IDX=TODAY_KEY?ORDER.indexOf(TODAY_KEY):-1;
+  var winStart=TODAY_IDX>=0?TODAY_IDX:0;
+  var selectedWeek=TODAY_KEY;
+
+  function selectedMonthValue(select,selectedIdx){
+    var bestIdx=-1;
+    var bestValue='';
+    for(var i=0;i<select.options.length;i++){
+      var optionIdx=ORDER.indexOf(select.options[i].getAttribute('data-week'));
+      if(optionIdx<=selectedIdx&&optionIdx>bestIdx){
+        bestIdx=optionIdx;
+        bestValue=select.options[i].value;
+      }
+    }
+    return bestValue;
+  }
+  function applyWindow(){
+    if(!ORDER.length)return;
+    var selectedIdx=ORDER.indexOf(selectedWeek);
+    if(selectedIdx<0)throw new Error('選択週が週ナビの順序にありません: '+selectedWeek);
+    if(selectedIdx<winStart)winStart=selectedIdx;
+    if(selectedIdx>=winStart+WIN)winStart=selectedIdx-WIN+1;
+    var maxStart=Math.max(0,ORDER.length-WIN);
+    if(winStart<0)winStart=0;
+    if(winStart>maxStart)winStart=maxStart;
+    weekNavNodes.forEach(function(nav){
+      var navTabs=nav.querySelectorAll('.cal-go-dayweek,.cal-go-week');
+      navTabs.forEach(function(tab){
+        var key=tab.hasAttribute('data-dayweek')?tab.getAttribute('data-dayweek'):tab.getAttribute('data-go');
+        var idx=ORDER.indexOf(key);
+        tab.hidden=idx<winStart||idx>=winStart+WIN;
+      });
+      var prev=nav.querySelector('.wk-prev');
+      var next=nav.querySelector('.wk-next');
+      var today=nav.querySelector('.wk-today');
+      var select=nav.querySelector('.wk-jump-sel');
+      if(prev)prev.disabled=winStart===0;
+      if(next)next.disabled=winStart+WIN>=ORDER.length;
+      if(today)today.setAttribute('data-shown',selectedWeek===TODAY_KEY?'false':'true');
+      if(select){
+        var monthValue=selectedMonthValue(select,selectedIdx);
+        if(monthValue)select.value=monthValue;
+      }
+    });
+  }
   // ある .day[data-date] が属する .daywk[data-week] のキーを返す。
   function weekKeyOfDay(node){
     var wk=node&&node.closest?node.closest('.daywk'):null;
@@ -486,6 +556,8 @@ export function clientScript() {
     dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===weekKey);});
     document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==weekKey;});
     wts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===weekKey);});
+    selectedWeek=weekKey;
+    applyWindow();
   }
   // 指定ISOの日だけを可視にする（全 .day を一旦 hidden→該当1つだけ表示）。属する週（日レベル・
   // 週レベルの両方）は selectWeek で同時に揃える。
@@ -535,6 +607,35 @@ export function clientScript() {
     var iso=defaultDateOfWeek(weekKey,todayISO());
     if(iso){showDayByDate(iso);}else{selectWeek(weekKey);}
   }
+  function stepWeek(delta){
+    var nextStart=winStart+delta;
+    if(nextStart<0||nextStart+WIN>ORDER.length)return;
+    winStart=nextStart;
+    goToWeek(ORDER[winStart]);
+  }
+  function jumpToMonth(select){
+    var option=select&&select.options[select.selectedIndex];
+    var weekKey=option&&option.getAttribute('data-week');
+    var idx=ORDER.indexOf(weekKey);
+    if(idx<0)throw new Error('年月ジャンプの週が週ナビの順序にありません: '+weekKey);
+    winStart=Math.min(idx,Math.max(0,ORDER.length-WIN));
+    goToWeek(weekKey);
+  }
+  function goToday(){
+    if(TODAY_IDX<0)return;
+    winStart=TODAY_IDX;
+    goToWeek(TODAY_KEY);
+  }
+  weekNavNodes.forEach(function(nav){
+    var prev=nav.querySelector('.wk-prev');
+    var next=nav.querySelector('.wk-next');
+    var today=nav.querySelector('.wk-today');
+    var select=nav.querySelector('.wk-jump-sel');
+    if(prev)prev.addEventListener('click',function(){stepWeek(-1);});
+    if(next)next.addEventListener('click',function(){stepWeek(1);});
+    if(today)today.addEventListener('click',goToday);
+    if(select)select.addEventListener('change',function(){jumpToMonth(select);});
+  });
   // 週セレクタ（日レベル）: 選んだ週へ切り替える。
   dws.forEach(function(b){b.addEventListener('click',function(){goToWeek(b.getAttribute('data-dayweek'));});});
   // 週タブ（週レベル）: 選んだ週へ切り替える。日レベルの週セレクタと同じ goToWeek 入口を通すことで、

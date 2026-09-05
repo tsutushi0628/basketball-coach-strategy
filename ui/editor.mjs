@@ -14,7 +14,9 @@
  */
 
 import { BLOCK_TINT, EDIT_SVG } from './render-shared.mjs';
+import { GOAL_SAVED_EVENT } from './goal-editor.mjs';
 import { loadCss } from './styles/load-css.mjs';
+import { copySourceCandidates } from './copy-source.mjs';
 import { isSameGenderCell, isTogetherRow } from './two-col-together.mjs';
 
 /**
@@ -92,6 +94,7 @@ function dayToPrefill(d) {
       const girls = cellToPrefill(r.girls);
       if (boys) row['男子'] = boys;
       if (girls) row['女子'] = girls;
+      if (r.split === true) row.split = true;
     }
     return row;
   });
@@ -190,6 +193,7 @@ export function editorDataIsland(data) {
     seedPrefill, // 「自動で叩き台を入れる」が日付キーで引くエンジン叩き台（表示はしない）
     // 保存直後の再描画でも印刷の「日ヘッダ右＝月/週目標」を保つための値（編集対象は週内同値）。
     goals: g ? { monthMain: g.monthMain || '', week: g.week || '' } : null,
+    goalKeys: data.goalKeys || null,
   };
 
   // application/json なので esc 不要。</script> 混入だけ無害化する。
@@ -203,7 +207,7 @@ export function editorDataIsland(data) {
  * 編集UIのクライアントJS（IIFE文字列）。build 側で <script> に差し込む。
  * - 上書き日は起動時にサーバが Firestore から読んで描画済み（クライアントは起動時適用しない）
  * - 「この日を編集」でフォームを開き、保存で override を構築→保存API（POST /api/override）→即時再描画
- * - 「自動に戻す」で削除API（POST /api/override/delete）→再読込、「入力を書き出し」で overrides.json 配列形をコピー
+ * - 「自動に戻す」で削除API（POST /api/override/delete）→対象日を空状態へ局所更新、「入力を書き出し」で overrides.json 配列形をコピー
  * 再描画は twoColTimeline / dayHeader(コーチ分岐) を同一クラス・同一構造で移植する。
  * @returns {string} IIFE
  */
@@ -211,6 +215,7 @@ export function editorScript() {
   return `(function(){
   var isSameGenderCell=${isSameGenderCell.toString()};
   var isTogetherRow=${isTogetherRow.toString()};
+  var copySourceCandidates=${copySourceCandidates.toString()};
   var island=document.getElementById('${ISLAND_ID}');
   if(!island)return;
   var ED=JSON.parse(island.textContent||'{}');
@@ -221,6 +226,7 @@ export function editorScript() {
   var PREFILL=ED.prefill||{};
   var SEEDPREFILL=ED.seedPrefill||{}; // 「自動で叩き台を入れる」用のエンジン叩き台（表示しない）
   var GOALS=ED.goals||null;
+  var GOALKEYS=ED.goalKeys||null;
 
   // ── 枠別 datalist の id 解決 ──
   // 全catalog用の datalist は 'ed-catalog'、各枠は 'ed-cat-<index>'。ある枠の候補が空 or
@@ -264,11 +270,11 @@ export function editorScript() {
   }
 
   // ── 再描画: twoColTimeline / dayHeader(コーチ分岐) の移植（同一クラス・同一構造）──
+  function goalsPrHtml(){
+    return (GOALS&&(GOALS.monthMain||GOALS.week))?('<div class="dh-goals" aria-hidden="true">'+(GOALS.monthMain?('<span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain)+'</span>'):'')+(GOALS.week?('<span class="dhg-item"><b>週</b>'+esc(GOALS.week)+'</span>'):'')+'</div>'):'';
+  }
   function dayHeaderHtml(ov){
     var dateHead=dateLabelISO(ov.date,ov.weekday);
-    // サーバ描画 dayHeader（render-shared.mjs）と同じ空フォールバック: 未設定の側は項目ごと省略、
-    // 両方未設定ならペイン自体を出さない（'—'の幽霊行を刷らない）。
-    var goalsPr=(GOALS&&(GOALS.monthMain||GOALS.week))?('<div class="dh-goals" aria-hidden="true">'+(GOALS.monthMain?('<span class="dhg-item"><b>月</b>'+esc(GOALS.monthMain)+'</span>'):'')+(GOALS.week?('<span class="dhg-item"><b>週</b>'+esc(GOALS.week)+'</span>'):'')+'</div>'):'';
     // オンリー時は対象性別チップを出す（サーバ描画 dayHeader と一致・C）。
     var onlyG=(ov.onlyGender==='男子'||ov.onlyGender==='女子')?ov.onlyGender:null;
     var teamChip=onlyG?(' '+genderChipHtml(onlyG)):'';
@@ -279,9 +285,23 @@ export function editorScript() {
         '</div>'+
         '<div class="dh-aim"><span class="dh-aiml">この日のねらい</span>'+esc(ov.aim)+'</div>'+
       '</div>'+
-      goalsPr+
+      goalsPrHtml()+
     '</div>';
   }
+  document.addEventListener('${GOAL_SAVED_EVENT}',function(e){
+    var detail=e.detail||{};
+    var matchesMonth=detail.scope==='month'&&GOALKEYS&&detail.key===String(GOALKEYS.monthArcKey);
+    var matchesWeek=detail.scope==='week'&&GOALKEYS&&detail.key===GOALKEYS.weekKey;
+    if(!matchesMonth&&!matchesWeek)return;
+    if(!GOALS)GOALS={monthMain:'',week:''};
+    if(matchesMonth)GOALS.monthMain=detail.text;
+    if(matchesWeek)GOALS.week=detail.text;
+    var goalsHtml=goalsPrHtml();
+    document.querySelectorAll('.day .dayhead').forEach(function(dayhead){
+      dayhead.querySelectorAll('.dh-goals').forEach(function(goalsNode){goalsNode.remove();});
+      if(goalsHtml)dayhead.insertAdjacentHTML('beforeend',goalsHtml);
+    });
+  });
   function genderChipHtml(g){
     var cls=g==='男子'?'boys':'girls';
     return '<span class="gchip '+cls+'">'+esc(g)+'</span>';
@@ -406,6 +426,19 @@ export function editorScript() {
     article.innerHTML=dayHeaderHtml(ov)+timelineHtml(ov)+
       '<pre class="plain" hidden>'+esc(plainTextOf(ov))+'</pre>';
   }
+  function renderEmptyDay(article,date,weekday){
+    var seed=SEEDPREFILL[date];
+    var court=seed&&seed.court?('<span class="dh-court">'+esc(seed.court)+'</span>'):'';
+    var isPast=!!article.closest('.daywk[data-past]');
+    var text=isPast?'この日の記録はありません。':'まだ入力がありません。この日の練習を入力してください。';
+    var actions=isPast
+      ? '<button type="button" class="btn" data-empty-act="blank" data-print-hide>この日の記録を入力する</button>'
+      : '<button type="button" class="btn" data-empty-act="blank" data-print-hide>入力する</button>'+\
+        '<button type="button" class="btn" data-empty-act="seed" data-print-hide>自動で叩き台を入れる</button>';
+    article.innerHTML='<div class="dayhead"><div class="dh-main"><div class="dh-t">'+esc(dateLabelISO(date,weekday))+court+'</div></div></div>'+\
+      '<div class="emptystate"><p class="es-text">'+text+'</p><div class="es-actions">'+actions+'</div></div>'+\
+      '<pre class="plain" hidden></pre>';
+  }
 
   // 上書き日は起動時にサーバ（Cloud Function）が Firestore から読んで HTML に描画済み。
   // クライアントは起動時に何も適用しない（サーバが単一の真実源）。
@@ -454,6 +487,7 @@ export function editorScript() {
   var panel=null; // 編集パネル要素
   var model=null; // 現在の編集モデル
   var editingArticle=null; // 編集対象 article
+  var copySourceMonths=[]; // renderPanel 時に算出した年月別候補。change 時は再計算せず参照する。
 
   function blockOptions(sel){
     return BLOCKS.map(function(b){
@@ -486,16 +520,41 @@ export function editorScript() {
       }
       return '';
     }
-    var opts='<option value="">選んでください…</option>'+dates.map(function(k){
+    var candidates=copySourceCandidates(dates,model.date);
+    copySourceMonths=candidates.months;
+    var recommended=candidates.recommended.map(function(candidate){
+      var k=candidate.date;
       var p=PREFILL[k]||{};
-      var lab=dateLabelISO(k,p.weekday)+(p.title?'：'+p.title:(p.aim?'：'+p.aim:''));
-      return '<option value="'+esc(k)+'">'+esc(lab)+'</option>';
+      var title=p.title||p.aim||'';
+      return '<label class="cf-pick"><input class="cf-radio" type="radio" name="cf-pick" value="'+esc(k)+'">'+
+        '<span class="cf-head"><span class="cf-rel">'+esc(candidate.relation)+'</span><span class="cf-date">'+esc(dateLabelISO(k,p.weekday))+'</span></span>'+
+        (title?'<span class="cf-title">'+esc(title)+'</span>':'')+'</label>';
     }).join('');
+    var search='';
+    if(candidates.searchable){
+      var monthOptions=candidates.months.map(function(month){
+        return '<option value="'+esc(month.ym)+'"'+(month.ym===candidates.initialYm?' selected':'')+'>'+esc(month.label)+'</option>';
+      }).join('');
+      var initialMonth=candidates.months.find(function(month){return month.ym===candidates.initialYm;});
+      var initialDates=initialMonth?initialMonth.dates:[];
+      search='<div class="cf-group"><span class="cf-legend">探す</span><div class="cf-search-row">'+
+        '<select class="ed-sel cf-ym" aria-label="年月">'+monthOptions+'</select>'+
+        '<select class="ed-sel cf-day" aria-label="日">'+copySourceDayOptions(initialDates)+'</select>'+
+        '</div></div>';
+    }
     return '<div class="ed-field"><span class="ed-lab">他の日からコピー</span>'+
-      '<div class="ed-copyfrom">'+
-        '<select class="ed-sel" id="ed-copyfrom" style="width:auto;min-width:200px">'+opts+'</select>'+
-        '<button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button>'+
-      '</div></div>';
+      '<input type="hidden" id="ed-copyfrom" value="">'+
+      '<fieldset class="cf-group"><legend class="cf-legend">おすすめ</legend><div class="cf-list">'+recommended+'</div></fieldset>'+
+      search+
+      '<div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div></div>';
+  }
+  function copySourceDayOptions(dates){
+    return '<option value="">日を選んでください…</option>'+dates.map(function(k){
+      var p=PREFILL[k]||{};
+      var title=p.title||p.aim||'';
+      var dayLabel=String(Number(k.slice(8,10)))+'日'+dateLabelISO(k,p.weekday).slice(10)+(title?'：'+title:'');
+      return '<option value="'+esc(k)+'">'+esc(dayLabel)+'</option>';
+    }).join('');
   }
   // 「自動で叩き台を入れる」（旧: 上部ツールバーの単独ボタン）を編集画面の中へ移設した導線。
   // その日のエンジン叩き台（seedPrefill）が無ければ導線を出さない（押しても無反応のボタンにしない）。
@@ -507,9 +566,11 @@ export function editorScript() {
         '<span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span>'+
       '</div></div>';
   }
-  // この日の編集モデルに「中身」があるか（見出し or 名前のある項目）。コピー上書きの確認に使う。
+  // この日の編集モデルに「中身」があるか（ねらい・タイトル・見出し or 名前のある項目）。コピー上書きの確認に使う。
   function modelHasContent(){
     if(!model)return false;
+    if((model.aim||'').trim())return true;
+    if((model.title||'').trim())return true;
     return (model.rows||[]).some(function(r){
       return ['男子','女子','both'].some(function(side){
         var c=cellOf(r,side);
@@ -737,8 +798,9 @@ export function editorScript() {
       return;
     }
     if(act==='export'){exportJson();return;}
-    if(act==='revert-auto'){revertAuto(btn);return;}
+    if(act==='revert-auto'){collectInputs();revertAuto(btn);return;}
     if(act==='load-seed'){
+      collectInputs(); // DOMの最新入力値を取り込んでから「空」を判定する（change未発火の入力欄も拾う）
       var seed=SEEDPREFILL[model.date];
       if(!seed){flash('この日の叩き台はありません');return;}
       if(modelHasContent()&&!window.confirm('いまの内容を、自動生成の叩き台で上書きします。よろしいですか？'))return;
@@ -776,7 +838,7 @@ export function editorScript() {
       var cfSel=panel.querySelector('#ed-copyfrom');
       var srcDate=cfSel?cfSel.value:'';
       if(!srcDate||!PREFILL[srcDate]){flash('コピー元の日を選んでください');return;}
-      if(modelHasContent()&&!window.confirm('いまの内容を、選んだ日の内容で上書きします。よろしいですか？'))return;
+      if(modelHasContent()&&!window.confirm('いまの内容を、'+dateLabelISO(srcDate,PREFILL[srcDate].weekday)+'の内容で置き換えます。よろしいですか？'))return;
       // 取り込み元の中身（ねらい・コート・時間帯）をこの日に複製。日付・曜日はこの日のまま保つ。
       model=normalizeModel(deepClone(PREFILL[srcDate]),model.date,model.weekday);
       renderPanel();
@@ -837,6 +899,31 @@ export function editorScript() {
     }
   }
   function onPanelChange(e){
+    var copyRadio=e.target.closest('.cf-radio');
+    if(copyRadio){
+      var radioHidden=panel.querySelector('#ed-copyfrom');
+      var radioDay=panel.querySelector('.cf-day');
+      if(radioHidden)radioHidden.value=copyRadio.value;
+      if(radioDay)radioDay.value='';
+      return;
+    }
+    var copyDay=e.target.closest('.cf-day');
+    if(copyDay){
+      var dayHidden=panel.querySelector('#ed-copyfrom');
+      if(dayHidden)dayHidden.value=copyDay.value;
+      panel.querySelectorAll('.cf-radio').forEach(function(radio){radio.checked=false;});
+      return;
+    }
+    var copyYm=e.target.closest('.cf-ym');
+    if(copyYm){
+      var selectedMonth=copySourceMonths.find(function(month){return month.ym===copyYm.value;});
+      var monthDay=panel.querySelector('.cf-day');
+      var monthHidden=panel.querySelector('#ed-copyfrom');
+      if(monthDay)monthDay.innerHTML=copySourceDayOptions(selectedMonth?selectedMonth.dates:[]);
+      if(monthHidden)monthHidden.value='';
+      panel.querySelectorAll('.cf-radio').forEach(function(radio){radio.checked=false;});
+      return;
+    }
     // 枠（ブロック）select が変わったら、そのセルのドリル名候補（datalist）を新しい枠に絞り直す。
     // 全体再描画はしない（入力中の値を失わないため）＝該当セルの name input の list 属性だけ差し替える。
     var blockSel=e.target.closest('[data-k="block"]');
@@ -994,6 +1081,7 @@ export function editorScript() {
     row._memo={'男子':deepClone(boys)||blankCell(),'女子':deepClone(girls)||blankCell()};
     row._mergeBase=deepClone(both);
     row.both=both;
+    delete row.split;
   }
   // 共通OFF: both を男女別へ戻す。
   //  共通セルを編集していなければ（ON時点と同一）元の男女別をそのまま復元（別内容を失わない）。
@@ -1009,6 +1097,7 @@ export function editorScript() {
     }
     if(!row['男子'])row['男子']=blankCell();
     if(!row['女子'])row['女子']=blankCell();
+    row.split=true;
     row._memo=null;row._mergeBase=null;row.both=null;
   }
 
@@ -1106,6 +1195,7 @@ export function editorScript() {
         if(!boys&&!girls)return; // 男女とも空なら行を捨てる
         if(boys)out['男子']=boys;
         if(girls)out['女子']=girls;
+        out.split=true;
       }
       rows.push(out);
     });
@@ -1219,7 +1309,7 @@ export function editorScript() {
     panel=null;model=null;editingArticle=null;
   }
 
-  // ── 自動に戻す: サーバの上書きを削除→再読込（サーバが自動生成を再描画）──
+  // ── 自動に戻す: サーバの上書きを削除→対象日を空状態へ局所更新 ──
   // 上部ツールバーから編集画面の中へ移設済み（2026-07-29）。編集中は対象の article が hidden 化されて
   // curDay()（hidden でない .day を探す）が拾えなくなるため、編集中は editingArticle を優先して使う。
   // opener: 押されたボタン（「やめる」/Escで閉じたときに焦点を返す先。確認カード経由の呼び出し用）。
@@ -1228,6 +1318,7 @@ export function editorScript() {
     if(!article){flash('対象の日が表示されていません');return;}
     var date=(article.getAttribute('data-date')||'').trim();
     if(!date){flash('この日は上書き編集の対象外です');return;}
+    var weekday=article.getAttribute('data-day')||'';
     // 破壊的操作（元に戻せない）のため、移設後の誤操作防止として確認カードを挟む（決定書3.2節）。
     // 対象が空（この日に手で入れた内容が無い）なら確認カードを出さず即実行する。
     confirmThen({
@@ -1237,12 +1328,19 @@ export function editorScript() {
       x:'捨てて戻す',icon:'undo',
       opener:opener,
       onExec:function(){
+        var myPanel=panel;
         flash('自動に戻しています…');
         withAuth({'Content-Type':'application/json'})
           .then(function(headers){return fetch(withTenantQ('/api/override/delete'),{method:'POST',headers:headers,body:JSON.stringify({date:date})});})
           .then(function(r){return r.json().catch(function(){return {ok:r.ok};});})
           .then(function(res){
-            if(res&&res.ok){ delete PREFILL[date]; location.reload(); }
+            if(res&&res.ok){
+              delete PREFILL[date];
+              renderEmptyDay(article,date,weekday);
+              if(panel===myPanel)closePanel();
+              article.hidden=false;
+              flash('自動生成に戻しました');
+            }
             else{ flash('戻せませんでした（'+((res&&res.error)||'サーバ応答エラー')+'）'); }
           })
           .catch(function(){ flash('バックエンド未接続のため戻せません（エミュレータ/本番URLで開いてください）'); });

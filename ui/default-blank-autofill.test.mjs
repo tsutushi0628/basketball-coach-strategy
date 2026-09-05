@@ -195,8 +195,8 @@ test('⑩ 月タブの目標パネル: 未入力の今月/今週は「未入力�
   assert.ok(goalsM, '月タブに目標パネル（.goals）が存在する');
   const goals = goalsM[1];
   // 今月・今週の行が「未入力」淡色（es-inline）で出る（空欄でない）。
-  assert.match(goals, /<span class="lab">今月<\/span><span class="txt es-inline">未入力<\/span>/, '今月の未入力が淡色「未入力」で出る');
-  assert.match(goals, /<span class="lab">今週<\/span><span class="txt es-inline">未入力<\/span>/, '今週の未入力が淡色「未入力」で出る');
+  assert.match(goals, /<span class="lab">今月<\/span><span class="txt es-inline"(?: data-goal-val)?>未入力<\/span>/, '今月の未入力が淡色「未入力」で出る');
+  assert.match(goals, /<span class="lab">今週<\/span><span class="txt es-inline"(?: data-goal-val)?>未入力<\/span>/, '今週の未入力が淡色「未入力」で出る');
 });
 
 // ⑧ applyOverridesWithEmpty 単体: 上書きのある日だけ手書き／他は空状態 ──────────────
