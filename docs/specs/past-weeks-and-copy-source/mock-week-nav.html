@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>過去の週へ移動するモック</title>
+<!-- 実画面と同じ見た目にするため、製品の実CSSをそのまま読み込む（読み込み順も実画面と同じ）。
+     週タブ（.pk）・曜日帯・操作3つ・目標バー・空状態は実クラスをそのまま使い、このファイルでは上書きしない。 -->
+<link rel="stylesheet" href="../../../ui/styles/base.css">
+<link rel="stylesheet" href="../../../ui/styles/pattern-timeline.css">
+<link rel="stylesheet" href="../../../ui/styles/editor.css">
+<link rel="stylesheet" href="../../../ui/styles/goal-editor.css">
+<!-- 色は製品の意味ロール層から受ける。値の正本は ui/styles/tokens.css で、この搬送役は承認済みモックと共用。 -->
+<link rel="stylesheet" href="../button-roles-20260730-tokens.css">
+<style>
+/* Hallmark · macrostructure: long-document · genre: modern-minimal
+   · pre-emit critique: P4 H4 E4 S4 R5 V3
+   · tokens: button-roles-20260730-tokens.css (no inline color/font) · nav: none · footer: none
+   · design-system: 製品固有トンマナ（docs/design-system/component-spec.md）に従う。弁コム正本トークンは対象外 */
+html,body{overflow-x:clip}
+
+/* ============ 資料そのものの体裁（製品UIではない・比較資料の地の文用） ============ */
+.doc-h1{font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.4;margin-bottom:8px;overflow-wrap:anywhere;min-width:0}
+.doc-lede{font-size:14px;color:var(--on-surface-muted);line-height:1.75;margin-bottom:28px;max-width:60ch}
+.doc-sec{margin-bottom:40px}
+.doc-h2{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px;overflow-wrap:anywhere;min-width:0}
+.doc-note{font-size:13px;line-height:1.75;color:var(--on-surface);margin-bottom:14px;max-width:64ch}
+.doc-note b{font-weight:700}
+.doc-rule{height:1px;background:var(--line-hairline);margin:36px 0}
+.doc-h3{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--on-label-accent);margin:18px 0 8px}
+/* 製品UIを置く舞台。実画面の .wrap と同じ幅の中に、そのまま置く。 */
+.stage{background:var(--surface-ground);border:1px solid var(--line-hairline);border-radius:14px;padding:18px 16px}
+/* 320pxでは舞台の左右余白を外し、幅条件を実画面（.wrap の内側そのまま）に揃える。 */
+@media (max-width:359px){.stage{padding-left:0;padding-right:0;border:none;border-radius:0}}
+/* ワイヤーフレームの占位（現状のまま変えない領域）。破線は使わない。 */
+.wire{background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:22px 16px;font-size:12px;color:var(--on-surface-muted);line-height:1.6}
+
+/* ============ 足す部品（この2要望で新設する分だけ） ============
+ * 週タブ列 .picker と .pk の見た目・大きさ・並び・ラベルはいっさい変えない。
+ * 足すのは移動手段だけ: 一歩移動（前の週・次の週）、年月で飛ぶ、今週へ戻る。 */
+
+/* 週ナビ全体。上段=年月で飛ぶ＋今週へ戻る、下段=一歩移動＋週タブ列。 */
+.wknav{margin-bottom:16px}
+
+/* 上段: 年月で飛ぶ（入力部品・.ed-sel 流用）と今週へ戻る（移動ロール・語つきピル）。
+ * 今週へ戻るは出ないときも枠を残す（visibility）。現れても他の要素の位置が動かない。 */
+.wk-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:10px}
+.wk-jump-lab{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;white-space:nowrap}
+.wk-jump-sel{width:auto;min-width:0;min-height:44px;padding-top:0;padding-bottom:0;font-variant-numeric:tabular-nums}
+/* パターン7の「開いた状態」展示だけ、ネイティブのドロップダウンの代わりにリストボックスで選択肢を見せる。 */
+.wk-jump-sel[size]{min-height:0;padding:6px 0;overflow:auto}
+.wk-jump-sel[size] option{padding:8px 12px;font-size:14px}
+
+/* 移動ロール（component-spec.md「移動」行の語つき週送り）: 面なし・枠なし・角丸999px・0 8px・11px 700・SVG19px stroke2。
+ * 触れたら --action-move-fill-hover の面が現れ、押したら1px沈む。 */
+.wk-step,.wk-today{appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:44px;padding:0 8px;border-radius:999px;
+  background:var(--action-move-fill);border:none;color:var(--on-action-move);white-space:nowrap;flex:0 0 auto;
+  transition:background-color .14s ease,color .14s ease,transform .14s ease}
+.wk-step svg,.wk-today svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.wk-step:hover:not(:disabled),.wk-today:hover{background:var(--action-move-fill-hover);color:var(--on-action-move-hover)}
+.wk-step:active:not(:disabled),.wk-today:active{transform:translateY(1px)}
+.wk-step:focus-visible,.wk-today:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+/* 押せない（到達下限・未来上限）。文字と記号は死に色に沈み、枠は元々無いので無いまま。反応なし。消さない。 */
+.wk-step:disabled{cursor:not-allowed;color:var(--on-action-disabled);background:var(--action-move-fill);transform:none}
+/* 今週へ戻る: 表示中の週が今週でないときだけ見える。見えないときも同じ幅の枠を残す。 */
+.wk-today{margin-left:auto}
+.wk-today[data-shown="false"]{visibility:hidden}
+
+/* 下段: 一歩移動＋週タブ列。列（.picker）は既存のまま flex-wrap で折り返す。
+ * 414px未満では一歩移動を列の上段へ回し、列に全幅を渡す（曜日帯の週送りと同じ取引。
+ * 320pxでは4枠が2段2枠で並ぶので、左右端に44px+8pxを2つ置くと1段1枠の4段になり、
+ * 一歩移動の幅を詰めても収まらない）。414px以上で列の左右端へ戻す。 */
+.wk-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
+.wk-row .picker{flex:1 1 100%;min-width:0;margin-bottom:0;order:3}
+.wk-row .wk-prev{order:1}
+.wk-row .wk-next{order:2;margin-left:auto}
+@media (min-width:414px){
+  .wk-row{flex-wrap:nowrap}
+  .wk-row .picker{flex:1 1 auto;order:2}
+  .wk-row .wk-next{order:3;margin-left:0}
+}
+
+/* 目標バー: 前の年度の週では月のセルを出さず、週のセルを全幅にする（2セル構成の意匠は年度内のまま）。 */
+.goalbar.goalbar--week-only{grid-template-columns:1fr}
+
+/* 対象幅の当たり（資料用）。実測は ui/e2e/evidence の JSON。 */
+.doc-widths{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--on-surface-muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="doc-h1">過去の週へ移動するモック</h1>
+<p class="doc-lede">週タブ（4枠、「yyyy/mm/dd〜」、オレンジの選択中）はいまのまま。足すのは移動手段の3つで、列の左右に「前の週」「次の週」、列の直上に「年月で飛ぶ」と「今週へ戻る」を置く。日レベルの列と週レベルの列は同じ窓を見せる。設計文書 service-design.md 5.1 の9状態を上から順に並べ、行動分析は ux-analysis.md にある。</p>
+
+<div class="doc-widths"><span>対象幅 320 / 375 / 414 / 768px</span><span>414px未満は一歩移動が列の上段へ回る</span><span>414px以上は列の左右端</span></div>
+
+<div class="doc-rule"></div>
+
+<!-- ============================================================ 1 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">1. 今週を含む窓で今週を選んでいる</h2>
+<p class="doc-note">現状と同じ見え方に移動手段が足された状態。「今週へ戻る」は出ていないが、枠は右端に残っている（出た瞬間に他の要素が動かない）。「前の週」も「次の週」も押せる。下に週レベルの列も示す。どちらを押しても同じ窓が動く。</p>
+<div class="stage">
+  <div class="levels" role="tablist">
+    <button class="lvtab on" type="button">日</button><button class="lvtab" type="button">週</button><button class="lvtab" type="button">月</button><button class="lvtab" type="button">年</button>
+  </div>
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-1">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-1" aria-label="年月で飛ぶ">
+        <option selected>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2026年6月</option><option>2026年5月</option><option>2026年4月</option><option>2026年3月</option><option>2026年2月</option><option>2026年1月</option><option>2025年12月</option><option>2025年11月</option>
+      </select>
+      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek on" type="button">2026/08/30〜</button><button class="pk cal-go-dayweek" type="button">2026/09/06〜</button><button class="pk cal-go-dayweek" type="button">2026/09/13〜</button><button class="pk cal-go-dayweek" type="button">2026/09/20〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="daytoolbar">
+    <div class="daytoolbar-picker">
+      <div class="picker" data-print-hide>
+        <button class="pk cal-go sun" type="button">日<small>08/30</small></button><button class="pk cal-go" type="button">月<small>08/31</small></button><button class="pk cal-go" type="button">火<small>09/01</small></button><button class="pk cal-go" type="button">水<small>09/02</small></button><button class="pk cal-go" type="button">木<small>09/03</small></button><button class="pk cal-go" type="button">金<small>09/04</small></button><button class="pk cal-go on sat" type="button">土<small>09/05</small></button>
+      </div>
+    </div>
+    <div class="daytoolbar-ops" data-print-hide>
+      <div class="op-group" role="group" aria-label="日ビューの操作">
+        <button class="op-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg><span>印刷</span></button>
+        <button class="op-btn op-btn--icon" type="button" title="編集"><span class="sr-only">編集</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg></button>
+        <button class="op-btn op-btn--icon" type="button" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div class="goalbar">
+    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">新チームの守備の型を固める</span></div>
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">ハーフコートの1対1で足を動かす</span></div>
+  </div>
+  <article class="day">
+    <div class="dayhead"><div class="dh-main"><div class="dh-t">2026/09/05（土）<span class="dh-court">全面</span></div><div class="dh-aim"><span class="dh-aiml">この日のねらい</span>ゲーム形式で守備の声を出す</div></div></div>
+    <div class="wire">タイムライン（現状のまま）</div>
+  </article>
+
+  <p class="doc-h3">週レベルの列（同じ窓）</p>
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-1w">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-1w" aria-label="年月で飛ぶ"><option selected>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-week on" type="button">2026/08/30〜</button><button class="pk cal-go-week" type="button">2026/09/06〜</button><button class="pk cal-go-week" type="button">2026/09/13〜</button><button class="pk cal-go-week" type="button">2026/09/20〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="wire">この週の練習（週グリッド。現状のまま）</div>
+</div>
+</section>
+
+<!-- ============================================================ 2 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">2. 「前の週」を1回押した後</h2>
+<p class="doc-note">窓が1週戻り、先頭が「2026/08/23〜」になって選択中がそこへ移る。表示中の週が今週でないので「今週へ戻る」が現れる。年月の表示は「2026年8月」に追従する。曜日帯は 08/23 週へ切り替わり、その週の先頭練習日（火）が見えている。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-2">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-2" aria-label="年月で飛ぶ"><option>2026年9月</option><option selected>2026年8月</option><option>2026年7月</option><option>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="true">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek on" type="button">2026/08/23〜</button><button class="pk cal-go-dayweek" type="button">2026/08/30〜</button><button class="pk cal-go-dayweek" type="button">2026/09/06〜</button><button class="pk cal-go-dayweek" type="button">2026/09/13〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="daytoolbar">
+    <div class="daytoolbar-picker">
+      <div class="picker" data-print-hide>
+        <button class="pk cal-go sun" type="button">日<small>08/23</small></button><button class="pk cal-go" type="button">月<small>08/24</small></button><button class="pk cal-go on" type="button">火<small>08/25</small></button><button class="pk cal-go" type="button">水<small>08/26</small></button><button class="pk cal-go" type="button">木<small>08/27</small></button><button class="pk cal-go" type="button">金<small>08/28</small></button><button class="pk cal-go sat" type="button">土<small>08/29</small></button>
+      </div>
+    </div>
+    <div class="daytoolbar-ops" data-print-hide>
+      <div class="op-group" role="group" aria-label="日ビューの操作">
+        <button class="op-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 12h.01"/></svg><span>印刷</span></button>
+        <button class="op-btn op-btn--icon" type="button" title="編集"><span class="sr-only">編集</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1v-7"/><path d="m15.5 4.5 4 4L9 19l-5 1 1-5z"/></svg></button>
+        <button class="op-btn op-btn--icon" type="button" title="テキストとしてコピー"><span class="sr-only">テキストとしてコピー</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8l3 3v11H8z"/><path d="M16 5v4h4M11 12h5M11 15h5M5 8v11h10"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div class="wire">目標バーと日の本体は 3 と 4 に示す</div>
+</div>
+</section>
+
+<!-- ============================================================ 3 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">3. 過去週の上書きあり日</h2>
+<p class="doc-note">2 の続きで 08/25（火）を見ている。上書きのある日は普段どおりの手書き表示で、編集も印刷もテキストコピーもできる。目標バーは今日と同じ年度なので2セルのまま（月のセルは8月の目標）。「自動で叩き台を入れる」の導線は過去週には出ない。</p>
+<div class="stage">
+  <div class="goalbar">
+    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">夏の大会の反省を新チームの型に落とす</span></div>
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">シュートの回転と足の向きを揃える</span></div>
+  </div>
+  <article class="day">
+    <div class="dayhead"><div class="dh-main"><div class="dh-t">2026/08/25（火）<span class="dh-court">半面</span></div><div class="dh-aim"><span class="dh-aiml">この日のねらい</span>シュート強化。キャッチからの足の向きまで</div></div></div>
+    <div class="wire">タイムライン（男女2列。現状のまま）</div>
+  </article>
+</div>
+</section>
+
+<!-- ============================================================ 4 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">4. 過去週の上書きなし日</h2>
+<p class="doc-note">2 の続きで 08/27（木）を見ている。過去の週で入力の無い日は「記録なし」の空状態で、導線は「この日の記録を入力する」の1つだけ。叩き台の導線は出さない（叩き台は今週から先へ進む既習連鎖の産物で、過去に生成すると既習が矛盾する）。空状態の箱は現状の .emptystate、ボタンは現状の .btn。</p>
+<div class="stage">
+  <div class="picker" data-print-hide>
+    <button class="pk cal-go sun" type="button">日<small>08/23</small></button><button class="pk cal-go" type="button">月<small>08/24</small></button><button class="pk cal-go" type="button">火<small>08/25</small></button><button class="pk cal-go" type="button">水<small>08/26</small></button><button class="pk cal-go on" type="button">木<small>08/27</small></button><button class="pk cal-go" type="button">金<small>08/28</small></button><button class="pk cal-go sat" type="button">土<small>08/29</small></button>
+  </div>
+  <div class="goalbar">
+    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">夏の大会の反省を新チームの型に落とす</span></div>
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">シュートの回転と足の向きを揃える</span></div>
+  </div>
+  <article class="day">
+    <div class="dayhead"><div class="dh-main"><div class="dh-t">2026/08/27（木）<span class="dh-court">半面</span></div></div></div>
+    <div class="emptystate">
+      <p class="es-text">この日の記録はありません。</p>
+      <div class="es-actions"><button type="button" class="btn" data-print-hide>この日の記録を入力する</button></div>
+    </div>
+  </article>
+</div>
+</section>
+
+<!-- ============================================================ 5 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">5. 到達下限で「前の週」が押せない</h2>
+<p class="doc-note">このテナントで最も古い上書き日が 2025/11/11（火）の例。窓の先頭がその週（2025/11/09〜）に着くと「前の週」は押せない状態になる。文字と記号は死に色に沈み、枠は元々無いので無いまま。消さないので列の位置は動かない。年月の選択肢もここが最古。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-5">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-5" aria-label="年月で飛ぶ"><option>2026年9月</option><option>2026年8月</option><option>2025年12月</option><option selected>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="true">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek on" type="button">2025/11/09〜</button><button class="pk cal-go-dayweek" type="button">2025/11/16〜</button><button class="pk cal-go-dayweek" type="button">2025/11/23〜</button><button class="pk cal-go-dayweek" type="button">2025/11/30〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="picker" data-print-hide>
+    <button class="pk cal-go sun" type="button">日<small>11/09</small></button><button class="pk cal-go" type="button">月<small>11/10</small></button><button class="pk cal-go on" type="button">火<small>11/11</small></button><button class="pk cal-go" type="button">水<small>11/12</small></button><button class="pk cal-go" type="button">木<small>11/13</small></button><button class="pk cal-go" type="button">金<small>11/14</small></button><button class="pk cal-go sat" type="button">土<small>11/15</small></button>
+  </div>
+  <div class="goalbar goalbar--week-only">
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">区の新人大会に向けたセットの確認</span></div>
+  </div>
+  <div class="wire">2025/11/11（火）の手書き表示（前の年度なので月のセルは無い。9 を参照）</div>
+</div>
+</section>
+
+<!-- ============================================================ 6 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">6. 未来上限で「次の週」が押せない</h2>
+<p class="doc-note">今週の窓のまま末尾の「2026/09/20〜」を選んでいる。未来は今週＋3週で止まるので「次の週」は押せない。表示中の週が今週でないので「今週へ戻る」は出る（過去側だけに限らない。ux-analysis.md 4章）。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-6">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-6" aria-label="年月で飛ぶ"><option selected>2026年9月</option><option>2026年8月</option><option>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="true">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek" type="button">2026/08/30〜</button><button class="pk cal-go-dayweek" type="button">2026/09/06〜</button><button class="pk cal-go-dayweek" type="button">2026/09/13〜</button><button class="pk cal-go-dayweek on" type="button">2026/09/20〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週" disabled>次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="wire">09/20 週の曜日帯と日（現状のまま。未来週なので叩き台の導線は残る）</div>
+</div>
+</section>
+
+<!-- ============================================================ 7 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">7. 「年月で飛ぶ」を開いた状態</h2>
+<p class="doc-note">選択肢は到達範囲内の年月だけ（最古の上書き 2025年11月 から 今週＋3週の 2026年9月 まで）を新しい順に並べる。範囲外の年月は出さないので、選んで空の週に落ちることがない。選ぶと窓がその月の第1週に合い、第1週の先頭練習日が見える。実装はネイティブの select のままで、開いた姿は端末ごとの標準ピッカーになる。ここでは選択肢の中身を見せるためにリストボックスで展示している。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-7">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-7" aria-label="年月で飛ぶ" size="11">
+        <option selected>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2026年6月</option><option>2026年5月</option><option>2026年4月</option><option>2026年3月</option><option>2026年2月</option><option>2026年1月</option><option>2025年12月</option><option>2025年11月</option>
+      </select>
+      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 8 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">8. 今日と同じ年度の過去週の目標バー</h2>
+<p class="doc-note">2026/06/14 週（月曜 06/15 は2026年度）。月のセルはその週の月（6月）の目標を出し、そのまま編集できる。見た目は現状の2セルのまま。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-8">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-8" aria-label="年月で飛ぶ"><option>2026年9月</option><option selected>2026年6月</option><option>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="true">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek on" type="button">2026/06/14〜</button><button class="pk cal-go-dayweek" type="button">2026/06/21〜</button><button class="pk cal-go-dayweek" type="button">2026/06/28〜</button><button class="pk cal-go-dayweek" type="button">2026/07/05〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="goalbar">
+    <div class="gb-cell"><span class="gb-lab">月の目標</span><span class="gb-val">夏の大会で3年生を出し切る</span></div>
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">セットの最終確認とフリースロー</span></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 9 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">9. 前の年度の週の目標バー</h2>
+<p class="doc-note">2026/03/22 週（月曜 03/23 は2025年度）。月の目標のキーは年を持たないので、去年の3月の目標は今年の3月の文書と同じになり、表示しても去年の内容にならない。月のセルを出さず、週のセルだけを全幅で出す。窓の3枠目「2026/04/05〜」（月曜 04/06）からは2026年度に入るので、そこへ移ると月のセルが戻る。</p>
+<div class="stage">
+  <div class="wknav" data-print-hide>
+    <div class="wk-jump">
+      <label class="wk-jump-lab" for="jump-9">年月で飛ぶ</label>
+      <select class="ed-sel wk-jump-sel" id="jump-9" aria-label="年月で飛ぶ"><option>2026年9月</option><option selected>2026年3月</option><option>2025年11月</option></select>
+      <button class="wk-today" type="button" data-shown="true">今週へ戻る</button>
+    </div>
+    <div class="wk-row">
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <div class="picker">
+        <button class="pk cal-go-dayweek on" type="button">2026/03/22〜</button><button class="pk cal-go-dayweek" type="button">2026/03/29〜</button><button class="pk cal-go-dayweek" type="button">2026/04/05〜</button><button class="pk cal-go-dayweek" type="button">2026/04/12〜</button>
+      </div>
+      <button class="wk-step wk-next" type="button" aria-label="次の週">次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="goalbar goalbar--week-only">
+    <div class="gb-cell"><span class="gb-lab">週の目標</span><span class="gb-val">研修大会の振り返りと新年度の準備</span></div>
+  </div>
+</div>
+</section>
+
+</div>
+</body>
+</html>

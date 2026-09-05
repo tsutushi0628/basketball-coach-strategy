@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>コピー元の選び方モック</title>
+<!-- 実画面と同じ見た目にするため、製品の実CSSをそのまま読み込む（読み込み順も実画面と同じ）。
+     編集パネル（.ed-panel）・3択（.modetoggle）・入力欄（.ed-in/.ed-sel）・取り込みボタン（.ed-mini）・
+     確認カード（.ed-cd）は実クラスをそのまま使い、このファイルでは上書きしない。 -->
+<link rel="stylesheet" href="../../../ui/styles/base.css">
+<link rel="stylesheet" href="../../../ui/styles/pattern-timeline.css">
+<link rel="stylesheet" href="../../../ui/styles/editor.css">
+<!-- 色は製品の意味ロール層から受ける。値の正本は ui/styles/tokens.css で、この搬送役は承認済みモックと共用。 -->
+<link rel="stylesheet" href="../button-roles-20260730-tokens.css">
+<style>
+/* Hallmark · macrostructure: long-document · genre: modern-minimal
+   · pre-emit critique: P4 H4 E4 S4 R5 V3
+   · tokens: button-roles-20260730-tokens.css (no inline color/font) · nav: none · footer: none
+   · design-system: 製品固有トンマナ（docs/design-system/component-spec.md）に従う。弁コム正本トークンは対象外 */
+html,body{overflow-x:clip}
+
+/* ============ 資料そのものの体裁（製品UIではない・比較資料の地の文用） ============ */
+.doc-h1{font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.4;margin-bottom:8px;overflow-wrap:anywhere;min-width:0}
+.doc-lede{font-size:14px;color:var(--on-surface-muted);line-height:1.75;margin-bottom:28px;max-width:60ch}
+.doc-sec{margin-bottom:40px}
+.doc-h2{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px;overflow-wrap:anywhere;min-width:0}
+.doc-note{font-size:13px;line-height:1.75;color:var(--on-surface);margin-bottom:14px;max-width:64ch}
+.doc-rule{height:1px;background:var(--line-hairline);margin:36px 0}
+.stage{background:var(--surface-ground);border:1px solid var(--line-hairline);border-radius:14px;padding:18px 16px}
+/* 320pxでは舞台の左右余白を外し、幅条件を実画面（.wrap の内側そのまま）に揃える。
+ * 3択の器は320pxで余裕が4.66pxしかなく（component-spec.md）、舞台の余白32pxを足すと実画面には無いはみ出しが出るため。 */
+@media (max-width:359px){.stage{padding-left:0;padding-right:0;border:none;border-radius:0}}
+.wire{background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;padding:22px 16px;font-size:12px;color:var(--on-surface-muted);line-height:1.6}
+/* 6 の確認カードは覆いごと舞台の中に静止させる（実装は fixed で画面中央）。
+ * 舞台の内側余白を外し、カードの幅条件を実装（視口幅−32px）に寄せる。 */
+.stage--flush{padding:0}
+.stage .ed-cd{position:relative;inset:auto;min-height:260px;border-radius:14px;overflow:hidden}
+.stage .ed-cd-scrim{border-radius:14px}
+
+/* ============ 足す部品（「他の日からコピー」の中身だけ） ============
+ * 枠の位置（3択の下、叩き台の上）と取り込みボタン（.ed-mini「この日を取り込む」）は現状のまま。
+ * 置き換えるのは <select> 全件一覧の部分だけで、「おすすめ」と「探す」を縦に積む。 */
+
+/* 枠見出し（おすすめ / 探す）。押せない見出しラベルの姿（12px 700 字間.04em 下線なし）。 */
+.cf-group{margin:0 0 10px;padding:0;border:none;min-width:0}
+.cf-legend{display:block;font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;margin-bottom:6px;padding:0}
+
+/* おすすめの1行。入力部品（1つを選ぶラジオ）なので状態ロールは借りず、入力欄と同じカード面と弱い罫線で描く。
+ * 入った印は本文前景の丸で示す。行全体が押せる（44px以上）。 */
+.cf-list{display:flex;flex-direction:column;gap:6px}
+.cf-pick{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:2px;align-items:start;
+  min-height:44px;padding:9px 12px;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;cursor:pointer;
+  transition:background-color .14s ease}
+.cf-pick:hover{background:var(--surface-ground)}
+.cf-pick:focus-within{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cf-radio{appearance:none;margin:3px 0 0;width:18px;height:18px;flex:0 0 auto;grid-row:1 / span 2;
+  background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:50%;cursor:pointer}
+.cf-radio:checked{box-shadow:inset 0 0 0 5px var(--on-surface)}
+.cf-radio:focus-visible{outline:none}
+.cf-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
+.cf-rel{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;white-space:nowrap}
+.cf-date{font-size:14px;font-weight:600;color:var(--on-surface);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cf-title{font-size:14px;color:var(--on-surface-muted);line-height:1.5;min-width:0;overflow-wrap:anywhere}
+
+/* 探す: 年月で絞ってから日を選ぶ2段。どちらも入力部品（.ed-sel 流用・高さ44px）。 */
+.cf-search-row{display:flex;flex-wrap:wrap;gap:8px}
+.cf-ym,.cf-day{width:auto;min-width:0;min-height:44px;padding-top:0;padding-bottom:0;font-variant-numeric:tabular-nums}
+.cf-ym{flex:0 1 auto}
+.cf-day{flex:1 1 200px;max-width:100%}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="doc-h1">コピー元の選び方モック</h1>
+<p class="doc-lede">「他の日からコピー」の枠は編集パネルの現在位置（男女オンリーの3択の下、自動の叩き台の上）のまま。取り込みボタンと上書き確認の流れも変えない。置き換えるのは全件一覧の select の部分だけで、「おすすめ」（最大3件、関係語つき）と「探す」（年月で絞ってから日を選ぶ）を縦に積む。設計文書 service-design.md 5.1 の6状態を上から順に並べ、行動分析は ux-analysis.md にある。</p>
+
+<div class="doc-rule"></div>
+
+<!-- ============================================================ 1 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">1. 候補0件</h2>
+<p class="doc-note">テナント全体で保存済みの日が無い。現状の案内文をそのまま出す。保存済みが編集中の日だけのときは現状どおり何も出さない（枠ごと消える）。</p>
+<div class="stage">
+  <div class="ed-panel">
+    <div class="ed-h">この日を編集（2026/09/08（火））</div>
+    <div class="ed-field"><div class="modetoggle" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div></div>
+    <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+      <p class="ed-hint">コピーできる保存済みの日がまだありません。他の日を保存すると、ここから選べるようになります。</p>
+    </div>
+    <div class="ed-field"><span class="ed-lab">自動の叩き台</span><div class="ed-copyfrom"><button type="button" class="ed-mini">叩き台を読み込む</button><span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span></div></div>
+    <div class="ed-field"><span class="ed-lab">この日のねらい</span><textarea class="ed-in" rows="3" placeholder="この日のねらい（改行できます）"></textarea></div>
+    <div class="wire">コート、時間の行、保存とキャンセル（現状のまま）</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 2 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">2. 少数（おすすめだけ）</h2>
+<p class="doc-note">保存済みの日が編集中の日を除いて2件しか無く、全部おすすめに載る。「探す」は出さない。おすすめの並びは上から「直近の同じ曜日」「前回の練習日」「去年の同じ頃」で、無い項目は空の枠を出さず詰める。関係語の曜日は実際の曜日名で書く。</p>
+<div class="stage">
+  <div class="ed-panel">
+    <div class="ed-h">この日を編集（2026/09/08（火））</div>
+    <div class="ed-field"><div class="modetoggle" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div></div>
+    <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+      <fieldset class="cf-group">
+        <legend class="cf-legend">おすすめ</legend>
+        <div class="cf-list">
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf2" value="2026-09-01"><span class="cf-head"><span class="cf-rel">直近の火曜</span><span class="cf-date">2026/09/01（火）</span></span><span class="cf-title">シュート強化</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf2" value="2026-09-05"><span class="cf-head"><span class="cf-rel">前回の練習日</span><span class="cf-date">2026/09/05（土）</span></span><span class="cf-title">ゲーム形式で守備の声を出す</span></label>
+        </div>
+      </fieldset>
+      <div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div>
+    </div>
+    <div class="ed-field"><span class="ed-lab">自動の叩き台</span><div class="ed-copyfrom"><button type="button" class="ed-mini">叩き台を読み込む</button><span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span></div></div>
+    <div class="wire">この日のねらい、コート、時間の行、保存とキャンセル（現状のまま）</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 3 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">3. 多数（おすすめ3件と探す）</h2>
+<p class="doc-note">保存済みの日が1年以上あり、おすすめに載らない日がある。「おすすめ」3件の下に「探す」を出す。探すの年月は上書きのある年月だけを新しい順に並べ、初期値は編集中の日の月に候補があればその月。日の選択肢はその月の上書き日を日付順に並べ、年月を繰り返さない。ここでは1件目「直近の火曜」を選んだ状態。取り込みボタンは1つで、おすすめと探すのどちらで選んでも同じボタンに集約する。</p>
+<div class="stage">
+  <div class="ed-panel">
+    <div class="ed-h">この日を編集（2026/09/08（火））</div>
+    <div class="ed-field"><div class="modetoggle" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div></div>
+    <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+      <fieldset class="cf-group">
+        <legend class="cf-legend">おすすめ</legend>
+        <div class="cf-list">
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf3" value="2026-09-01" checked><span class="cf-head"><span class="cf-rel">直近の火曜</span><span class="cf-date">2026/09/01（火）</span></span><span class="cf-title">シュート強化</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf3" value="2026-09-05"><span class="cf-head"><span class="cf-rel">前回の練習日</span><span class="cf-date">2026/09/05（土）</span></span><span class="cf-title">ゲーム形式で守備の声を出す</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf3" value="2025-09-09"><span class="cf-head"><span class="cf-rel">去年の同じ頃</span><span class="cf-date">2025/09/09（火）</span></span><span class="cf-title">新チーム初のセットオフェンス</span></label>
+        </div>
+      </fieldset>
+      <div class="cf-group">
+        <span class="cf-legend">探す</span>
+        <div class="cf-search-row">
+          <select class="ed-sel cf-ym" aria-label="年月"><option selected>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2026年6月</option><option>2026年5月</option><option>2026年4月</option><option>2026年3月</option><option>2026年2月</option><option>2026年1月</option><option>2025年12月</option><option>2025年11月</option></select>
+          <select class="ed-sel cf-day" aria-label="日"><option value="" selected>日を選んでください…</option><option>1日（火）：シュート強化</option><option>3日（木）：走り込みとパス</option><option>5日（土）：ゲーム形式で守備の声を出す</option></select>
+        </div>
+      </div>
+      <div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div>
+    </div>
+    <div class="ed-field"><span class="ed-lab">自動の叩き台</span><div class="ed-copyfrom"><button type="button" class="ed-mini">叩き台を読み込む</button><span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span></div></div>
+    <div class="wire">この日のねらい、コート、時間の行、保存とキャンセル（現状のまま）</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 4 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">4. 「去年の同じ頃」が無い（おすすめ2件）</h2>
+<p class="doc-note">データが1年未満で、基準日の364日前を中心にした前後3週に上書きが無い。おすすめは2件に短くなり、空の枠は出さない。多数なので「探す」は出す。</p>
+<div class="stage">
+  <div class="ed-panel">
+    <div class="ed-h">この日を編集（2026/09/08（火））</div>
+    <div class="ed-field"><div class="modetoggle" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div></div>
+    <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+      <fieldset class="cf-group">
+        <legend class="cf-legend">おすすめ</legend>
+        <div class="cf-list">
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf4" value="2026-09-01"><span class="cf-head"><span class="cf-rel">直近の火曜</span><span class="cf-date">2026/09/01（火）</span></span><span class="cf-title">シュート強化</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf4" value="2026-09-05"><span class="cf-head"><span class="cf-rel">前回の練習日</span><span class="cf-date">2026/09/05（土）</span></span><span class="cf-title">ゲーム形式で守備の声を出す</span></label>
+        </div>
+      </fieldset>
+      <div class="cf-group">
+        <span class="cf-legend">探す</span>
+        <div class="cf-search-row">
+          <select class="ed-sel cf-ym" aria-label="年月"><option selected>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2026年6月</option><option>2026年5月</option></select>
+          <select class="ed-sel cf-day" aria-label="日"><option value="" selected>日を選んでください…</option><option>1日（火）：シュート強化</option><option>3日（木）：走り込みとパス</option><option>5日（土）：ゲーム形式で守備の声を出す</option></select>
+        </div>
+      </div>
+      <div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div>
+    </div>
+    <div class="wire">自動の叩き台、この日のねらい、コート、時間の行、保存とキャンセル（現状のまま）</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 5 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">5. 「探す」で別の年月に切り替えた後</h2>
+<p class="doc-note">去年の新人大会前を持ってくる場面。年月を「2025年11月」に切り替えると日の選択肢がその月の上書き日に入れ替わり、「18日（火）：区新人前のセット確認」を選んでいる。選択は1つの持ち場なので、探すで日を選んだ時点でおすすめの選択は外れる（逆も同じ）。</p>
+<div class="stage">
+  <div class="ed-panel">
+    <div class="ed-h">この日を編集（2026/09/08（火））</div>
+    <div class="ed-field"><div class="modetoggle" role="group" aria-label="男女オンリーの切り替え"><button class="mt" type="button">女子のみ</button><button class="mt" type="button">男子のみ</button><button class="mt on" type="button">男女両方</button></div></div>
+    <div class="ed-field"><span class="ed-lab">他の日からコピー</span>
+      <fieldset class="cf-group">
+        <legend class="cf-legend">おすすめ</legend>
+        <div class="cf-list">
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf5" value="2026-09-01"><span class="cf-head"><span class="cf-rel">直近の火曜</span><span class="cf-date">2026/09/01（火）</span></span><span class="cf-title">シュート強化</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf5" value="2026-09-05"><span class="cf-head"><span class="cf-rel">前回の練習日</span><span class="cf-date">2026/09/05（土）</span></span><span class="cf-title">ゲーム形式で守備の声を出す</span></label>
+          <label class="cf-pick"><input class="cf-radio" type="radio" name="cf5" value="2025-09-09"><span class="cf-head"><span class="cf-rel">去年の同じ頃</span><span class="cf-date">2025/09/09（火）</span></span><span class="cf-title">新チーム初のセットオフェンス</span></label>
+        </div>
+      </fieldset>
+      <div class="cf-group">
+        <span class="cf-legend">探す</span>
+        <div class="cf-search-row">
+          <select class="ed-sel cf-ym" aria-label="年月"><option>2026年9月</option><option>2026年8月</option><option>2026年7月</option><option>2026年6月</option><option>2026年5月</option><option>2026年4月</option><option>2026年3月</option><option>2026年2月</option><option>2026年1月</option><option>2025年12月</option><option selected>2025年11月</option></select>
+          <select class="ed-sel cf-day" aria-label="日"><option value="">日を選んでください…</option><option>4日（火）：ゾーンの入り方</option><option>6日（木）：速攻の判断</option><option>11日（火）：区新人前のセット確認</option><option>13日（木）：フリースローとリバウンド</option><option selected>18日（火）：区新人前のセット確認</option><option>20日（木）：ゲーム形式</option><option>25日（火）：試合前日の調整</option></select>
+        </div>
+      </div>
+      <div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div>
+    </div>
+    <div class="wire">自動の叩き台、この日のねらい、コート、時間の行、保存とキャンセル（現状のまま）</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ 6 ============================================================ -->
+<section class="doc-sec">
+<h2 class="doc-h2">6. 取り込み前の上書き確認</h2>
+<p class="doc-note">編集中の日に中身があるときだけ、「この日を取り込む」を押した瞬間に止める。空の日は確認なしで取り込む。文言は失う対象と写るものを名指す。実装は現状 window.confirm で、確認カード（.ed-cd）への載せ替えは行の削除と同じ姿になるが別タスク。このモックは文言と2つの答えの並び（やめるが左、実行が右）を示す。</p>
+<div class="stage stage--flush">
+  <div class="ed-cd" role="dialog" aria-modal="true" aria-labelledby="cd-h" aria-describedby="cd-b">
+    <div class="ed-cd-scrim"></div>
+    <div class="ed-cd-card" tabindex="-1">
+      <p class="ed-cd-h" id="cd-h">いまの内容を、2025/11/18（火）の内容で置き換えます。</p>
+      <p class="ed-cd-b" id="cd-b">ねらい、コート、時間割と項目をこの日に写します。日付と曜日はこの日のまま、週と月の目標は写しません。</p>
+      <div class="rc-actions">
+        <button type="button" class="ed-cd-btn rc-cancel">やめる</button>
+        <button type="button" class="ed-cd-btn rc-exec"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>取り込む</button>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+</div>
+</body>
+</html>

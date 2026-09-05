@@ -144,6 +144,11 @@ export function emptyDayActions() {
     `<button type="button" class="btn" data-empty-act="seed" data-print-hide>自動で叩き台を入れる</button>`;
 }
 
+/** 過去日の記録なし状態の導線。過去には自動の叩き台を生成しない。 */
+export function noRecordDayActions() {
+  return `<button type="button" class="btn" data-empty-act="blank" data-print-hide>この日の記録を入力する</button>`;
+}
+
 /** 日ヘッダ（曜日・コート・時間・本日の狙い）。印刷時は右側に月/週の目標を横並びにして行を稼ぐ。 */
 export function dayHeader(pd, month, goals) {
   // 見出しの日付表記: 実日付があれば「6/23（火）」、無ければ従来の「N月 火曜」。
@@ -481,6 +486,59 @@ export function clientScript() {
   var dts=document.querySelectorAll('.cal-go');           // 各週の日ピッカーのボタン（data-date付き）
   var dws=document.querySelectorAll('.cal-go-dayweek');   // 日レベルの週セレクタ（data-dayweek）
   var wts=document.querySelectorAll('.cal-go-week');      // 週レベルの週タブ（data-go）
+  var weekNavNodes=document.querySelectorAll('.wknav');
+  var firstWeekNav=weekNavNodes.length?weekNavNodes[0]:null;
+  var firstWeekTabs=firstWeekNav?firstWeekNav.querySelectorAll('.picker .pk'):[];
+  var orderAttr=firstWeekTabs.length&&firstWeekTabs[0].hasAttribute('data-dayweek')?'data-dayweek':'data-go';
+  var ORDER=[];
+  for(var oi=0;oi<firstWeekTabs.length;oi++){ORDER.push(firstWeekTabs[oi].getAttribute(orderAttr));}
+  var WIN=4;
+  var TODAY_KEY=firstWeekNav?firstWeekNav.getAttribute('data-today-week'):null;
+  var TODAY_IDX=TODAY_KEY?ORDER.indexOf(TODAY_KEY):-1;
+  var winStart=TODAY_IDX>=0?TODAY_IDX:0;
+  var selectedWeek=TODAY_KEY;
+
+  function selectedMonthValue(select,selectedIdx){
+    var bestIdx=-1;
+    var bestValue='';
+    for(var i=0;i<select.options.length;i++){
+      var optionIdx=ORDER.indexOf(select.options[i].getAttribute('data-week'));
+      if(optionIdx<=selectedIdx&&optionIdx>bestIdx){
+        bestIdx=optionIdx;
+        bestValue=select.options[i].value;
+      }
+    }
+    return bestValue;
+  }
+  function applyWindow(){
+    if(!ORDER.length)return;
+    var selectedIdx=ORDER.indexOf(selectedWeek);
+    if(selectedIdx<0)throw new Error('選択週が週ナビの順序にありません: '+selectedWeek);
+    if(selectedIdx<winStart)winStart=selectedIdx;
+    if(selectedIdx>=winStart+WIN)winStart=selectedIdx-WIN+1;
+    var maxStart=Math.max(0,ORDER.length-WIN);
+    if(winStart<0)winStart=0;
+    if(winStart>maxStart)winStart=maxStart;
+    weekNavNodes.forEach(function(nav){
+      var navTabs=nav.querySelectorAll('.cal-go-dayweek,.cal-go-week');
+      navTabs.forEach(function(tab){
+        var key=tab.hasAttribute('data-dayweek')?tab.getAttribute('data-dayweek'):tab.getAttribute('data-go');
+        var idx=ORDER.indexOf(key);
+        tab.hidden=idx<winStart||idx>=winStart+WIN;
+      });
+      var prev=nav.querySelector('.wk-prev');
+      var next=nav.querySelector('.wk-next');
+      var today=nav.querySelector('.wk-today');
+      var select=nav.querySelector('.wk-jump-sel');
+      if(prev)prev.disabled=winStart===0;
+      if(next)next.disabled=winStart+WIN>=ORDER.length;
+      if(today)today.setAttribute('data-shown',selectedWeek===TODAY_KEY?'false':'true');
+      if(select){
+        var monthValue=selectedMonthValue(select,selectedIdx);
+        if(monthValue)select.value=monthValue;
+      }
+    });
+  }
   // ある .day[data-date] が属する .daywk[data-week] のキーを返す。
   function weekKeyOfDay(node){
     var wk=node&&node.closest?node.closest('.daywk'):null;
@@ -498,6 +556,8 @@ export function clientScript() {
     dws.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-dayweek')===weekKey);});
     document.querySelectorAll('.wkpanel[data-week]').forEach(function(p){p.hidden=p.getAttribute('data-week')!==weekKey;});
     wts.forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===weekKey);});
+    selectedWeek=weekKey;
+    applyWindow();
   }
   // 指定ISOの日だけを可視にする（全 .day を一旦 hidden→該当1つだけ表示）。属する週（日レベル・
   // 週レベルの両方）は selectWeek で同時に揃える。
@@ -547,6 +607,35 @@ export function clientScript() {
     var iso=defaultDateOfWeek(weekKey,todayISO());
     if(iso){showDayByDate(iso);}else{selectWeek(weekKey);}
   }
+  function stepWeek(delta){
+    var nextStart=winStart+delta;
+    if(nextStart<0||nextStart+WIN>ORDER.length)return;
+    winStart=nextStart;
+    goToWeek(ORDER[winStart]);
+  }
+  function jumpToMonth(select){
+    var option=select&&select.options[select.selectedIndex];
+    var weekKey=option&&option.getAttribute('data-week');
+    var idx=ORDER.indexOf(weekKey);
+    if(idx<0)throw new Error('年月ジャンプの週が週ナビの順序にありません: '+weekKey);
+    winStart=Math.min(idx,Math.max(0,ORDER.length-WIN));
+    goToWeek(weekKey);
+  }
+  function goToday(){
+    if(TODAY_IDX<0)return;
+    winStart=TODAY_IDX;
+    goToWeek(TODAY_KEY);
+  }
+  weekNavNodes.forEach(function(nav){
+    var prev=nav.querySelector('.wk-prev');
+    var next=nav.querySelector('.wk-next');
+    var today=nav.querySelector('.wk-today');
+    var select=nav.querySelector('.wk-jump-sel');
+    if(prev)prev.addEventListener('click',function(){stepWeek(-1);});
+    if(next)next.addEventListener('click',function(){stepWeek(1);});
+    if(today)today.addEventListener('click',goToday);
+    if(select)select.addEventListener('change',function(){jumpToMonth(select);});
+  });
   // 週セレクタ（日レベル）: 選んだ週へ切り替える。
   dws.forEach(function(b){b.addEventListener('click',function(){goToWeek(b.getAttribute('data-dayweek'));});});
   // 週タブ（週レベル）: 選んだ週へ切り替える。日レベルの週セレクタと同じ goToWeek 入口を通すことで、

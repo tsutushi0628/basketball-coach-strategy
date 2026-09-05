@@ -97,6 +97,27 @@ textarea.ed-in{min-height:64px;resize:vertical}
 .ed-export-area[hidden]{display:none}
 /* 他の日からコピーの行（セレクタ＋取り込みボタン） */
 .ed-copyfrom{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* 他の日からコピー: おすすめ＋年月から探す（承認済みモックのクラス・配置を移植） */
+.cf-group{margin:0 0 10px;padding:0;border:none;min-width:0}
+.cf-legend{display:block;font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;margin-bottom:6px;padding:0}
+.cf-list{display:flex;flex-direction:column;gap:6px}
+.cf-pick{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:2px;align-items:start;
+  min-height:44px;padding:9px 12px;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;cursor:pointer;
+  transition:background-color .14s ease}
+.cf-pick:hover{background:var(--surface-ground)}
+.cf-pick:focus-within{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cf-radio{appearance:none;margin:3px 0 0;width:18px;height:18px;flex:0 0 auto;grid-row:1 / span 2;
+  background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:50%;cursor:pointer}
+.cf-radio:checked{box-shadow:inset 0 0 0 5px var(--on-surface)}
+.cf-radio:focus-visible{outline:none}
+.cf-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
+.cf-rel{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;white-space:nowrap}
+.cf-date{font-size:14px;font-weight:600;color:var(--on-surface);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cf-title{font-size:14px;color:var(--on-surface-muted);line-height:1.5;min-width:0;overflow-wrap:anywhere}
+.cf-search-row{display:flex;flex-wrap:wrap;gap:8px}
+.cf-ym,.cf-day{width:auto;min-width:0;min-height:44px;padding-top:0;padding-bottom:0;font-variant-numeric:tabular-nums}
+.cf-ym{flex:0 1 auto}
+.cf-day{flex:1 1 200px;max-width:100%}
 /* コピー元が1件も無いときの案内文（border帯にせず既存 mute トーンの地の文で出す） */
 .ed-hint{font-size:12px;color:var(--on-surface-muted);line-height:1.5;margin:0}
 /* 編集中は日・週・月・レベルの移動を止める（別の日へ移ると編集パネルが取り残されるため） */

@@ -284,10 +284,34 @@
 /* 状態ロール（曜日ピッカーの選択中／未選択）。裁定3.1節: 土日の色参照は落とし、曜日名の文字だけで週末を伝える。
  * 反応表3.6節: 状態は位置で返す（触れたら2px浮く・押したら1px沈む）。 */
 .pk{appearance:none;border:1px solid var(--state-idle-line);background:var(--state-idle-fill);color:var(--on-state-idle);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:46px;text-align:center;cursor:pointer;transition:transform .14s ease}
+.pk[hidden]{display:none}
 .pk small{font-weight:400;font-size:11px;opacity:.85}
 .pk:hover{transform:translateY(-2px)}
 .pk:active{transform:translateY(1px)}
 .pk.on{background:var(--state-selected-fill);color:var(--on-state-selected);border-color:var(--state-selected-ring)}
+
+.wknav{margin-bottom:16px}
+.wk-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:10px}
+.wk-jump-lab{font-size:12px;font-weight:700;color:var(--on-label-accent);letter-spacing:.04em;white-space:nowrap}
+.wk-jump-sel{width:auto;min-width:0;min-height:44px;padding-top:0;padding-bottom:0;font-variant-numeric:tabular-nums}
+.wk-step,.wk-today{appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:44px;padding:0 8px;border-radius:999px;background:var(--action-move-fill);border:none;color:var(--on-action-move);white-space:nowrap;flex:0 0 auto;transition:background-color .14s ease,color .14s ease,transform .14s ease}
+.wk-step svg,.wk-today svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.wk-step:hover:not(:disabled),.wk-today:hover{background:var(--action-move-fill-hover);color:var(--on-action-move-hover)}
+.wk-step:active:not(:disabled),.wk-today:active{transform:translateY(1px)}
+.wk-step:focus-visible,.wk-today:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.wk-step:disabled{cursor:not-allowed;color:var(--on-action-disabled);background:var(--action-move-fill);transform:none}
+.wk-today{margin-left:auto}
+.wk-today[data-shown="false"]{visibility:hidden}
+.wk-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
+.wk-row .picker{flex:1 1 100%;min-width:0;margin-bottom:0;order:3}
+.wk-row .wk-prev{order:1}
+.wk-row .wk-next{order:2;margin-left:auto}
+@media (min-width:414px){
+  .wk-row{flex-wrap:nowrap}
+  .wk-row .picker{flex:1 1 auto;order:2}
+  .wk-row .wk-next{order:3;margin-left:0}
+}
+.goalbar.goalbar--week-only{grid-template-columns:1fr}
 
 /* ── 日ビュー2段目ツールバー: 左=7曜日ピッカー／右=操作3つ（印刷・編集・コピー） ──
  * 間に他要素を挟まない1段。横幅が足りない時は右側（操作群）だけを折り返す。 */

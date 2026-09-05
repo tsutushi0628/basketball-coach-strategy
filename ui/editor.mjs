@@ -16,6 +16,7 @@
 import { BLOCK_TINT, EDIT_SVG } from './render-shared.mjs';
 import { GOAL_SAVED_EVENT } from './goal-editor.mjs';
 import { loadCss } from './styles/load-css.mjs';
+import { copySourceCandidates } from './copy-source.mjs';
 import { isSameGenderCell, isTogetherRow } from './two-col-together.mjs';
 
 /**
@@ -214,6 +215,7 @@ export function editorScript() {
   return `(function(){
   var isSameGenderCell=${isSameGenderCell.toString()};
   var isTogetherRow=${isTogetherRow.toString()};
+  var copySourceCandidates=${copySourceCandidates.toString()};
   var island=document.getElementById('${ISLAND_ID}');
   if(!island)return;
   var ED=JSON.parse(island.textContent||'{}');
@@ -485,6 +487,7 @@ export function editorScript() {
   var panel=null; // 編集パネル要素
   var model=null; // 現在の編集モデル
   var editingArticle=null; // 編集対象 article
+  var copySourceMonths=[]; // renderPanel 時に算出した年月別候補。change 時は再計算せず参照する。
 
   function blockOptions(sel){
     return BLOCKS.map(function(b){
@@ -517,16 +520,41 @@ export function editorScript() {
       }
       return '';
     }
-    var opts='<option value="">選んでください…</option>'+dates.map(function(k){
+    var candidates=copySourceCandidates(dates,model.date);
+    copySourceMonths=candidates.months;
+    var recommended=candidates.recommended.map(function(candidate){
+      var k=candidate.date;
       var p=PREFILL[k]||{};
-      var lab=dateLabelISO(k,p.weekday)+(p.title?'：'+p.title:(p.aim?'：'+p.aim:''));
-      return '<option value="'+esc(k)+'">'+esc(lab)+'</option>';
+      var title=p.title||p.aim||'';
+      return '<label class="cf-pick"><input class="cf-radio" type="radio" name="cf-pick" value="'+esc(k)+'">'+
+        '<span class="cf-head"><span class="cf-rel">'+esc(candidate.relation)+'</span><span class="cf-date">'+esc(dateLabelISO(k,p.weekday))+'</span></span>'+
+        (title?'<span class="cf-title">'+esc(title)+'</span>':'')+'</label>';
     }).join('');
+    var search='';
+    if(candidates.searchable){
+      var monthOptions=candidates.months.map(function(month){
+        return '<option value="'+esc(month.ym)+'"'+(month.ym===candidates.initialYm?' selected':'')+'>'+esc(month.label)+'</option>';
+      }).join('');
+      var initialMonth=candidates.months.find(function(month){return month.ym===candidates.initialYm;});
+      var initialDates=initialMonth?initialMonth.dates:[];
+      search='<div class="cf-group"><span class="cf-legend">探す</span><div class="cf-search-row">'+
+        '<select class="ed-sel cf-ym" aria-label="年月">'+monthOptions+'</select>'+
+        '<select class="ed-sel cf-day" aria-label="日">'+copySourceDayOptions(initialDates)+'</select>'+
+        '</div></div>';
+    }
     return '<div class="ed-field"><span class="ed-lab">他の日からコピー</span>'+
-      '<div class="ed-copyfrom">'+
-        '<select class="ed-sel" id="ed-copyfrom" style="width:auto;min-width:200px">'+opts+'</select>'+
-        '<button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button>'+
-      '</div></div>';
+      '<input type="hidden" id="ed-copyfrom" value="">'+
+      '<fieldset class="cf-group"><legend class="cf-legend">おすすめ</legend><div class="cf-list">'+recommended+'</div></fieldset>'+
+      search+
+      '<div class="ed-copyfrom"><button type="button" class="ed-mini" data-act="copy-from">この日を取り込む</button></div></div>';
+  }
+  function copySourceDayOptions(dates){
+    return '<option value="">日を選んでください…</option>'+dates.map(function(k){
+      var p=PREFILL[k]||{};
+      var title=p.title||p.aim||'';
+      var dayLabel=String(Number(k.slice(8,10)))+'日'+dateLabelISO(k,p.weekday).slice(10)+(title?'：'+title:'');
+      return '<option value="'+esc(k)+'">'+esc(dayLabel)+'</option>';
+    }).join('');
   }
   // 「自動で叩き台を入れる」（旧: 上部ツールバーの単独ボタン）を編集画面の中へ移設した導線。
   // その日のエンジン叩き台（seedPrefill）が無ければ導線を出さない（押しても無反応のボタンにしない）。
@@ -538,9 +566,11 @@ export function editorScript() {
         '<span class="ed-hint">今の入力を自動生成の下書きに置き換えます</span>'+
       '</div></div>';
   }
-  // この日の編集モデルに「中身」があるか（見出し or 名前のある項目）。コピー上書きの確認に使う。
+  // この日の編集モデルに「中身」があるか（ねらい・タイトル・見出し or 名前のある項目）。コピー上書きの確認に使う。
   function modelHasContent(){
     if(!model)return false;
+    if((model.aim||'').trim())return true;
+    if((model.title||'').trim())return true;
     return (model.rows||[]).some(function(r){
       return ['男子','女子','both'].some(function(side){
         var c=cellOf(r,side);
@@ -808,7 +838,7 @@ export function editorScript() {
       var cfSel=panel.querySelector('#ed-copyfrom');
       var srcDate=cfSel?cfSel.value:'';
       if(!srcDate||!PREFILL[srcDate]){flash('コピー元の日を選んでください');return;}
-      if(modelHasContent()&&!window.confirm('いまの内容を、選んだ日の内容で上書きします。よろしいですか？'))return;
+      if(modelHasContent()&&!window.confirm('いまの内容を、'+dateLabelISO(srcDate,PREFILL[srcDate].weekday)+'の内容で置き換えます。よろしいですか？'))return;
       // 取り込み元の中身（ねらい・コート・時間帯）をこの日に複製。日付・曜日はこの日のまま保つ。
       model=normalizeModel(deepClone(PREFILL[srcDate]),model.date,model.weekday);
       renderPanel();
@@ -869,6 +899,31 @@ export function editorScript() {
     }
   }
   function onPanelChange(e){
+    var copyRadio=e.target.closest('.cf-radio');
+    if(copyRadio){
+      var radioHidden=panel.querySelector('#ed-copyfrom');
+      var radioDay=panel.querySelector('.cf-day');
+      if(radioHidden)radioHidden.value=copyRadio.value;
+      if(radioDay)radioDay.value='';
+      return;
+    }
+    var copyDay=e.target.closest('.cf-day');
+    if(copyDay){
+      var dayHidden=panel.querySelector('#ed-copyfrom');
+      if(dayHidden)dayHidden.value=copyDay.value;
+      panel.querySelectorAll('.cf-radio').forEach(function(radio){radio.checked=false;});
+      return;
+    }
+    var copyYm=e.target.closest('.cf-ym');
+    if(copyYm){
+      var selectedMonth=copySourceMonths.find(function(month){return month.ym===copyYm.value;});
+      var monthDay=panel.querySelector('.cf-day');
+      var monthHidden=panel.querySelector('#ed-copyfrom');
+      if(monthDay)monthDay.innerHTML=copySourceDayOptions(selectedMonth?selectedMonth.dates:[]);
+      if(monthHidden)monthHidden.value='';
+      panel.querySelectorAll('.cf-radio').forEach(function(radio){radio.checked=false;});
+      return;
+    }
     // 枠（ブロック）select が変わったら、そのセルのドリル名候補（datalist）を新しい枠に絞り直す。
     // 全体再描画はしない（入力中の値を失わないため）＝該当セルの name input の list 属性だけ差し替える。
     var blockSel=e.target.closest('[data-k="block"]');

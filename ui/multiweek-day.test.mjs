@@ -3,7 +3,7 @@
  *
  * 検証する業務意図（fix: 今日が日曜＝週起点が今週のとき、翌週火曜のメニューを打ち込む導線が無い）:
  *   - 日レベルが先頭週7日ぶんでなく data.weeks 全週ぶんに広がる（翌週の編集可能 .day が存在）。
- *   - 日レベルの .daywk 週グループ数＝data.weeks.length（各週が独立した日グループを持つ）。
+ *   - 日レベルの .daywk 週グループ数＝pastWeeks+weeks（各週が独立した日グループを持つ）。
  *   - cal-go の各曜日ボタンが実ISO(data-date)を持つ（別週の同曜日と衝突せず日付で一意に指せる）。
  *   - 単一可視日の不変条件: markup 上で可視（hidden でない）な .day は全週通して常に1つだけ。
  *     curDay（editor.mjs）＝「hidden でない最初の .day」が別週の日を誤編集しないための前提。
@@ -58,7 +58,7 @@ function weekGoalKeyOf(groupHtml) {
 /** グループHTMLから「週の目標」バーの表示テキスト（gb-val）を拾う。
  * 既定空白では空セルが <span class="gb-val es-inline">未入力</span> になるので、その class 差も許容して拾う。 */
 function weekGoalTextOf(groupHtml) {
-  const m = groupHtml.match(/<span class="gb-lab">週の目標<\/span><span class="gb-val(?: es-inline)?">([^<]*)<\/span>/);
+  const m = groupHtml.match(/<span class="gb-lab">週の目標<\/span><span class="gb-val(?: es-inline)?"(?: data-goal-val)?>([^<]*)<\/span>/);
   return m ? m[1] : null;
 }
 
@@ -86,14 +86,17 @@ test('日レベルが全週ぶんに広がり、翌週（先頭週の次週）�
   }
 });
 
-test('日レベルの .daywk 週グループ数が data.weeks.length と一致する', async () => {
+test('日レベルの .daywk 週グループ数が pastWeeks+weeks と一致する', async () => {
   const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
   const groups = [...region.matchAll(/class="daywk" data-week="([^"]*)"/g)].map((x) => x[1]);
-  assert.equal(groups.length, data.weeks.length, '日グループ数＝週数');
+  // 設計メモ spec-20260905-past-weeks-and-copy-source-impl.md 8章の方針: 過去週追加後は
+  // .daywk が weeks に加えて pastWeeks ぶんも描かれる。検証意図（各週が独立した日グループを持つ）は
+  // 変えず、対象範囲を pastWeeks+weeks に広げる。
+  assert.equal(groups.length, data.pastWeeks.length + data.weeks.length, '日グループ数＝過去週+週数');
   // 各グループのキーは対応する週のキー（週セレクタ・showDayByDate の同期キー）。
-  assert.deepEqual(groups, data.weeks.map((w) => w.key), '各 .daywk のキーは週キーと一致');
+  assert.deepEqual(groups, [...data.weeks, ...data.pastWeeks].map((w) => w.key), '各 .daywk のキーは weeks→pastWeeks の週キーと一致');
 });
 
 test('cal-go の各日ボタンが実ISO(data-date)を持つ（別週の同曜日と衝突しない）', async () => {
@@ -198,13 +201,15 @@ test('日レベルの各 .daywk グループの週目標バーが、その週の
   const region = dayRegionOf(body);
 
   const groups = dayWeekGroupsOf(region);
-  assert.equal(groups.length, data.weeks.length, '日グループ数＝週数（各週に1つ週目標バー）');
+  const allWeeks = [...data.weeks, ...data.pastWeeks];
+  // 設計メモ8章の方針: 過去週追加後は .daywk が pastWeeks ぶんも増える（検証意図「各週に1つ週目標バー」は不変）。
+  assert.equal(groups.length, data.pastWeeks.length + data.weeks.length, '日グループ数＝過去週+週数（各週に1つ週目標バー）');
 
   // 各週グループの週目標バー: 編集キー＝その週の週起点ISO（誤上書き防止の核）、表示テキストは
   // コーチ入力があればその焦点／既定空白（未入力）なら「未入力」を出す（叩き台を自動表示しない）。
   for (const grp of groups) {
-    const w = data.weeks.find((x) => x.key === grp.key);
-    assert.ok(w, `グループキー ${grp.key} に対応する週が data.weeks にある`);
+    const w = allWeeks.find((x) => x.key === grp.key);
+    assert.ok(w, `グループキー ${grp.key} に対応する週が pastWeeks+weeks にある`);
     assert.equal(weekGoalKeyOf(grp.html), w.weekStartDate,
       `週 ${grp.key} の週目標編集キーは自週の週起点ISO（誤上書き防止＝他週キーを送らない）`);
     const expected = w.focus ? w.focus : '未入力';
@@ -213,14 +218,23 @@ test('日レベルの各 .daywk グループの週目標バーが、その週の
   }
 });
 
-test('日レベルの月目標は全週グループで不変（同一アーク月内は月キーが追従しない＝月を週切替で誤上書きしない）', async () => {
+test('日レベルの月目標は各週の monthArcKey に追従する（週切替で別月を誤上書きしない）', async () => {
   const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
   const region = dayRegionOf(body);
 
-  // 月scopeの編集キーは全グループで同一（アンカーarc月キー）。週切替で月キーが変わってはならない。
-  const monthGoalKeys = [...region.matchAll(/data-goal-scope="month" data-goal-key="([^"]*)"/g)].map((x) => x[1]);
-  assert.ok(monthGoalKeys.length >= data.weeks.length, '各週グループに月目標バーがある');
-  assert.equal(new Set(monthGoalKeys).size, 1, '月目標キーは全週で不変（同一アーク月）');
-  assert.equal(monthGoalKeys[0], String(data.goalKeys.monthArcKey), '月目標キーはアンカーarc月キー');
+  const groups = dayWeekGroupsOf(region);
+  const allWeeks = [...data.weeks, ...data.pastWeeks];
+  for (const grp of groups) {
+    const w = allWeeks.find((x) => x.key === grp.key);
+    assert.ok(w, `グループキー ${grp.key} に対応する週がある`);
+    const monthKey = grp.html.match(/data-goal-scope="month" data-goal-key="([^"]*)"/);
+    if (w.monthArcKey == null) {
+      assert.equal(monthKey, null, `週 ${grp.key} は年度外なので月目標セルを持たない`);
+    } else {
+      assert.equal(monthKey && monthKey[1], String(w.monthArcKey), `週 ${grp.key} の月目標キーは自週の monthArcKey`);
+    }
+  }
+  const firstGroup = groups.find((g) => g.key === data.weeks[0].key);
+  assert.match(firstGroup.html, new RegExp(`data-goal-scope="month" data-goal-key="${data.goalKeys.monthArcKey}"`), '先頭週はアンカーarc月キーを維持する');
 });

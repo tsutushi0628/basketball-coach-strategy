@@ -59,11 +59,11 @@ async function main() {
 
   // pattern-*.mjs を発見して読み込む。
   const files = readdirSync(__dirname)
-    .filter((f) => /^pattern-.*\.mjs$/.test(f))
+    .filter((f) => /^pattern-.*\.mjs$/.test(f) && !f.endsWith('.test.mjs'))
     .sort();
   const patterns = [];
   for (const f of files) {
-    const mod = await import('./' + f);
+    const mod = await import(pathToFileURL(resolve(__dirname, f)).href);
     if (typeof mod.render !== 'function' || !mod.meta) continue;
     patterns.push(mod);
   }
