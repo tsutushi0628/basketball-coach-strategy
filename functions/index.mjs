@@ -162,6 +162,7 @@ export function sanitizeOverride(body) {
       const boys = cell(rr['男子']); const girls = cell(rr['女子']);
       if (boys) row['男子'] = boys;
       if (girls) row['女子'] = girls;
+      if (rr.split === true) row.split = true;
     }
     return row;
   });

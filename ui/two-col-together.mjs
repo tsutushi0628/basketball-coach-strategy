@@ -6,6 +6,7 @@
  * 上に載る薄いラッパーとして残す（コピー用テキストの見出し分岐「全行共通／一部男女別／男女2列」で使う）。
  * 描画側（pattern-timeline.mjs の twoColTimeline・editor.mjs の timelineHtml）はもう日単位判定を
  * ゲートに使わず、各行で isTogetherRow を呼んで「共通行を1本・相違行を左右2列」に振り分ける。
+ * split:true の行は、男女セルの内容が同一でも明示的な男女別行として2列で描く。
  */
 
 /**
@@ -32,6 +33,7 @@ export function isSameGenderCell(boys, girls) {
 export function isTogetherRow(row) {
   if (!row) return false;
   if (row.both) return true;
+  if (row.split === true) return false;
   return isSameGenderCell(row.boys || row['男子'], row.girls || row['女子']);
 }
 

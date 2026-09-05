@@ -4,7 +4,7 @@
  * タイムライン画面の目標表示（月の目標／週の焦点／今月やること／年アークの各月見出し）を
  * その場で編集し、Cloud Function の保存API（POST /api/tenant/goal）へ送ってバックエンド
  * （Firestore・Admin SDK経由）に保存する。クライアントからの Firestore 直書きは rules で全 deny のまま。
- * 保存後はページを再読込し、サーバが Firestore から読んだ同じ内容で全タブを整合させる。
+ * 保存後は同じ scope と key の表示ノードだけを更新し、開いている別の未保存入力を保つ。
  *
  * データモデル: 月の目標と年アークの各月見出しは同一源（arc月キーの arcMonths マップ）。だから月タブで
  * 編集すると年タブの同じ arc月セルにも反映される（単一真実源・正しい挙動）。週の焦点だけ別（週起点日キー）。
@@ -15,6 +15,9 @@
  */
 
 import { loadCss } from './styles/load-css.mjs';
+
+/** 目標保存後に document へ発火する局所更新イベント名。 */
+export const GOAL_SAVED_EVENT = 'bcs:goal-saved';
 
 /**
  * 目標保存失敗時の利用者向け文言を status から決める純関数（themeSaveErrorText と同型）。
@@ -44,7 +47,7 @@ export const GOAL_EDITOR_CSS = loadCss(import.meta.url, 'styles/goal-editor.css'
  * - [data-goal-edit] 要素ごとに「編集」ボタンを付ける（data-print-hide・既存トーンの小ボタン）。
  * - 押下→現在値（data-goal-text）をプリフィルした input＋保存/取消に差し替え。
  * - 保存→ POST /api/tenant/goal { scope, key, text }（withAuth/withTenantQ/credentials/401一回再送）。
- *   成功→ location.reload()（全タブ整合）。失敗→インライン文言（401/403/他を出し分け）。
+ *   成功→同じ scope と key の表示ノードを局所更新。失敗→インライン文言（401/403/他を出し分け）。
  * - 空文字保存も許可（＝その目標をエンジン値に戻す。サーバが該当キーを削除する）。
  * @returns {string} IIFE
  */
@@ -52,6 +55,7 @@ export function goalEditorScript() {
   return `(function(){
   // 失敗文言は node 側でテスト済みの goalSaveErrorText を埋め込んで使う（規則と実行時を一致＝ドリフト防止）。
   var goalErrorText=${goalSaveErrorText.toString()};
+  var goalSavedEvent='${GOAL_SAVED_EVENT}';
   function withTenantQ(path){
     try{
       var t=new URLSearchParams(location.search).get('t');
@@ -141,7 +145,29 @@ export function goalEditorScript() {
         .then(function(r){
           var status=r.status;
           return r.json().catch(function(){return {ok:r.ok};}).then(function(res){
-            if(res&&res.ok){location.reload();return;} // SSR再描画で全タブ整合（楽観適用しない）
+            if(res&&res.ok){
+              var savedText=typeof res.text==='string'?res.text:text;
+              var selector='[data-goal-edit][data-goal-scope="'+scope+'"][data-goal-key="'+key+'"],[data-goal-view="'+scope+':'+key+'"]';
+              document.querySelectorAll(selector).forEach(function(goalNode){
+                if(goalNode.hasAttribute('data-goal-edit'))goalNode.setAttribute('data-goal-text',savedText);
+                if(goalNode.hasAttribute('title'))goalNode.setAttribute('title',savedText);
+                var valueNodes=[];
+                if(goalNode.hasAttribute('data-goal-val'))valueNodes.push(goalNode);
+                goalNode.querySelectorAll('[data-goal-val]').forEach(function(valueNode){valueNodes.push(valueNode);});
+                valueNodes.forEach(function(valueNode){
+                  if(savedText){
+                    valueNode.textContent=savedText;
+                    valueNode.classList.remove('es-inline');
+                  }else{
+                    valueNode.textContent=valueNode.getAttribute('data-goal-empty')||'未入力';
+                    valueNode.classList.add('es-inline');
+                  }
+                });
+              });
+              document.dispatchEvent(new CustomEvent(goalSavedEvent,{detail:{scope:scope,key:key,text:savedText}}));
+              close();
+              return;
+            }
             input.disabled=false;save.disabled=false;cancel.disabled=false;
             setFoot('error',goalErrorText(status,res&&res.error)); // 401/403/他を出し分け
           });

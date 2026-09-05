@@ -258,34 +258,39 @@ function kpiCard(label, gender, g) {
   return `<div class="kteam"><div class="kth">${genderChip(gender)}の指標</div><div class="kpis">${meters}</div></div>`;
 }
 
-/** 月/週の目標バー（この日の狙いの上に置く横2分割ボックス）。値はエンジン出力（session.goals）。
- * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。月はアンカーarc月キー、週はアンカー
- * 週起点ISOキー（週起点が無ければ週セルには編集属性を付けない＝保存キーが作れないため）。
+/** 月/週の目標バー（この日の狙いの上に置くボックス）。
+ * 目標編集導線（goal-editor）の対象として data-goal-edit を付ける。週起点が無ければ週セルには
+ * 編集属性を付けない。学校年度外の週は month:null を受け、月セルを描かない。
  *
  * 週セルは「表示中の週」に追従させる必要がある（日レベルは全週ぶんの .daywk グループを描き、表示中の
- * 週だけが見える）。そのため週のテキスト・編集キーは引数 week で差し替えられる。week 省略時はアンカー週
- * （session.goals.week ＋ goalKeys.weekKey）にフォールバック（既存の単一週呼び出しと後方互換）。
- * 月/定性/KPIは同一アーク月内で不変なので常にアンカー値（month は引数化しない）。
+ * 週だけが見える）。そのため週と月のテキスト・編集キーは引数 week で差し替えられる。week 省略時は
+ * session.goals と goalKeys のアンカー値にフォールバックし、従来の呼び出しと後方互換にする。
  * @param {object} data buildPlanData の戻り値
- * @param {{text:string, key:?string}} [week] 表示する週の {週の焦点テキスト, 週起点ISOキー}
+ * @param {{text:string, key:?string, month:({text:string, key:(string|number)}|null)}} [week]
  */
 export function goalsBar(data, week) {
   const g = data.session.goals;
   const keys = data.goalKeys || {};
   const weekText = week ? week.text : g.week;
   const weekKey = week ? week.key : keys.weekKey;
-  const monthAttr = (keys.monthArcKey != null)
-    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(keys.monthArcKey))}" data-goal-text="${esc(g.monthMain || '')}"`
+  const month = week && Object.prototype.hasOwnProperty.call(week, 'month')
+    ? week.month
+    : { key: keys.monthArcKey, text: g.monthMain };
+  const monthAttr = (month && month.key != null)
+    ? ` data-goal-edit data-goal-scope="month" data-goal-key="${esc(String(month.key))}" data-goal-text="${esc(month.text || '')}"`
     : '';
   const weekAttr = weekKey
     ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(weekText || '')}"`
     : '';
   // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
   const valHtml = (v) => v
-    ? `<span class="gb-val">${esc(v)}</span>`
-    : `<span class="gb-val es-inline">未入力</span>`;
-  return `<div class="goalbar">
-    <div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span>${valHtml(g.monthMain)}</div>
+    ? `<span class="gb-val" data-goal-val>${esc(v)}</span>`
+    : `<span class="gb-val es-inline" data-goal-val>未入力</span>`;
+  const monthCell = month === null
+    ? ''
+    : `<div class="gb-cell"${monthAttr}><span class="gb-lab">月の目標</span>${valHtml(month.text)}</div>`;
+  return `<div class="goalbar${month === null ? ' goalbar--week-only' : ''}">
+    ${monthCell}
     <div class="gb-cell"${weekAttr}><span class="gb-lab">週の目標</span>${valHtml(weekText)}</div>
   </div>`;
 }
@@ -293,16 +298,23 @@ export function goalsBar(data, week) {
 /** 目標セクション（今月/今週/定性は共通、チェックする数字は男女別）。 */
 export function goalsSection(data) {
   const g = data.session.goals;
+  const keys = data.goalKeys || {};
   const qual = g.qualitative.map((q) => `・${esc(q)}`).join('<br>');
+  const monthViewAttr = keys.monthArcKey != null
+    ? ` data-goal-view="month:${esc(String(keys.monthArcKey))}"`
+    : '';
+  const weekViewAttr = keys.weekKey
+    ? ` data-goal-view="week:${esc(keys.weekKey)}"`
+    : '';
   // 未入力（既定空白）はエンジン既定を出さず「未入力」を淡色で示す（goalsBar と同じ非対称解消）。
   // 空欄のままだと「壊れて見える」（質行が || '—' で守られているのと同じ守りを今月/今週にも揃える）。
   const goalTxt = (v) => v
-    ? `<span class="txt">${esc(v)}</span>`
-    : `<span class="txt es-inline">未入力</span>`;
+    ? `<span class="txt" data-goal-val>${esc(v)}</span>`
+    : `<span class="txt es-inline" data-goal-val>未入力</span>`;
   return `<section class="goals">
     <h3>目標（チェックする数字は各チーム別）</h3>
-    <div class="gline"><span class="lab">今月</span>${goalTxt(g.monthMain)}</div>
-    <div class="gline"><span class="lab">今週</span>${goalTxt(g.week)}</div>
+    <div class="gline"${monthViewAttr}><span class="lab">今月</span>${goalTxt(g.monthMain)}</div>
+    <div class="gline"${weekViewAttr}><span class="lab">今週</span>${goalTxt(g.week)}</div>
     <div class="gline"><span class="lab">質</span><span class="txt">${qual || '—'}</span></div>
     <div class="kgrid">
       ${kpiCard('男子', '男子', data.boysGoals)}
@@ -333,7 +345,7 @@ export function yearSection(data) {
         // 狭セルなので data-goal-overlay で画面下オーバーレイ編集にする（セル内インライン展開だと行が崩れる）。
         const goalAttr = gender === 'boys'
           ? ` data-goal-edit data-goal-overlay="1" data-goal-scope="month" data-goal-key="${esc(String(a.month))}" data-goal-text="${esc(a.headline)}" data-goal-title="${esc(String(a.month))}月の目標"`
-          : '';
+          : ` data-goal-view="month:${esc(String(a.month))}"`;
         return `<div class="arccell${peakCls}${isNow ? ' arccell-now' : ''}"${goalAttr} title="${esc(a.headline)}">
           <span class="am">${a.month}月</span>
           <span class="ap">${shortPhase}</span>
@@ -377,8 +389,8 @@ export function monthSection(data, m = data.session.month, displayMonth = data.m
     : '';
   // 未入力（既定空白）はエンジン既定見出しを出さず「未入力」を淡色で示す（編集導線はそのまま）。
   const aimHtml = m.headline
-    ? `<div class="mc-aim"${aimAttr}>${esc(m.headline)}</div>`
-    : `<div class="mc-aim es-inline"${aimAttr}>今月の目標は未入力</div>`;
+    ? `<div class="mc-aim"${aimAttr}><span data-goal-val data-goal-empty="今月の目標は未入力">${esc(m.headline)}</span></div>`
+    : `<div class="mc-aim"${aimAttr}><span class="es-inline" data-goal-val data-goal-empty="今月の目標は未入力">今月の目標は未入力</span></div>`;
   return `<h3 class="lvh">${displayMonth}月にやること</h3>
     <div class="monthcard">
       <div class="mc-h"><span class="mc-mon">${displayMonth}月</span><span class="mc-phase">${esc(m.phase)}</span></div>

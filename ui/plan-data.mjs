@@ -640,6 +640,7 @@ function toTwoColDay(day, ov, dISO) {
       both,
       boys,
       girls,
+      split: r.split === true,
     };
   });
   const firstFrom = rows.length ? rows[0].from : day.start;

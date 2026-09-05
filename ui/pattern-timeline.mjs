@@ -597,8 +597,8 @@ function weekLevel(data, days = data.days, focus = '', weekKey = '') {
   const focusAttr = weekKey ? ` data-goal-edit data-goal-scope="week" data-goal-key="${esc(weekKey)}" data-goal-text="${esc(focus || '')}"` : '';
   // 今週の焦点: コーチ入力があればそれ／無ければ「未入力」を淡色で示す（編集導線はそのまま＝入力できる）。
   const focusNote = focus
-    ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　${esc(focus)}</p>`
-    : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline">未入力</span></p>` : '');
+    ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span data-goal-val>${esc(focus)}</span></p>`
+    : (weekKey ? `<p class="note"${focusAttr}><b style="color:var(--orange-deep)">今週の焦点</b>　<span class="es-inline" data-goal-val>未入力</span></p>` : '');
   if (!realAxis && !hasDatedDay) {
     return `<h3 class="lvh">この週の練習</h3>${focusNote}${emptyState({ text: 'この週はまだ入力がありません。各曜日の入力は「日」タブから、自動の叩き台もそこから入れられます。' })}`;
   }
