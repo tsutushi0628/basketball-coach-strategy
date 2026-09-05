@@ -306,6 +306,145 @@ export function goalWriteDecision(ctx, body) {
   return { ok: true, scope, key, text };
 }
 
+// ── 紅白戦チーム分け（scrimmage・spec-20260905-scrimmage-split.md 10章B）────────────
+// 性別コード（players/roster とも 'M'|'F'）とチーム数（2 または 3）の許容集合。
+const SCRIMMAGE_GENDERS = ['M', 'F'];
+const SCRIMMAGE_TEAM_COUNTS = [2, 3];
+// 選手ID書式（spec 2.1）。
+const PLAYER_ID_RE = /^[MF]\d{2}$/;
+// 名簿シートID書式（spec 5章）。Google スプレッドシートIDは英数・-・_ のみで20文字以上。
+const SHEET_ID_RE = /^[A-Za-z0-9_-]{20,}$/;
+
+/** Firestore Timestamp/Date/string を ISO 文字列へ正規化する（GET /scrimmage の model 用）。 */
+function toIsoTimestamp(value) {
+  if (value && typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === 'string' ? value : null;
+}
+
+/**
+ * 選手IDの配列であることを検証する共通ガード（重複禁止）。
+ * @param {*} arr
+ * @returns {arr is string[]}
+ */
+function isPlayerIdArray(arr) {
+  return Array.isArray(arr) && arr.length > 0
+    && arr.every((id) => typeof id === 'string' && PLAYER_ID_RE.test(id))
+    && new Set(arr).size === arr.length;
+}
+
+/**
+ * チーム分け実行の認可＋入力検証（テナント解決後・エンジン呼び出し前の純判定。spec 5章・10章B）。
+ *   - owner ロールでない（ctx.role !== 'owner'）→ 403。
+ *   - gender が 'M'|'F' でない → 400。
+ *   - teamCount が 2|3 でない → 400。
+ *   - attendees が選手ID配列（重複なし・1件以上）でない、または teamCount 未満 → 400。
+ *   - seed 指定時に有限数でない → 400。
+ * 名簿との突合（attendees が在籍選手の部分集合か）は Firestore 読み取りが要るためハンドラ側で行う。
+ * @param {{role?:string}} ctx
+ * @param {*} body
+ * @returns {{ok:true, gender:'M'|'F', teamCount:2|3, attendees:string[], seed?:number} | {ok:false, status:number, error:string}}
+ */
+export function scrimmageSplitDecision(ctx, body) {
+  if (!ctx || ctx.role !== 'owner') {
+    return { ok: false, status: 403, error: '編集権限がありません' };
+  }
+  const gender = body?.gender;
+  if (!SCRIMMAGE_GENDERS.includes(gender)) {
+    return { ok: false, status: 400, error: 'gender が不正です' };
+  }
+  const teamCount = body?.teamCount;
+  if (!SCRIMMAGE_TEAM_COUNTS.includes(teamCount)) {
+    return { ok: false, status: 400, error: 'teamCount が不正です' };
+  }
+  const attendees = body?.attendees;
+  if (!isPlayerIdArray(attendees) || attendees.length < teamCount) {
+    return { ok: false, status: 400, error: 'attendees が不正です' };
+  }
+  if (body?.seed !== undefined && (typeof body.seed !== 'number' || !Number.isFinite(body.seed))) {
+    return { ok: false, status: 400, error: 'seed が不正です' };
+  }
+  const decision = { ok: true, gender, teamCount, attendees };
+  if (body?.seed !== undefined) decision.seed = body.seed >>> 0;
+  return decision;
+}
+
+/**
+ * チーム分け確定（履歴保存）の認可＋入力検証（テナント解決後・Firestore 書き込み前の純判定。spec 5章）。
+ *   - owner ロールでない → 403。
+ *   - date が YYYY-MM-DD でない → 400。
+ *   - gender / teamCount / attendees は split と同じ検証 → 400。
+ *   - teams が teamCount 個の配列でない、要素が文字列配列でない → 400。
+ *   - teams を平らにしたものが attendees の並べ替え（全員ちょうど1回）でない → 400。
+ *   - seed が有限数でない → 400。
+ * 各選手が同性別の在籍選手であることの確認は Firestore 読み取りが要るためハンドラ側で行う。
+ * @param {{role?:string}} ctx
+ * @param {*} body
+ * @returns {{ok:true, date:string, gender:'M'|'F', teamCount:2|3, attendees:string[], teams:string[][], seed:number} | {ok:false, status:number, error:string}}
+ */
+export function scrimmageDecideDecision(ctx, body) {
+  if (!ctx || ctx.role !== 'owner') {
+    return { ok: false, status: 403, error: '編集権限がありません' };
+  }
+  const date = String(body?.date || '');
+  if (!DATE_DOC_ID.test(date)) {
+    return { ok: false, status: 400, error: 'date が不正です' };
+  }
+  const gender = body?.gender;
+  if (!SCRIMMAGE_GENDERS.includes(gender)) {
+    return { ok: false, status: 400, error: 'gender が不正です' };
+  }
+  const teamCount = body?.teamCount;
+  if (!SCRIMMAGE_TEAM_COUNTS.includes(teamCount)) {
+    return { ok: false, status: 400, error: 'teamCount が不正です' };
+  }
+  const attendees = body?.attendees;
+  if (!isPlayerIdArray(attendees) || attendees.length < teamCount) {
+    return { ok: false, status: 400, error: 'attendees が不正です' };
+  }
+  const teams = body?.teams;
+  const teamsShapeOk = Array.isArray(teams) && teams.length === teamCount
+    && teams.every((t) => Array.isArray(t) && t.every((id) => typeof id === 'string'));
+  if (!teamsShapeOk) {
+    return { ok: false, status: 400, error: 'teams が不正です' };
+  }
+  const flat = teams.flat();
+  const sortedFlat = [...flat].sort();
+  const sortedAttendees = [...attendees].sort();
+  const isPartition = flat.length === attendees.length
+    && sortedFlat.every((id, i) => id === sortedAttendees[i]);
+  if (!isPartition) {
+    return { ok: false, status: 400, error: 'teams が attendees と一致しません' };
+  }
+  if (typeof body?.seed !== 'number' || !Number.isFinite(body.seed)) {
+    return { ok: false, status: 400, error: 'seed が不正です' };
+  }
+  return { ok: true, date, gender, teamCount, attendees, teams, seed: body.seed >>> 0 };
+}
+
+/**
+ * 名簿同期の認可＋入力形式の検証（テナント解決後・Sheets 取得前の純判定。spec 3章・5章）。
+ *   - isAdmin でない（ctx.isAdmin !== true）→ 403（同期は管理者専用）。
+ *   - sheetId 指定時に書式（20文字以上の英数・-・_）を満たさない → 400。
+ * sheetId 省略時に保存済み値が無ければ 400 にする判定は Firestore 読み取りが要るためハンドラ側で行う。
+ * @param {{isAdmin?:boolean}} ctx
+ * @param {*} body
+ * @returns {{ok:true, sheetId:string|null} | {ok:false, status:number, error:string}}
+ */
+export function rosterSyncDecision(ctx, body) {
+  if (!ctx || ctx.isAdmin !== true) {
+    return { ok: false, status: 403, error: '名簿同期の権限がありません' };
+  }
+  const raw = body?.sheetId;
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: true, sheetId: null };
+  }
+  if (typeof raw !== 'string' || !SHEET_ID_RE.test(raw)) {
+    return { ok: false, status: 400, error: 'sheetId が不正です' };
+  }
+  return { ok: true, sheetId: raw };
+}
+
 /**
  * 書き込みAPI・認証API・招待APIを express サーバへマウントする。
  * db は依存注入（本番は Admin SDK の Firestore、テストはモック db）。書き込みは
@@ -560,6 +699,230 @@ export function mountWriteApi(appServer, dbInstance) {
       res.status(500).json({ ok: false, error: 'save failed' });
     }
   });
+
+  // ── 紅白戦チーム分け（owner スコープ）─────────────────────────────────────────────
+  // /api/override と同型（resolveRequestTenant→kind 分岐→owner 認可→純判定→Firestore）。
+  // engine/src/scrimmage.js はまだ存在しないかもしれない（並行実装の A 分担）ので、契約どおりの
+  // パスを動的 import する（pattern-*.mjs の動的 import と同じ作法＝未着地でも index.mjs 自体の
+  // 読み込みを壊さない）。存在確認後の統合は spec 10章の契約どおりの名前で自動的に噛み合う。
+  appServer.post('/api/scrimmage/split', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    const decision = scrimmageSplitDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+
+    const tenantRef = dbInstance.collection('tenants').doc(ctx.tenantId);
+    let rosterDocs;
+    try {
+      const rosterSnap = await tenantRef.collection('roster')
+        .where('gender', '==', decision.gender).where('active', '==', true).get();
+      rosterDocs = rosterSnap.docs.map((d) => d.data());
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+      return;
+    }
+    const rosterIds = new Set(rosterDocs.map((p) => p.playerId));
+    if (!decision.attendees.every((id) => rosterIds.has(id))) {
+      res.status(400).json({ ok: false, error: 'attendees が名簿に一致しません' });
+      return;
+    }
+
+    let scrimmageMod;
+    try {
+      scrimmageMod = await import('../engine/src/scrimmage.js');
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+      return;
+    }
+    try {
+      const historySnap = await tenantRef.collection('scrimmages')
+        .where('gender', '==', decision.gender).orderBy('createdAt', 'desc').limit(3).get();
+      const history = historySnap.docs.map((d) => d.data().teams);
+      const seed = decision.seed !== undefined ? decision.seed : (Date.now() >>> 0);
+      const engineRoster = rosterDocs.map((p) => ({
+        id: p.playerId, grade: p.grade, tier: p.tier, heightCm: p.heightCm, roles: p.roles,
+      }));
+      const result = scrimmageMod.splitTeams({
+        roster: engineRoster, attendees: decision.attendees, teamCount: decision.teamCount, history, seed,
+      });
+      res.json({ ok: true, seed: result.seed, teams: result.teams });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
+
+  // ── 紅白戦チーム分け確定（履歴保存・owner スコープ）───────────────────────────────
+  // n（同日連番）は runTransaction 内で件数を数えて採番する（invitations.mjs の txn.get(query) 作法）。
+  appServer.post('/api/scrimmage/decide', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    const decision = scrimmageDecideDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+
+    const tenantRef = dbInstance.collection('tenants').doc(ctx.tenantId);
+    try {
+      const rosterSnap = await tenantRef.collection('roster')
+        .where('gender', '==', decision.gender).where('active', '==', true).get();
+      const rosterIds = new Set(rosterSnap.docs.map((d) => d.data().playerId));
+      if (!decision.teams.flat().every((id) => rosterIds.has(id))) {
+        res.status(400).json({ ok: false, error: 'teams に同性別の在籍選手以外が含まれています' });
+        return;
+      }
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+      return;
+    }
+
+    const scrimmagesCol = tenantRef.collection('scrimmages');
+    let id;
+    try {
+      await dbInstance.runTransaction(async (txn) => {
+        // n（同日・同 tenant の件数 + 1）を txn 内で数える（同時確定の連番衝突を避ける）。
+        const dateSnap = await txn.get(scrimmagesCol.where('date', '==', decision.date));
+        const n = dateSnap.docs.length + 1;
+        id = `${decision.date}-${n}`;
+        txn.set(scrimmagesCol.doc(id), {
+          date: decision.date,
+          gender: decision.gender,
+          teamCount: decision.teamCount,
+          attendees: decision.attendees,
+          teams: decision.teams,
+          seed: decision.seed,
+          createdAt: FieldValue.serverTimestamp(),
+          createdBy: ctx.uid,
+        });
+      });
+      res.json({ ok: true, id });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
+
+  // ── 名簿同期（管理者スコープ・Sheets → Firestore roster）──────────────────────────
+  // engine/src/roster.js（normalizeRoster）も A 分担の未着地かもしれないため split と同様に動的 import。
+  // 手順（spec 3章）: sheetId 解決 → Sheets 取得（失敗 502・roster 不変）→ 正規化 →
+  // 差分件数の事前計算（500 超は 422・roster 不変）→ 1 batch で set/delete + tenant doc merge。
+  appServer.post('/api/roster/sync', json, async (req, res) => {
+    let ctx;
+    try {
+      const r = await resolveRequestTenant(dbInstance, req, { forWrite: true });
+      if (r.kind === 'auth') { res.status(401).json({ ok: false, error: 'サインインが必要です' }); return; }
+      if (r.kind === 'none') { res.status(403).json({ ok: false, error: 'テナントがありません' }); return; }
+      if (r.kind !== 'context') { res.status(r.status || 400).json({ ok: false, error: 'テナントを選択してください' }); return; }
+      ctx = r.context;
+    } catch {
+      res.status(500).json({ ok: false, error: 'resolve failed' });
+      return;
+    }
+    const decision = rosterSyncDecision(ctx, req.body);
+    if (!decision.ok) { res.status(decision.status).json({ ok: false, error: decision.error }); return; }
+
+    const tenantRef = dbInstance.collection('tenants').doc(ctx.tenantId);
+    let sheetId = decision.sheetId;
+    try {
+      if (sheetId) {
+        await tenantRef.set({ rosterSheetId: sheetId }, { merge: true });
+      } else {
+        const tenantSnap = await tenantRef.get();
+        const tenant = tenantSnap.exists ? tenantSnap.data() : null;
+        sheetId = (tenant && typeof tenant.rosterSheetId === 'string') ? tenant.rosterSheetId : '';
+        if (!sheetId) {
+          res.status(400).json({ ok: false, error: '名簿シートが未設定です' });
+          return;
+        }
+      }
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+      return;
+    }
+
+    let values;
+    try {
+      const sheetMod = await import('./roster-sheet.mjs');
+      values = await sheetMod.fetchSheetValues({ sheetId });
+    } catch {
+      res.status(502).json({ ok: false, error: '名簿シートを読めませんでした' });
+      return;
+    }
+
+    let normalized;
+    try {
+      const rosterMod = await import('../engine/src/roster.js');
+      normalized = rosterMod.normalizeRoster(values);
+    } catch {
+      // 正規化不能な応答（想定外の列・空シート等）も Sheets 側の問題として扱う（roster は不変のまま）。
+      res.status(502).json({ ok: false, error: '名簿シートを読めませんでした' });
+      return;
+    }
+
+    try {
+      const rosterCol = tenantRef.collection('roster');
+      const existingSnap = await rosterCol.get();
+      const existingIds = new Set(existingSnap.docs.map((d) => d.id));
+      const newIds = new Set(normalized.players.map((p) => p.playerId));
+      const toDelete = [...existingIds].filter((id) => !newIds.has(id));
+
+      // 差分 write 数の事前計算（set 全件 + delete 全件 + tenant doc merge 1件 が 500 batch 上限内か）。
+      const writeCount = normalized.players.length + toDelete.length + 1;
+      if (writeCount > 499) {
+        res.status(422).json({ ok: false, error: '名簿の変更が500件を超えています' });
+        return;
+      }
+
+      const syncedAt = new Date();
+      const batch = dbInstance.batch();
+      for (const p of normalized.players) {
+        batch.set(rosterCol.doc(p.playerId), {
+          playerId: p.playerId,
+          name: p.name,
+          gender: p.gender,
+          grade: p.grade,
+          active: p.active,
+          heightCm: p.heightCm,
+          tier: p.tier,
+          roles: p.roles,
+          missing: p.missing,
+          syncedAt,
+        });
+      }
+      for (const id of toDelete) {
+        batch.delete(rosterCol.doc(id));
+      }
+      batch.set(tenantRef, { rosterSyncedAt: syncedAt, rosterSkipped: normalized.skipped }, { merge: true });
+      await batch.commit();
+
+      const missing = normalized.players
+        .filter((p) => Array.isArray(p.missing) && p.missing.length > 0)
+        .map((p) => ({ playerId: p.playerId, name: p.name, count: p.missing.length }));
+      res.json({
+        ok: true,
+        syncedAt: syncedAt.toISOString(),
+        count: normalized.players.length,
+        skipped: normalized.skipped,
+        missing,
+      });
+    } catch {
+      res.status(500).json({ ok: false, error: 'save failed' });
+    }
+  });
 }
 
 const server = express();
@@ -585,6 +948,74 @@ server.get('/onboarding', async (req, res) => {
     css: '',
     body: '<div class="wrap"><h1>まだチームがありません</h1><p>招待リンクを受け取ったら、そのリンクを開いて承諾してください。承諾するとあなた専用のチームが用意されます。</p></div>',
   }));
+});
+
+// 紅白戦チーム分け（独立URL・spec 6章）。/onboarding と GET '*' の間に置く（GET '*' より先に評価させる）。
+// テナント解決の kind 分岐は GET '*' と同じ（buildPlanData は呼ばず renderScrimmagePage(model) を呼ぶ）。
+// ui/scrimmage-page.mjs は C 分担の未着地かもしれないため動的 import する（pattern-*.mjs と同じ作法）。
+server.get('/scrimmage', async (req, res) => {
+  try {
+    let resolved;
+    try {
+      resolved = await resolveRequestTenant(db, req, { forWrite: false });
+    } catch {
+      res.status(500).set('Content-Type', 'text/plain; charset=utf-8').send('render error: tenant resolve');
+      return;
+    }
+    if (resolved.kind === 'auth') { res.redirect(302, '/login'); return; }
+    if (resolved.kind === 'none') { res.redirect(302, '/onboarding'); return; }
+    if (resolved.kind === 'choose') {
+      res.set('Content-Type', 'text/html; charset=utf-8').send(tenantPickerHtml({ tenants: resolved.memberships }));
+      return;
+    }
+    const ctx = resolved.context;
+
+    const tenantSnap = await db.collection('tenants').doc(ctx.tenantId).get();
+    const tenant = tenantSnap.exists ? tenantSnap.data() : null;
+    const schoolName = (tenant && typeof tenant.name === 'string' && tenant.name.trim()) ? tenant.name.trim() : 'マイチーム';
+    const themeKey = (tenant && typeof tenant.themeKey === 'string') ? tenant.themeKey : 'orange';
+
+    const rosterSnap = await db.collection('tenants').doc(ctx.tenantId).collection('roster').get();
+    const rosterDocs = rosterSnap.docs.map((d) => d.data());
+    // Tier・役割・身長・学年は model に載せない（spec 6章・8章の受け入れ条件）。
+    const players = rosterDocs.map((p) => ({
+      playerId: p.playerId, name: p.name, gender: p.gender, active: p.active === true,
+    }));
+
+    let sync = null;
+    if (ctx.isAdmin === true) {
+      const missing = rosterDocs
+        .filter((p) => Array.isArray(p.missing) && p.missing.length > 0)
+        .map((p) => ({ playerId: p.playerId, name: p.name, count: p.missing.length }));
+      sync = {
+        syncedAt: tenant ? toIsoTimestamp(tenant.rosterSyncedAt) : null,
+        sheetUrl: (tenant && typeof tenant.rosterSheetId === 'string' && tenant.rosterSheetId)
+          ? `https://docs.google.com/spreadsheets/d/${tenant.rosterSheetId}`
+          : null,
+        missing,
+      };
+    }
+
+    const model = {
+      school: schoolName,
+      isAdmin: ctx.isAdmin === true,
+      themeKey,
+      tenantId: ctx.tenantId,
+      players,
+      sync,
+    };
+
+    const scrimmagePageMod = await import('../ui/scrimmage-page.mjs').catch(() => null);
+    if (!scrimmagePageMod || typeof scrimmagePageMod.renderScrimmagePage !== 'function') {
+      res.status(500).set('Content-Type', 'text/plain; charset=utf-8').send('render error: scrimmage page module missing');
+      return;
+    }
+    const html = scrimmagePageMod.renderScrimmagePage(model);
+    res.set('Content-Type', 'text/html; charset=utf-8').send(html);
+  } catch (e) {
+    res.status(500).set('Content-Type', 'text/plain; charset=utf-8')
+      .send(`render error: ${e && e.message ? e.message : String(e)}`);
+  }
 });
 
 // 全リクエストで HTML を返す。?p=<patternId> で描画パターンを選ぶ（既定 timeline）。

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>チーム分け モック</title>
+<style>
+/* 値の正本は ui/styles/tokens.css（ui/index.html の :root と同値）。プリミティブ→意味ロールの2層をそのまま写し、
+ * 部品CSSはロールだけを参照する（docs/design-system/component-spec.md の規律）。 */
+:root{
+  --bg:#fbf5ec; --surface:#fffaf2; --ink:#2a201a; --mute:#6d5c4e; --mute-2:#a08b74;
+  --orange:#ef7a32; --orange-ink:#2a201a; --orange-soft:#ffd7b9; --orange-deep:#a8480c; --orange-wash:#ffe9d6;
+  --terra:#b8623b; --terra-ink:#93502c; --gold:#cf9a3e; --sage:#7c8a5a;
+  --boys:#ef7a32; --girls:#b8623b; --girls-ink:#93502c;
+  --line:#e7dccb; --line-2:#d9c8b0; --hair:#e7dccb;
+  --tan:#ddc9ab; --tan-2:#cdb894;
+  --scrim:rgba(42,32,26,.50);
+  --print-bg:#fff;
+
+  --surface-ground:var(--bg); --surface-card:var(--surface);
+  --on-surface:var(--ink); --on-surface-muted:var(--mute);
+  --line-hairline:var(--hair); --line-strong:var(--line-2); --scrim-overlay:var(--scrim);
+
+  --state-selected-fill:var(--orange); --state-selected-ring:var(--orange-deep);
+  --on-state-selected:var(--orange-ink);
+  --state-idle-fill:var(--surface); --state-idle-line:var(--hair); --on-state-idle:var(--mute);
+
+  --action-primary-fill:var(--orange-deep); --action-primary-line:var(--orange-deep);
+  --on-action-primary:var(--surface);
+  --action-disabled-fill:var(--surface);
+  --action-disabled-line:var(--mute-2);
+  --on-action-disabled:var(--mute-2);
+
+  --action-destructive-fill:var(--tan); --action-destructive-line:var(--mute);
+  --on-action-destructive:var(--ink);
+  --action-destructive-fill-hover:var(--tan-2);
+
+  --action-secondary-fill:var(--tan); --action-secondary-line:var(--mute);
+  --on-action-secondary:var(--ink);
+  --action-secondary-fill-hover:var(--tan-2);
+
+  --action-move-fill:transparent; --action-move-line:transparent;
+  --on-action-move:var(--mute); --on-action-move-hover:var(--ink);
+  --action-move-fill-hover:var(--tan);
+
+  --on-label-accent:var(--mute); --on-link:var(--ink);
+  --focus-ring:var(--orange);
+
+  --team-boys-fill:var(--boys); --team-girls-fill:var(--girls);
+  --on-team-label:var(--on-surface);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--surface-ground);color:var(--on-surface)}
+body{font-family:"Hiragino Sans",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+.wrap{max-width:840px;margin:0 auto;padding:32px 18px 80px}
+
+/* ── モックの外側（説明部）。本番には出ない ── */
+.doc-h1{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.35}
+.doc-lede{font-size:14px;color:var(--on-surface-muted);margin-top:8px;max-width:56ch;line-height:1.7}
+.doc-lede+.doc-lede{margin-top:4px}
+.frame-h{margin:40px 0 10px}
+.frame-h .fh-name{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.frame-h .fh-what{font-size:14px;color:var(--on-surface-muted);line-height:1.6;margin-top:2px}
+.frame-h .fh-note{font-size:13px;color:var(--on-surface-muted);line-height:1.6;margin-top:6px;max-width:56ch}
+
+/* ── 端末枠（390px） ── */
+.frame{width:390px;max-width:100%;background:var(--surface-ground);border:1px solid var(--line-strong);border-radius:14px;overflow:hidden}
+.screen{padding:18px 18px 22px}
+
+/* ── 独立アプリのヘッダ: アプリ名、右端に管理者だけの下線の文字「名簿」、下に男子/女子の器 ── */
+.hdr{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.hdr .lnk{margin-left:auto}
+.hdr+.seg{margin-top:10px}
+/* ── 画面の見出し（日ビューの dayhead .dh-t と同寸） ── */
+.sc-t{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.35}
+.sc-sub{font-size:14px;color:var(--on-surface-muted);line-height:1.6;margin-top:2px}
+
+/* ── 押せない見出しラベル（下線なし・700・字間.04em・--on-label-accent） ── */
+.lab{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--on-label-accent);margin:18px 0 8px}
+
+/* ── 役割1 状態: 器と状態ピル ──
+ * 器: 地色の面・角丸20px・濃い側1px・内側余白5px。中身は同じ形の兄弟だけ。 */
+.seg{display:flex;gap:6px;background:var(--surface-ground);border:1px solid var(--line-strong);border-radius:20px;padding:5px;margin-top:8px}
+.seg .st{flex:1 1 0;appearance:none;cursor:pointer;font:inherit;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-height:44px;padding:0 6px;border-radius:999px;background:var(--state-idle-fill);border:1px solid var(--state-idle-line);color:var(--on-state-idle);font-size:14px;font-weight:600;line-height:1.3;transition:transform .16s ease}
+.seg .st:hover{transform:translateY(-2px)}
+.seg .st:active{transform:translateY(1px)}
+.seg .st[aria-pressed="true"]{background:var(--state-selected-fill);border:1.5px solid var(--state-selected-ring);color:var(--on-state-selected);font-weight:700}
+.seg .st small{font-size:12px;font-weight:400}
+.seg .st:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* ── 役割2 主の操作: 濃い側の塗り・白抜き・角丸8px・チェック印17px・単独配置 ── */
+.act-primary{appearance:none;cursor:pointer;font:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;width:100%;padding:0 22px;border-radius:8px;background:var(--action-primary-fill);border:1.5px solid var(--action-primary-line);color:var(--on-action-primary);font-size:15px;font-weight:700;letter-spacing:.04em;transition:transform .16s ease}
+.act-primary:hover{transform:translateY(-2px)}
+.act-primary:active{transform:translateY(1px)}
+.act-primary:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.act-primary svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── 役割4 副の操作: タンの面・角丸8px・0 16px・14px 600・独立配置 gap8px 右揃え ── */
+.ops{display:flex;justify-content:flex-end;gap:8px;flex-wrap:nowrap}
+.act-secondary{appearance:none;cursor:pointer;font:inherit;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:0 16px;border-radius:8px;background:var(--action-secondary-fill);border:1px solid var(--action-secondary-line);color:var(--on-action-secondary);font-size:14px;font-weight:600;white-space:nowrap;transition:background-color .16s ease,transform .16s ease}
+.act-secondary:hover{background:var(--action-secondary-fill-hover)}
+.act-secondary:active{transform:translateY(1px)}
+.act-secondary:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.act-secondary svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── 文字だけの導線: 常時下線・400・本文と同寸・offset2px。押せる文字はこれだけ ── */
+.lnk{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 4px;color:var(--on-link);font-size:14px;font-weight:400;text-decoration:underline;text-underline-offset:2px}
+.lnk:hover{text-decoration-thickness:2px}
+.lnk:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.lnk--body{font-size:16px}
+
+/* ── 入力部品: 名簿のチェック行。カード面・弱い罫線、鉤は本文前景（状態ロールは借りない） ── */
+.roster{list-style:none;display:flex;flex-direction:column;gap:6px}
+.chk{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 16px;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;cursor:pointer;user-select:none}
+.chk input{position:absolute;opacity:0;width:1px;height:1px;font:inherit}
+.chk .box{flex:0 0 auto;width:24px;height:24px;border-radius:6px;background:var(--surface-card);border:1px solid var(--line-strong);display:inline-flex;align-items:center;justify-content:center;color:var(--on-surface)}
+.chk .box svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;visibility:hidden}
+.chk input:checked+.box svg{visibility:visible}
+.chk input:focus-visible+.box{outline:2px solid var(--focus-ring);outline-offset:2px}
+.chk .nm{font-size:18px;font-weight:600;line-height:1.3}
+.chk input:not(:checked)~.nm{color:var(--on-surface-muted);font-weight:400}
+
+/* ── 結果の名前一列（押せない表示物）。面2 ── */
+.names{list-style:none;display:flex;flex-direction:column;gap:6px}
+.names li{display:flex;align-items:center;min-height:52px;padding:0 16px;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;font-size:18px;font-weight:600;line-height:1.3}
+
+/* ── 本文行 ── */
+.line{font-size:16px;line-height:1.6;margin-top:10px}
+.line b{font-weight:700}
+.meta{font-size:14px;color:var(--on-surface-muted);line-height:1.6}
+
+/* ── 下部の操作域（親指の届く位置）。上に弱い罫線1本 ── */
+.bottom{margin-top:28px}
+.bottom .act-primary{margin-top:14px}
+
+/* ── 面3: 未入力一覧の行（押せない表示物） ── */
+.missing{list-style:none;display:flex;flex-direction:column;gap:6px}
+.missing li{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 16px;background:var(--surface-card);border:1px solid var(--line-hairline);border-radius:10px;font-size:18px;font-weight:600;line-height:1.3}
+.missing li .pid{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--on-surface-muted)}
+.missing li .cnt{margin-left:auto;color:var(--on-surface-muted);font-size:14px;white-space:nowrap}
+
+@media (max-width:420px){.wrap{padding:24px 12px 60px}.frame{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1 class="doc-h1">チーム分け（/scrimmage）の3フレーム</h1>
+<p class="doc-lede">独立 URL /scrimmage。ホーム画面に追加して直接開く。練習計画の画面からは入らない。入れ替えは無し、気に入らなければもう一回。</p>
+<p class="doc-lede">出欠を確認してチーム数を決めて分ける。結果はチームの文字と名前だけを出す。順位付けと読める語や数は、どの面にも出さない。</p>
+<p class="doc-lede">各フレームは幅390pxで描いてある。部品の見た目は docs/design-system/component-spec.md の5役割（状態ピル／主の操作／副の操作／下線の文字）に揃えた。</p>
+
+<!-- ───────── 面1: 出欠とチーム数 ───────── -->
+<div class="frame-h" id="f1">
+  <div class="fh-name">面1: 出欠とチーム数</div>
+  <div class="fh-what">ホーム画面のアイコンから開く最初の面。上で男子か女子を選び、来ていない子のチェックを外し、チーム数を選んで「分ける」を押す。</div>
+  <div class="fh-note">在籍中は全員チェック済みで開く。今日は2人が欠席で外れている。行に出すのは名前だけ。人数の行は出席人数と割り方を示す。ヘッダ右端の下線の文字「名簿」は管理者にだけ出て、面3へ跳ぶ。</div>
+</div>
+<div class="frame">
+  <div class="screen">
+    <div class="hdr">
+      <div class="sc-t">チーム分け</div>
+      <a class="lnk" href="#f3">名簿</a>
+    </div>
+    <div class="seg" role="group" aria-label="対象の切り替え">
+      <button class="st" type="button" aria-pressed="false">男子</button>
+      <button class="st" type="button" aria-pressed="true">女子</button>
+    </div>
+    <div class="sc-sub" style="margin-top:8px">9/5（金）</div>
+
+    <span class="lab">出席</span>
+    <ul class="roster">
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">アオキ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">イシダ</span></label></li>
+      <li><label class="chk"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">ウエノ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">エンドウ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">オカダ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">カトウ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">キムラ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">クドウ</span></label></li>
+      <li><label class="chk"><input type="checkbox"><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">コヤマ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">サカイ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">シミズ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">スギヤマ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">タナカ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">ツチヤ</span></label></li>
+      <li><label class="chk"><input type="checkbox" checked><span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="nm">ナカムラ</span></label></li>
+    </ul>
+
+    <div class="bottom">
+      <span class="lab" style="margin-top:0">チーム数</span>
+      <div class="seg" role="group" aria-label="チーム数">
+        <button class="st" type="button" aria-pressed="false">2</button>
+        <button class="st" type="button" aria-pressed="true">3</button>
+      </div>
+      <p class="line"><b>13人</b> → 5・4・4</p>
+      <button class="act-primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>分ける</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── 面2: 結果 ───────── -->
+<div class="frame-h">
+  <div class="fh-name">面2: 結果</div>
+  <div class="fh-what">A／B／Cを切り替えて、そのチームの名前だけを見る。1画面に1チーム。気に入らなければ「もう一回」、決まったら「この分けで決める」で今日の分けとして残す。</div>
+  <div class="fh-note">子に画面を見せる前提の面。出るのはチームの文字、人数、名前だけ。入れ替えの操作は持たない。決めた分けは履歴に残り、次回以降の分け方に使う。</div>
+</div>
+<div class="frame">
+  <div class="screen">
+    <div class="hdr">
+      <div class="sc-t">チーム分け</div>
+      <a class="lnk" href="#f3">名簿</a>
+    </div>
+    <div class="seg" role="group" aria-label="対象の切り替え">
+      <button class="st" type="button" aria-pressed="false">男子</button>
+      <button class="st" type="button" aria-pressed="true">女子</button>
+    </div>
+    <div class="sc-sub" style="margin-top:8px">9/5（金）13人</div>
+
+    <span class="lab">チーム</span>
+    <div class="seg" role="group" aria-label="チーム">
+      <button class="st" type="button" aria-pressed="true">A<small>5人</small></button>
+      <button class="st" type="button" aria-pressed="false">B<small>4人</small></button>
+      <button class="st" type="button" aria-pressed="false">C<small>4人</small></button>
+    </div>
+
+    <span class="lab">チームA</span>
+    <ul class="names">
+      <li>タナカ</li>
+      <li>アオキ</li>
+      <li>キムラ</li>
+      <li>サカイ</li>
+      <li>ナカムラ</li>
+    </ul>
+
+    <div class="bottom">
+      <div class="ops">
+        <button class="act-secondary" type="button">もう一回</button>
+      </div>
+      <button class="act-primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>この分けで決める</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── 面3: 名簿同期（管理者のみ） ───────── -->
+<div class="frame-h" id="f3">
+  <div class="fh-name">面3: 名簿同期（管理者のみ）</div>
+  <div class="fh-what">面1・面2のヘッダ右端「名簿」から入る。名簿シートの内容をアプリへ取り込む。最終同期の時刻と、シートに未入力がある子を出す。</div>
+  <div class="fh-note">管理者だけが開く面。どの列が空かを名指しで出し、下線の「名簿シートを開く」でシートへ跳んで埋める。</div>
+</div>
+<div class="frame">
+  <div class="screen">
+    <div class="hdr">
+      <div class="sc-t">名簿同期</div>
+      <a class="lnk" href="#f1">チーム分けへ戻る</a>
+    </div>
+    <div class="sc-sub">最終同期 9/3 18:20</div>
+
+    <span class="lab">シートで未入力の列がある子</span>
+    <ul class="missing">
+      <li><span class="pid">F07</span><span>サトウ</span><span class="cnt">身長</span></li>
+      <li><span class="pid">M03</span><span>コバヤシ</span><span class="cnt">Tier</span></li>
+    </ul>
+    <p class="line"><a class="lnk lnk--body" href="#" >名簿シートを開く</a></p>
+
+    <div class="bottom">
+      <p class="meta">シートの内容でアプリの名簿を置き換える。</p>
+      <button class="act-primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>名簿を同期</button>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
