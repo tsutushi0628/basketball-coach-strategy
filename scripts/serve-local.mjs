@@ -21,6 +21,11 @@
  *     事前に `gcloud auth application-default print-access-token` か `firebase login:list` で
  *     ADC の有無を確認してから起動すること。
  *
+ * このPCでの本番実行前提: `GOOGLE_APPLICATION_CREDENTIALS` にリポ外の ADC（個人アカウントの
+ * authorized_user 資格）、`GOOGLE_CLOUD_QUOTA_PROJECT=ai-bb-coach` を環境変数で与えれば、対話
+ * ログイン無しに本番 Firestore へ接続できる（.spec-workflow/specs/scrimmage-split/tasks.md
+ * の運用節参照）。
+ *
  * 使い方: `node scripts/serve-local.mjs`（既定ポート 5173、`PORT` 環境変数で変更可）。
  */
 

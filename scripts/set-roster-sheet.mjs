@@ -12,6 +12,11 @@
  *     を許さない）。
  *   - 実スプシIDはこのファイルに書かない。呼び出し時に `--sheet` 引数で渡す。
  *
+ * このPCでの本番実行前提: `GOOGLE_APPLICATION_CREDENTIALS` にリポ外の ADC（個人アカウントの
+ * authorized_user 資格）、`GOOGLE_CLOUD_QUOTA_PROJECT=ai-bb-coach` を環境変数で与えれば、
+ * firebase-admin 標準経路（ADC）で対話ログイン無しに本番へ書き込める（.spec-workflow/specs/
+ * scrimmage-split/tasks.md の運用節参照）。
+ *
  * 使い方:
  *   node scripts/set-roster-sheet.mjs --tenant tenant-genchi --sheet <20文字以上の英数・-・_>
  *   node scripts/set-roster-sheet.mjs --tenant tenant-genchi --sheet <sheetId> --prod
@@ -58,6 +63,7 @@ async function main() {
   }
 
   const projectId = args.prod ? PROD_PROJECT_ID : EMULATOR_PROJECT_ID;
+
   const app = getApps().length ? getApps()[0] : initializeApp({ projectId });
   const db = getFirestore(app, DATABASE_NAME);
 
@@ -68,7 +74,15 @@ async function main() {
   }
 
   await tenantRef.set({ rosterSheetId: args.sheet }, { merge: true });
-  console.log(`SET-ROSTER-SHEET OK: tenants/${args.tenant}.rosterSheetId を設定しました（project=${projectId}）`);
+
+  // 読み戻しで実際に保存された値を確認する（書き込み成功のログだけで済ませない）。
+  const verifySnap = await tenantRef.get();
+  const saved = verifySnap.data()?.rosterSheetId;
+  if (saved !== args.sheet) {
+    console.error('SET-ROSTER-SHEET FAIL: 書き込み後の読み戻しで値が一致しません');
+    process.exit(1);
+  }
+  console.log(`SET-ROSTER-SHEET OK: tenants/${args.tenant}.rosterSheetId を設定・読み戻しで確認しました（project=${projectId}）`);
 }
 
 main().catch((e) => {

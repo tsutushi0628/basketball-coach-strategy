@@ -34,6 +34,12 @@
 
 ## D. 統合と出荷
 
+### 運用（このPCでの本番スクリプト実行前提）
+
+- `GOOGLE_APPLICATION_CREDENTIALS` にリポ外の ADC ファイル（`C:\Users\tsutu\.tmp\adc-personal.json`。中身はコミットしない）を指定する。
+- `GOOGLE_CLOUD_QUOTA_PROJECT=ai-bb-coach` を併せて設定する（無いと ADC 経由の一部 API が quota project 未設定で 403 になる）。
+- 上記2つを環境変数で与えれば `scripts/set-roster-sheet.mjs --prod`・`scripts/serve-local.mjs` は対話ログイン無しで本番 Firestore に接続できる（firebase-admin 標準経路）。
+
 - [ ] エミュレータ実走：`npm --prefix functions run build` 後に `scripts/verify-scrimmage.mjs` を `emulators:exec` 配下で通す（PASS の実出力を `docs/findings/` に残す）。
 - [ ] オーナー作業：名簿シートの共有に Functions の実行サービスアカウントを閲覧者で追加し、`scripts/set-roster-sheet.mjs --prod --sheet <ID>` を1回実行する。
 - [ ] 本番デプロイ（`firebase deploy`）と本番 `/scrimmage` の1クリック確認。y/n 確認の対象。
