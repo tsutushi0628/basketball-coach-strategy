@@ -1,14 +1,18 @@
-# spec: 紅白戦チーム分けのデータ・同期・エンジン・API設計（2026-09-05）
+# 紅白戦チーム分け 設計（design）
 
-> 正本は `.spec-workflow/specs/scrimmage-split/`（product／requirements／design／tasks）へ移した。本書は初版の記録として残す。
-> type=spec。対象リポジトリ = basketball-coach-strategy（バスケ練習計画Webツール）。
-> 実装者向けの変更点の単一真実源。行番号は 2026-09-05 時点の main。
-> 面の見た目は `docs/findings/design-20260905-scrimmage-split-mock.html` が正本で、本書は面の一覧と操作だけを書く。モックの「入口: 日ビューの道具列」と「面2b 入れ替え中」は本書の 6 章で廃止した。
+> 対象リポジトリ = basketball-coach-strategy（ブランチ feat/scrimmage-split）。要件は `requirements.md`、進捗は `tasks.md`。
+> 面の見た目は `docs/findings/design-20260905-scrimmage-split-mock.html` が正本で、本書は面の一覧と操作だけを書く。モックの「入口: 日ビューの道具列」と「面2b 入れ替え中」は 6 章で廃止した。
 > 土台は `docs/specs/multitenant/design.md`（tenants/{tid} 配下・全 deny rules・Functions 経由）と `engine/DESIGN.md`（外部依存ゼロ・node:test）。
-> 改訂: 2026-09-05 外部レビュー反映（蛇行初期解を人数規則に一致させる、同期の batch 上限ガード、10 章の実装契約を追加）。
-> 改訂: 2026-09-05 実装は Claude の3分担（A engine・B functions・C ui）で行った。Codex は認証切れで使えなかった。
+> 行番号は 2026-09-05 のコミット a46e3e1 時点。
+>
+> 改訂履歴
+> - 2026-09-05 初版を `docs/findings/spec-20260905-scrimmage-split.md` に置き、オーナー裁定2件（独立URL・入れ替え削除）を反映。
+> - 2026-09-05 外部レビュー（GPT-5.6 Sol）採用1: 蛇行初期解を人数規則（余りは先頭チームへ片寄せ）に一致させる。
+> - 2026-09-05 外部レビュー（GPT-5.6 Sol）採用2: 名簿同期の差分 write を事前計算し 499 超は 422 で書かない（前回名簿を維持）。
+> - 2026-09-05 実装は Claude の3分担（A engine・B functions・C ui）で行った。Codex は認証切れで使えなかった。
+> - 2026-09-05 規範の置き場 `.spec-workflow/specs/scrimmage-split/` へ再構成。
 
-## 1. 目的と対象
+## 1. 概要
 
 コーチがスマホで独立URL `/scrimmage`（アプリ名「チーム分け」）を開き、その日の出席者を男女別に2〜3チームへ分け、結果を選手名だけで子に見せる。
 練習計画の画面は変更せず、認証・テナント解決・Firestore・名簿シートだけを共有する（別 Firebase プロジェクトにしない）。
@@ -68,7 +72,7 @@ Tier・役割・身長・平均・警告・評価は、画面にもHTMLのデー
 
 ## 4. エンジン `engine/src/scrimmage.js`
 
-外部依存ゼロ・ESM・純関数。`Math.random` と `Date` を使わない。関数の形は 10 章 A。
+外部依存ゼロ・ESM・純関数。`Math.random` と `Date` を使わない。関数の形は 7 章 A。
 
 ### 4.1 入力と人数
 
@@ -105,7 +109,7 @@ PRNG は mulberry32（同ファイル内に定義・seed は `>>> 0` で uint32 
 
 ## 5. API
 
-`functions/index.mjs` の `mountWriteApi`（`:316`）へ3本足す。作法は `/api/tenant/goal`（`:534-561`）と同型で、`resolveRequestTenant(dbInstance, req, { forWrite: true })` → `kind` 分岐（auth 401・none 403・choose 400・例外 500）→ 純判定関数（10 章 B）→ Firestore。
+`functions/index.mjs` の `mountWriteApi`（`:316`）に3本ある（split `:709`・decide `:766`・sync `:824`）。作法は `/api/tenant/goal`（`:534-561`）と同型で、`resolveRequestTenant(dbInstance, req, { forWrite: true })` → `kind` 分岐（auth 401・none 403・choose 400・例外 500）→ 純判定関数（7 章 B・`:349` `:386` `:435`）→ Firestore。
 
 | 経路 | 認可 | 入力 | 応答 |
 |---|---|---|---|
@@ -123,46 +127,13 @@ PRNG は mulberry32（同ファイル内に定義・seed は `>>> 0` で uint32 
 面の見た目と部品はモックが正本。操作語彙は `docs/design-system/component-spec.md` の「状態ピル」「主の操作」「副の操作」「下線の付いた文字」に揃える。
 
 - 入口：独立URL `/scrimmage` をスマホのホーム画面に追加して直接開く。練習計画の画面（`ui/pattern-timeline.mjs`・道具列）は変更しない。ホーム画面追加用に `<meta name="viewport">`、`apple-mobile-web-app-capable`、`apple-mobile-web-app-title`（「チーム分け」）、`theme-color` を `/scrimmage` の head に出す（manifest・Service Worker は持たない）。
-- 面の配信：`server.get('/scrimmage')` を `/onboarding`（`:578`）と `GET '*'`（`:591`）の間に置き、`resolveRequestTenant(db, req, { forWrite:false })` の `kind` 分岐（auth→/login、none→/onboarding、choose→選択画面）を `GET '*'` と同じにする。`buildPlanData` は呼ばず、10 章 B の model を組んで `renderScrimmagePage(model)` に渡す。Tier・役割・身長・学年は model に載せない。
+- 面の配信：`server.get('/scrimmage')`（`:957`）を `/onboarding` と `GET '*'` の間に置き、`resolveRequestTenant(db, req, { forWrite:false })` の `kind` 分岐（auth→/login、none→/onboarding、choose→選択画面）を `GET '*'` と同じにする。`buildPlanData` は呼ばず、7 章 B の model を組んで `renderScrimmagePage(model)` に渡す。Tier・役割・身長・学年は model に載せない。
 - ヘッダ：アプリ名「チーム分け」、男子／女子の状態ピル、`isAdmin` のときだけ右端に下線の文字「名簿」（面3へ）。
 - 面1 出欠とチーム数：在籍中を全員チェック済みで並べたチェック行（入力部品）、チーム数 2／3 の状態ピル、人数と割り方の一文、主の操作「分ける」。
 - 面2 結果：A／B／C の状態ピル（人数付き）、そのチームの名前の縦一列、副の操作「もう一回」（`seed + 1` で split）と主の操作「この分けで決める」（`decide`）。`decide` は「分ける」「もう一回」の直後には呼ばない（呼ぶと試行のたびに履歴が増え、過去3回の罰点が試行で汚れる）。
 - 面3 名簿同期：ヘッダの「名簿」から開く。最終同期時刻、未入力がある子の一覧（選手ID・名前・「未入力 n列」）、下線の文字「名簿シートを開く」（`https://docs.google.com/spreadsheets/d/{rosterSheetId}`）、主の操作「名簿を同期」。
 
-## 7. テスト
-
-- `engine/test/scrimmage.test.js`（node:test・合成名簿）：同じ入力と seed で `teams` が一致する／seed を変えると異なる分けが出る入力例が1つ以上ある／`n = teamCount〜20` の全人数と `teamCount = 2, 3` の全組合せで `splitTeams` の人数配分が `teamSizes` と一致する／`scoreTeams` の各項を、意図した欠け（handler 0人のチーム）を持つ手組みの teams で検証する／`history` に同チームペアを置くと P が増え J が上がる／不正入力（未知 id・重複・人数不足）で throw する。
-- `engine/test/roster.test.js`：役割セルの区切り6種と未知語・重複、Tier 範囲外→3、身長欠損→同性別中央値、性別欠落→skipped、`missing` の列名。fixture は合成名。
-- `functions/scrimmage-api.test.mjs`：`tenant-theme-api.test.mjs` と同じくモック db で `mountWriteApi` を実HTTPで叩く。owner でない 403、`attendees` 越境 400、decide の分割検証 400、採番 `-1`・`-2`、sync の isAdmin 403 と `sheetId` 書式 400、差分 500 超で 422 かつ `roster` 不変。
-- E2E：`e2e/` の作法（Playwright・PASS/FAIL 配列・証跡は `e2e/evidence/`）で、エミュレータ起動後に `/scrimmage` を開き、面1→分ける→面2→もう一回→決める の通し、面2の DOM テキストに数値（Tier・身長）が含まれないこと、`/scrimmage` の head にホーム画面追加用メタがあることを実測する。練習計画の既存 E2E（`ui/toolbar-reorg.test.mjs` を含む）は変更せずそのまま通す。
-
-## 8. 受け入れ条件
-
-- 同じ `roster`・`attendees`・`teamCount`・`history`・`seed` で `splitTeams` が同じ `teams` を返す。
-- 13人・3チームで 5・4・4、13人・2チームで 7・6、5人・3チームで 2・2・1 になる。
-- 実力合計差が 0.5 縮む交換は、役割欠けが1つ増えても採用される（100·0.5 = 50 > 40）。
-- 過去3回同チームだったペアを含む分けは、それ以外が同点なら選ばれない。
-- 面2の HTML と データ島に Tier・役割・身長・学年・平均・警告・評価が含まれない。
-- 当日欠席をチェックで外した選手が `teams` に現れない。
-- 「もう一回」は `seed + 1` を送り、応答の `seed` が +1 されている。
-- 履歴には「この分けで決める」を押した分けだけが保存される。
-- 練習計画の既存画面の DOM と E2E に差分が出ない（`ui/pattern-timeline.mjs` と `ui/styles/` は無変更）。
-- 名簿同期は管理者以外が 403、Sheets 失敗時は 502、差分 500 超は 422 で、いずれも `roster` が前回のまま残る。
-- 同期後の `roster` に 利き手・本人の目標・メモ・ポジション が無い。
-- seed・fixture・エミュレータ退避に実名が無い。
-- `node --test engine functions` が通り、E2E の通しが PASS する。
-
-## 9. やらないこと
-
-- スプレッドシートへの書き戻し（欠席・チーム分け結果をシートに戻さない）。
-- 名簿編集画面（名簿の直しはシート側で行う）。
-- OAuth（コーチ個人の Google 認可）。ADC とサービスアカウント共有だけ。
-- ウェブ公開CSV での読み取り。
-- 学年による実力の上限、上級生の散らしを禁止事項にすること（いずれも重み付き罰点で扱う）。
-- 1人入れ替え（相手を選んで交換する操作。「もう一回」だけで足りる）。
-- 面の見た目の記述（モック承認後に本書へ追記する）。
-
-## 10. 実装契約（3分担の境界）
+## 7. 実装契約（3分担の境界）
 
 依存の向きは C → なし、B → A と C、A → なし。A と C は firebase-admin・express を import しない。
 
@@ -188,3 +159,9 @@ PRNG は mulberry32（同ファイル内に定義・seed は `>>> 0` で uint32 
 - ブラウザ側 JS は同ファイル内の IIFE 文字列（`ui/editor.mjs` と同じ作法）。fetch は `credentials:'same-origin'`、URL の `?t` を `/api/...?t=` に引き継ぐ（`ui/editor.mjs` の `withTenantQ` と同型）。
 - fetch 先と形：`POST /api/scrimmage/split` → `{ ok, seed, teams }`、`POST /api/scrimmage/decide` → `{ ok, id }`、`POST /api/roster/sync` → `{ ok, syncedAt, count, skipped, missing }`。失敗は `{ ok:false, error }` の `error` を面の下部に一文で出し、面は変えない。
 - `model.players` の `playerId → name` 対応でチームの名前を描く。`model` に無い情報（Tier 等）を描画も島も持たない。
+
+## 8. Code Reuse Analysis
+
+- そのまま使う：`resolveRequestTenant` と `kind` 分岐、`mountWriteApi` の JSON 経路と `{ ok:false, error }` の応答形、`goalWriteDecision` と同型の純判定、`renderPage`／`themeOverrideCss`／`authClientHtml`、`ui/editor.mjs` の IIFE 文字列と `withTenantQ`、`scripts/fetch-0623.mjs` の PASS/FAIL 作法、`seed-firestore.mjs` の合成 uid と `--prod` 安全弁。
+- 拡張する：`functions/index.mjs`（ルート4本と純判定3本）、`firestore.indexes.json`（scrimmages の複合インデックス）、`functions/package.json`（google-auth-library の明記）。
+- 新規：`engine/src/scrimmage.js`、`engine/src/roster.js`、`functions/roster-sheet.mjs`、`ui/scrimmage-page.mjs`、`scripts/verify-scrimmage.mjs`、`scripts/set-roster-sheet.mjs`、`functions/fixtures/roster-synthetic.json`。firebase-kit 側の変更は無い（`createSessionAuthGate` は multitenant/design.md §3 のとおり本件に合わず、既存の自前セッション層を使う）。
