@@ -354,6 +354,33 @@ test('POST /api/roster/sync: sheetId 書式不正は 400', async () => {
   } finally { await app.close(); }
 });
 
+test('POST /api/roster/sync: sheetId 指定時に tenants/{tid}.rosterSheetId を merge 保存し、他フィールドを壊さない', async () => {
+  // オーナーが Firestore コンソールを触らずに初回の sheetId を設定できる経路（body の sheetId）。
+  // 既存の name/themeKey 等を消さないことを merge:true の実効果として確認する。
+  const db = makeMockDb({
+    ...rosterSeed,
+    'tenants/tenant-local': { id: 'tenant-local', name: '現行校', themeKey: 'navy' },
+  });
+  const app = await startApp(db);
+  const prevPath = process.env.ROSTER_FIXTURE_PATH;
+  // Sheets 取得自体は失敗させて roster 書き込みまで到達させない（本テストの関心は sheetId の
+  // merge 保存だけなので、502 になっても sheetId の保存は取得より先に起きる＝spec 5章の順序）。
+  process.env.ROSTER_FIXTURE_PATH = 'C:/nonexistent-roster-fixture-for-test.json';
+  try {
+    const sheetId = 'z'.repeat(24);
+    const r = await post(app.base, '/api/roster/sync', { sheetId });
+    assert.equal(r.status, 502);
+    const tenant = db.store.get('tenants/tenant-local');
+    assert.equal(tenant.rosterSheetId, sheetId, 'sheetId が保存される');
+    assert.equal(tenant.name, '現行校', '既存 name が消えない（merge）');
+    assert.equal(tenant.themeKey, 'navy', '既存 themeKey が消えない（merge）');
+  } finally {
+    if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
+    else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    await app.close();
+  }
+});
+
 test('POST /api/roster/sync: Sheets 取得失敗（fetchSheetValues throw）は 502 で roster 不変', async () => {
   const db = makeMockDb(rosterSeed);
   const app = await startApp(db);
