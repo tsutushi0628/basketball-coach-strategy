@@ -2,8 +2,10 @@
 
 > type=qa。対象: 未コミットの作業ツリー差分（`spec-20260905-past-weeks-and-copy-source-impl.md` 実装分。
 > 不具合3・4対応 `spec-20260905-goal-local-update-and-split-flag.md` の上に乗っている）。
-> 初回判定: QA FAIL（6章）。1回目修正後の再QA: QA FAIL（9〜10章）。2回目修正後の再々QAは11章。
-> **最終判定: QA PASS**（11章）。
+> 初回判定: QA FAIL（6章）。1回目修正後の再QA: QA FAIL（9〜10章）。2回目修正後の再々QA: QA PASS（11〜12章）。
+> オーナー差し戻し（`docs/findings/fix-20260905-week-nav-past-limit-and-jump-removal.md`。年月セレクト削除・
+> 到達下限廃止・`?week`遷移方式への変更）後の再々々QAは13章。
+> **最終判定: QA PASS**（13章）。
 
 ## 1. テスト全件実走
 
@@ -176,5 +178,47 @@ npm --prefix functions run build  # 正常終了
 ## 12. 最終結論
 
 `modelHasContent()` の判定ロジック修正（9章）と、呼び出し元2分岐の `collectInputs()` 先行修正（11章）により、「ねらいだけ入力した日」への無警告上書きは3経路（他日を取り込む・自動生成に戻す・叩き台を読み込む）すべてで解消された。テスト277+98件全緑、両ビルド正常、差分は指摘範囲のみ、主要機能（過去週ナビ・コピー元・不具合3・4対応）の非回帰も確認した。
+
+**QA PASS**。
+
+## 13. 再々々QA（オーナー差し戻し: 年月セレクト削除・到達下限廃止）
+
+対象: `docs/findings/fix-20260905-week-nav-past-limit-and-jump-removal.md`。「年月で飛ぶ」の全削除、「今週へ戻る」を「次の週」の隣へ移動、到達下限廃止（`pastWeeks`先頭を超えて「前の週」を押すと`?week=`付きURLへ再SSR、`weekQuery`はその週の学校年度4月1日週まで下限を広げる）。
+
+### 13.1 テスト全件・ビルド
+
+```
+node --test ui/*.test.mjs         # tests 274 / pass 274 / fail 0
+node --test functions/*.test.mjs  # tests 98 / pass 98 / fail 0
+node ui/build.mjs                 # 生成: 1パターン (timeline) ＋ index.html
+npm --prefix functions run build  # 正常終了、functions/dist/index.mjs に weekQuery 反映確認（grep 6件）
+```
+
+### 13.2 Playwright実機確認（独自スクリプト、`.tmp/qa-20260905/verify-final.mjs`・`debug-today*.mjs`）
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | 年月セレクトが無い | `.wk-jump-sel`・`.wk-jump` とも0件 |
+| 2 | 「今週へ戻る」が「次の週」の隣（同じ行、左から前の週→次の週→今週へ戻るの順）で、表示中週が今週なら非表示 | 位置は `.wk-row` 内で prev/next/today が同じ行・この順で確認。今週タブを明示選択すると `data-shown="false"`・`visibility:hidden`。別週選択時は `visibility:visible`。初期表示でボタンが見えていたのはローカル種データで今週に上書きが無く「今日に最も近い練習日」の初期選択規則（既存不変）が3週先の週を選んだためで、今週選択時の非表示自体は正しく動作している |
+| 3 | 「前の週」を20回以上連打しても`disabled`にならず、`pastWeeks`先頭を超えると`?week=`付きURLへ遷移 | `pastWeeks.length + 20` 回連打する経路で最後まで`disabled`にならず（`neverDisabled:true`）、超えた時点で `?week=2026-03-23` へ遷移（`navigated:true`）。値は学校年度2025の4月1日週の1週前の月曜と一致 |
+| 4 | 週タブ4枠の見た目不変 | 「前の週」押下前後で高さ・font-size・font-weight・border-radius・padding が完全一致 |
+| 5 | 過去週でも月・週目標と日の記録が出る | 直近の過去週で `hasMonthCell:true`・`hasWeekCell:true`（`monthKey:"8"`・`weekKey:"2026-06-15"`）、日の記録描画（`.dayhead`/`.emptystate`）も存在 |
+
+### 13.3 不具合3・4・コピー元の非回帰
+
+```
+node --test ui/goal-editor-no-reload.test.mjs ui/split-flag-round-trip.test.mjs \
+  ui/split-flag-save-pipeline.test.mjs ui/toggle-both-split-flag.test.mjs \
+  ui/two-col-together-split-flag.test.mjs ui/copy-source.test.mjs ui/copy-source-e2e.test.mjs
+# tests 30 / pass 30 / fail 0
+```
+
+### 13.4 hallmark実体検査
+
+変更CSS（`ui/styles/pattern-timeline.css`）の差分のみに対しside-stripe・汎用書体・purple/pink/violetグラデーション・background-clip:textを単語境界付きパターンで検査（`cursor:pointer`の部分文字列一致という誤検知を除外）。検出ゼロ。
+
+## 14. 最終結論
+
+年月セレクト削除・「今週へ戻る」の配置変更・到達下限廃止（`?week`再SSR方式）はすべて意図どおりに動作し、週タブの見た目・過去週の目標表示・記録表示・不具合3/4/コピー元の非回帰にも影響していない。テスト372件（274+98）全緑、両ビルド正常、hallmark検出ゼロ。
 
 **QA PASS**。

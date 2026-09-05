@@ -1,23 +1,22 @@
 /**
- * @file 週ナビ（前の週／次の週／年月で飛ぶ／今週へ戻る）と過去週の記録入力・自動に戻すの
+ * @file 週ナビ（前の週／次の週／今週へ戻る）と過去週の記録入力・自動に戻すの
  * 業務意図テスト（実ブラウザ通し）。
  *
  * 正本: docs/specs/past-weeks-and-copy-source/service-design.md（2.章）、
  *       docs/findings/spec-20260905-past-weeks-and-copy-source-impl.md（4章・10章2〜7,11・11章）。
+ *       ただし到達下限・「年月で飛ぶ」は本番差し戻しにより廃止（司令塔裁定 2026-09-05）。
  *
  * 検証する業務意図（実装の途中値は写経しない）:
  *   - 「前の週」を押すと窓が1週戻り、先頭タブが1週前になって on、日・週タブが同じ選択で揃う。
  *     窓が今週を含まなくなると「今週へ戻る」が現れる。
- *   - 到達下限で「前の週」が押せなくなる。初期状態で「次の週」が押せず、「前の週」の後は押せる。
- *   - 「年月で飛ぶ」で選んだ月の第1週へ窓が動く。
+ *   - 到達下限は廃止——pastWeeks の先頭週まで連打しても「前の週」は押せたままで、そこから
+ *     もう1回押すと `?week=` を付けた URL へページ遷移する（サーバ再SSRはSSRテストでカバー）。
+ *     初期状態で「次の週」が押せず、「前の週」の後は押せる。
  *   - 「今週へ戻る」で今日に最も近い練習日へ戻り、ボタンが消える。
  *   - 過去週の上書き無し日は「この日の記録はありません。」＋入力導線1つ。入力して保存すると
  *     location.reload せずその場で描き替わり、「自動に戻す」で1導線の空状態に戻る
  *     （3.3節「過去週は上書きだけで組む」・不具合3の再読込廃止の上に乗る設計）。
  *   - 320・375・414・768px のいずれでも横スクロールが出ない。
- *
- * 対応前の現状（本ファイル作成時点で実走確認済み）: .wknav・.wk-prev 等の週ナビ部品が
- * render() に未実装のため、`page.click('.wknav .wk-prev')` 等がセレクタ不在でタイムアウト失敗する。
  *
  * テスト基盤: node --test ＋ Playwright(chromium)。goal-editor-no-reload.test.mjs と同じ駆動方式
  * （buildPlanData→render→renderPage で1枚のHTMLに焼き、実IIFEを直接駆動・fetchはモック）。
@@ -108,16 +107,28 @@ test('「前の週」を1回押すと窓が1週戻り、先頭タブが on に�
   assert.equal(weekOn, afterKey, '週タブも日レベルと同じ選択週');
 });
 
-test('到達下限まで「前の週」を連打すると押せなくなり、年月の選択肢もその月まで', async () => {
-  const steps = DATA.pastWeeks.length; // 到達下限＝pastWeeks の先頭週まで
+test('pastWeeks の先頭週まで「前の週」を連打しても押せたままで、そこからもう1回押すと ?week 付きURLへ遷移する', async () => {
+  const steps = DATA.pastWeeks.length; // pastWeeks の先頭週まで
   for (let i = 0; i < steps; i++) {
     await page.click(dayNavSel('.wk-prev'), { timeout: 5000 });
     await page.waitForTimeout(30);
   }
   const disabled = await page.$eval(dayNavSel('.wk-prev'), (b) => b.disabled);
-  assert.equal(disabled, true, '到達下限で「前の週」が押せなくなる');
+  assert.equal(disabled, false, '到達下限は廃止——pastWeeks の先頭週でも「前の週」は押せる');
   const oldestKey = await visibleDayTabKey();
   assert.equal(oldestKey, DATA.pastWeeks[0].key, '先頭タブが最古の過去週');
+
+  const oldestMonday = DATA.pastWeeks[0].weekStartDate;
+  const d = new Date(`${oldestMonday}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7);
+  const expectedWeekParam = d.toISOString().slice(0, 10);
+
+  await Promise.all([
+    page.waitForNavigation({ timeout: 5000 }),
+    page.click(dayNavSel('.wk-prev'), { timeout: 5000 }),
+  ]);
+  const url = new URL(page.url());
+  assert.equal(url.searchParams.get('week'), expectedWeekParam, '?week に最古週の1週前の月曜ISOが付いて遷移する');
 });
 
 /* ───────────────────────── 次の週の初期状態 ───────────────────────── */
@@ -130,16 +141,6 @@ test('初期状態で「次の週」が押せず、「前の週」を押した�
   await page.waitForTimeout(50);
   const nowDisabled = await page.$eval(dayNavSel('.wk-next'), (b) => b.disabled);
   assert.equal(nowDisabled, false, '窓が過去へ動いたので「次の週」が押せる');
-});
-
-/* ───────────────────────── 年月で飛ぶ ───────────────────────── */
-
-test('「年月で飛ぶ」で最古の月を選ぶと、窓の先頭がその月の第1週になる', async () => {
-  const oldestMonth = DATA.jumpMonths[DATA.jumpMonths.length - 1]; // 新しい順配列の末尾＝最古
-  await page.selectOption(dayNavSel('.wk-jump-sel'), oldestMonth.ym);
-  await page.waitForTimeout(80);
-  const key = await visibleDayTabKey();
-  assert.equal(key, oldestMonth.weekKey, '窓の先頭がその月の第1週になる');
 });
 
 /* ───────────────────────── 今週へ戻る ───────────────────────── */

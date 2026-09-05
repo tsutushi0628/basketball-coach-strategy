@@ -498,18 +498,6 @@ export function clientScript() {
   var winStart=TODAY_IDX>=0?TODAY_IDX:0;
   var selectedWeek=TODAY_KEY;
 
-  function selectedMonthValue(select,selectedIdx){
-    var bestIdx=-1;
-    var bestValue='';
-    for(var i=0;i<select.options.length;i++){
-      var optionIdx=ORDER.indexOf(select.options[i].getAttribute('data-week'));
-      if(optionIdx<=selectedIdx&&optionIdx>bestIdx){
-        bestIdx=optionIdx;
-        bestValue=select.options[i].value;
-      }
-    }
-    return bestValue;
-  }
   function applyWindow(){
     if(!ORDER.length)return;
     var selectedIdx=ORDER.indexOf(selectedWeek);
@@ -526,17 +514,10 @@ export function clientScript() {
         var idx=ORDER.indexOf(key);
         tab.hidden=idx<winStart||idx>=winStart+WIN;
       });
-      var prev=nav.querySelector('.wk-prev');
       var next=nav.querySelector('.wk-next');
       var today=nav.querySelector('.wk-today');
-      var select=nav.querySelector('.wk-jump-sel');
-      if(prev)prev.disabled=winStart===0;
       if(next)next.disabled=winStart+WIN>=ORDER.length;
       if(today)today.setAttribute('data-shown',selectedWeek===TODAY_KEY?'false':'true');
-      if(select){
-        var monthValue=selectedMonthValue(select,selectedIdx);
-        if(monthValue)select.value=monthValue;
-      }
     });
   }
   // ある .day[data-date] が属する .daywk[data-week] のキーを返す。
@@ -607,19 +588,24 @@ export function clientScript() {
     var iso=defaultDateOfWeek(weekKey,todayISO());
     if(iso){showDayByDate(iso);}else{selectWeek(weekKey);}
   }
+  // 窓の先頭（ORDER[0]）よりさらに前へ進みたいとき、到達下限は設けず、その週の1週前の月曜ISOを
+  // ?week= に付けて再SSRさせる（既存クエリは保持。到達下限を廃止した司令塔裁定）。
+  function goToPastBeyondWindow(){
+    var firstMonday=firstWeekTabs.length?firstWeekTabs[0].getAttribute('data-monday'):null;
+    if(!firstMonday)throw new Error('最古週の月曜ISOが取得できません');
+    var d=new Date(firstMonday+'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate()-7);
+    var prevMonday=d.toISOString().slice(0,10);
+    var url=new URL(location.href);
+    url.searchParams.set('week',prevMonday);
+    location.href=url.toString();
+  }
   function stepWeek(delta){
     var nextStart=winStart+delta;
-    if(nextStart<0||nextStart+WIN>ORDER.length)return;
+    if(nextStart<0){goToPastBeyondWindow();return;}
+    if(nextStart+WIN>ORDER.length)return;
     winStart=nextStart;
     goToWeek(ORDER[winStart]);
-  }
-  function jumpToMonth(select){
-    var option=select&&select.options[select.selectedIndex];
-    var weekKey=option&&option.getAttribute('data-week');
-    var idx=ORDER.indexOf(weekKey);
-    if(idx<0)throw new Error('年月ジャンプの週が週ナビの順序にありません: '+weekKey);
-    winStart=Math.min(idx,Math.max(0,ORDER.length-WIN));
-    goToWeek(weekKey);
   }
   function goToday(){
     if(TODAY_IDX<0)return;
@@ -630,11 +616,9 @@ export function clientScript() {
     var prev=nav.querySelector('.wk-prev');
     var next=nav.querySelector('.wk-next');
     var today=nav.querySelector('.wk-today');
-    var select=nav.querySelector('.wk-jump-sel');
     if(prev)prev.addEventListener('click',function(){stepWeek(-1);});
     if(next)next.addEventListener('click',function(){stepWeek(1);});
     if(today)today.addEventListener('click',goToday);
-    if(select)select.addEventListener('change',function(){jumpToMonth(select);});
   });
   // 週セレクタ（日レベル）: 選んだ週へ切り替える。
   dws.forEach(function(b){b.addEventListener('click',function(){goToWeek(b.getAttribute('data-dayweek'));});});

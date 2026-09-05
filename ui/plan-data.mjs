@@ -158,25 +158,30 @@ export function computeWeekPeriods(anchor) {
 }
 
 /**
- * 過去週の期間リスト。最古のコーチ上書き週または今週の4週前のうち古い方から、前週までを並べる。
- * 過去週はエンジン叩き台を生成しないため、アーク月・週番号は持たない。
+ * 過去週の期間リスト。最古のコーチ上書き週または今日の学校年度の4月1日を含む週のうち古い方から、
+ * 前週までを並べる（到達下限は廃止——それより前へは呼び出し側が schoolYearAnchorMonday を差し替えて
+ * 再構築する）。過去週はエンジン叩き台を生成しないため、アーク月・週番号は持たない。
  * @param {string} todayMonday 今日を含む週の月曜ISO
  * @param {?string} oldestCoachDateISO 最古のコーチ上書き日ISO。上書きが無ければ null
+ * @param {string} [schoolYearAnchorMonday] 学校年度の基準にする月曜ISO。省略時は todayMonday
+ *   （?week クエリで過去の学校年度へ飛んだときに、その年度の4月1日週まで下限を広げるために使う）
  * @returns {Array<{key:string,label:string,weekStartDate:string}>}
  */
-export function computePastWeekDefs(todayMonday, oldestCoachDateISO) {
-  const fourWeeksAgoMonday = addDaysISO(todayMonday, -28);
+export function computePastWeekDefs(todayMonday, oldestCoachDateISO, schoolYearAnchorMonday) {
+  const anchorMonday = schoolYearAnchorMonday || todayMonday;
+  const schoolYear = schoolYearOf(anchorMonday);
+  const schoolYearStartMonday = mondayOfISO(`${schoolYear}-04-01`);
   let oldestCoachMonday;
   if (oldestCoachDateISO) {
     oldestCoachMonday = mondayOfISO(oldestCoachDateISO);
   } else {
-    oldestCoachMonday = fourWeeksAgoMonday;
+    oldestCoachMonday = schoolYearStartMonday;
   }
   let firstMonday;
-  if (oldestCoachMonday < fourWeeksAgoMonday) {
+  if (oldestCoachMonday < schoolYearStartMonday) {
     firstMonday = oldestCoachMonday;
   } else {
-    firstMonday = fourWeeksAgoMonday;
+    firstMonday = schoolYearStartMonday;
   }
   const lastMonday = addDaysISO(todayMonday, -7);
   const out = [];
@@ -204,31 +209,6 @@ export function arcMonthOfWeek(weekStartDate, displayCalendarMonth, displayArcMo
   }
   const weekCalendarMonth = Number(weekStartDate.split('-')[1]);
   return wrapMonth(weekCalendarMonth + (displayArcMonth - displayCalendarMonth));
-}
-
-/**
- * 週一覧から年月ジャンプ候補を作る。各月で最初の週を保持し、候補自体は新しい月から並べる。
- * @param {Array<{key:string,weekStartDate:?string}>} allWeeks 古い順の週一覧
- * @returns {Array<{ym:string,label:string,weekKey:string}>}
- */
-export function computeJumpMonths(allWeeks) {
-  const firstWeekByMonth = new Map();
-  for (const week of allWeeks) {
-    if (!week || !week.weekStartDate) {
-      continue;
-    }
-    const ym = week.weekStartDate.slice(0, 7);
-    if (firstWeekByMonth.has(ym)) {
-      continue;
-    }
-    firstWeekByMonth.set(ym, week.key);
-  }
-  return [...firstWeekByMonth.entries()]
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([ym, weekKey]) => {
-      const [year, month] = ym.split('-');
-      return { ym, label: `${year}年${Number(month)}月`, weekKey };
-    });
 }
 
 /**
@@ -1080,9 +1060,12 @@ function resolveDisplayAnchor(anchor, todayIso, annual) {
  * @param {string} [deps.today] 今日のISO（省略時はサーバ時計）。テストで固定日を注入する用途。
  * @returns {Promise<object>} pattern-*.mjs の render() に渡す表示データ
  */
-export async function buildPlanData({ storage, girlsStorage, school, today }) {
+export async function buildPlanData({ storage, girlsStorage, school, today, weekQuery }) {
   if (!storage || !girlsStorage) {
     throw new Error('buildPlanData: storage と girlsStorage の注入が必須です');
+  }
+  if (weekQuery !== undefined && weekQuery !== null && !/^\d{4}-\d{2}-\d{2}$/.test(weekQuery)) {
+    throw new Error(`buildPlanData: weekQuery の日付形式が不正です: ${weekQuery}`);
   }
 
   const [annual, rawDrills, config, teamInput, girlsInput, overrides, goalOverrides] = await Promise.all([
@@ -1174,7 +1157,8 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
   // 過去週は既習連鎖とエンジン生成を通さず、保存済み記録だけを表示する。
   let pastWeekDefs;
   if (displayAnchor.weekStartDate) {
-    pastWeekDefs = computePastWeekDefs(mondayOfISO(todayIso), oldestCoachDateISO);
+    const schoolYearAnchorMonday = weekQuery ? mondayOfISO(weekQuery) : undefined;
+    pastWeekDefs = computePastWeekDefs(mondayOfISO(todayIso), oldestCoachDateISO, schoolYearAnchorMonday);
   } else {
     pastWeekDefs = [];
   }
@@ -1230,7 +1214,6 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
     }
     week.monthGoal = '';
   }
-  const jumpMonths = computeJumpMonths([...pastWeeks, ...weeks]);
 
   // ── 月ピッカー用の複数月（今日を含む月から半年。各月は年間計画のアーク内容＝週生成不要で軽量）──
   const anchorYear = displayAnchor.weekStartDate ? Number(displayAnchor.weekStartDate.split('-')[0]) : null;
@@ -1333,8 +1316,7 @@ export async function buildPlanData({ storage, girlsStorage, school, today }) {
     days, // アンカー週（先頭期間）の days。日レベルはこれを使う（後方互換）。
     seedDays, // アンカー週のエンジン叩き台（表示しない・「自動で叩き台を入れる」の自動入力ソース）。
     weeks, // 週ピッカー実切替用の複数週（先頭=アンカー）。
-    pastWeeks, // 到達下限から前週までの過去週（古い順・叩き台なし）。
-    jumpMonths, // 過去週と現行週から作る年月ジャンプ候補（新しい順）。
+    pastWeeks, // 学校年度4月1日週（上書きがそれより古ければそこまで）から前週までの過去週（古い順・叩き台なし）。
     allCoachDays, // editor「他の日からコピー」候補源: 表示週に縛られないテナント全件のコーチ上書き日（twoCol）。
     months, // 月ピッカー実切替用の複数月（先頭=現月）。
     year,

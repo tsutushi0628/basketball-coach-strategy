@@ -811,41 +811,35 @@ function dayPicker(days) {
 }
 
 /** 過去から未来までの週を4枠の窓で移動する共通ナビ。allWeeks は古い順。 */
-function weekNav({ allWeeks, todayKey, jumpMonths, tabClass, tabAttr, idSuffix }) {
+function weekNav({ allWeeks, todayKey, tabClass, tabAttr }) {
   if (!allWeeks || allWeeks.length <= 1) return '';
   const todayIndex = allWeeks.findIndex((w) => w.key === todayKey);
   if (todayIndex < 0) throw new Error(`週ナビの今週キーが見つかりません: ${todayKey}`);
   const windowEnd = todayIndex + 4;
-  const options = (jumpMonths || []).map((m) =>
-    `<option value="${esc(m.ym)}" data-week="${esc(m.weekKey)}">${esc(m.label)}</option>`
-  ).join('');
   const tabs = allWeeks.map((w, i) => {
     const onClass = w.key === todayKey ? ' on' : '';
     const hiddenAttr = i < todayIndex || i >= windowEnd ? ' hidden' : '';
-    return `<button class="pk ${tabClass}${onClass}" ${tabAttr}="${esc(w.key)}" type="button"${hiddenAttr}>${esc(w.label)}</button>`;
+    const mondayAttr = w.weekStartDate ? ` data-monday="${esc(w.weekStartDate)}"` : '';
+    return `<button class="pk ${tabClass}${onClass}" ${tabAttr}="${esc(w.key)}" type="button"${mondayAttr}${hiddenAttr}>${esc(w.label)}</button>`;
   }).join('');
   return `<div class="wknav" data-print-hide data-today-week="${esc(todayKey)}">
-    <div class="wk-jump">
-      <label class="wk-jump-lab" for="wk-jump-${idSuffix}">年月で飛ぶ</label>
-      <select class="ed-sel wk-jump-sel" id="wk-jump-${idSuffix}" aria-label="年月で飛ぶ">${options}</select>
-      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
-    </div>
     <div class="wk-row">
-      <button class="wk-step wk-prev" type="button" aria-label="前の週"${todayIndex === 0 ? ' disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
+      <button class="wk-step wk-prev" type="button" aria-label="前の週"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>前の週</button>
       <div class="picker">${tabs}</div>
       <button class="wk-step wk-next" type="button" aria-label="次の週" disabled>次の週<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="wk-today" type="button" data-shown="false">今週へ戻る</button>
     </div>
   </div>`;
 }
 
 /** 日レベルの週セレクタ。 */
 function dayWeekSelector(data, allWeeks, todayKey) {
-  return weekNav({ allWeeks, todayKey, jumpMonths: data.jumpMonths, tabClass: 'cal-go-dayweek', tabAttr: 'data-dayweek', idSuffix: 'day' });
+  return weekNav({ allWeeks, todayKey, tabClass: 'cal-go-dayweek', tabAttr: 'data-dayweek' });
 }
 
 /** 週レベルの週セレクタ。 */
 function weekPicker(data, allWeeks, todayKey) {
-  return weekNav({ allWeeks, todayKey, jumpMonths: data.jumpMonths, tabClass: 'cal-go-week', tabAttr: 'data-go', idSuffix: 'week' });
+  return weekNav({ allWeeks, todayKey, tabClass: 'cal-go-week', tabAttr: 'data-go' });
 }
 
 /** 月ピッカー: 生成済みの各月（data.months）を「yyyy/mm」で実選択できるボタンで並べる。先頭=今月。 */

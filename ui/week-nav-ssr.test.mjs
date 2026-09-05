@@ -1,12 +1,13 @@
 /**
- * @file 週ナビ（前の週／次の週／年月で飛ぶ／今週へ戻る）と過去週描画のSSR出力の業務意図テスト。
+ * @file 週ナビ（前の週／次の週／今週へ戻る）と過去週描画のSSR出力の業務意図テスト。
  *
  * 正本: docs/specs/past-weeks-and-copy-source/service-design.md（2.〜4.章）、
  *       docs/findings/spec-20260905-past-weeks-and-copy-source-impl.md（2.3・3.3・4・5.3・11章）。
+ *       ただし到達下限・「年月で飛ぶ」は本番差し戻しにより廃止（司令塔裁定 2026-09-05）。
  *
  * 検証する業務意図（実装の途中値は写経しない）:
- *   - 週ナビ（.wknav）は日レベル・週レベルの両方に1つずつ描かれ、前の週／次の週／年月で飛ぶ／
- *     今週へ戻るの部品を持つ。年月の選択肢は jumpMonths と同じ数・順・data-week。
+ *   - 週ナビ（.wknav）は日レベル・週レベルの両方に1つずつ描かれ、前の週／次の週／今週へ戻るの
+ *     部品を持つ。「前の週」に disabled は付かない（到達下限を廃止）。「年月で飛ぶ」は無い。
  *   - 日レベルのタブ総数は pastWeeks+weeks の合計。表示中（hidden でない）は weeks の4件だけで、
  *     初期の on は weeks[0]。週レベルも同型（週タブ列の一貫性＝2.3節「片方だけ動く状態を作らない」）。
  *   - .daywk の数も同じ合計になり、過去週グループは hidden かつ data-past を持つ。初期可視の .day は
@@ -62,7 +63,7 @@ function wknavOf(region) {
 
 /* ───────────────────────── .wknav の構造（日・週レベル共通） ───────────────────────── */
 
-test('.wknav が日レベル・週レベルにそれぞれ1つあり、前後移動・今週へ戻る・年月ジャンプを持つ', async () => {
+test('.wknav が日レベル・週レベルにそれぞれ1つあり、前後移動・今週へ戻るを持つ。前の週に disabled は付かず、年月で飛ぶは無い', async () => {
   const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
   const { body } = render(data);
 
@@ -70,21 +71,11 @@ test('.wknav が日レベル・週レベルにそれぞれ1つあり、前後移
   const weekNav = wknavOf(weekRegionOf(body));
   for (const [label, nav] of [['日', dayNav], ['週', weekNav]]) {
     assert.match(nav, /class="wk-step wk-prev"/, `${label}レベル: 前の週ボタンがある`);
+    assert.doesNotMatch(nav, /class="wk-step wk-prev"[^>]*disabled/, `${label}レベル: 前の週は到達下限廃止により disabled が付かない`);
     assert.match(nav, /class="wk-step wk-next"[^>]*disabled/, `${label}レベル: 次の週は初期状態で押せない（今週+3週が上限）`);
     assert.match(nav, /class="wk-today"[^>]*data-shown="false"/, `${label}レベル: 今週へ戻るは初期非表示`);
-    assert.match(nav, /class="[^"]*wk-jump-sel[^"]*"/, `${label}レベル: 年月で飛ぶセレクトがある`);
+    assert.doesNotMatch(nav, /wk-jump-sel/, `${label}レベル: 年月で飛ぶは廃止済み`);
   }
-});
-
-test('年月で飛ぶの選択肢は jumpMonths と同じ数・順で、各 option が data-week を持つ', async () => {
-  const data = await buildPlanData({ ...localStorages(), today: LOCAL_FIXTURE_TODAY });
-  const { body } = render(data);
-  const dayNav = wknavOf(dayRegionOf(body));
-  const opts = [...dayNav.matchAll(/<option value="([^"]+)" data-week="([^"]+)">([^<]*)<\/option>/g)];
-  assert.ok(opts.length > 0, '年月の選択肢が1件以上ある');
-  assert.deepEqual(opts.map((o) => o[1]), data.jumpMonths.map((m) => m.ym), '順序と件数が jumpMonths と一致');
-  assert.deepEqual(opts.map((o) => o[2]), data.jumpMonths.map((m) => m.weekKey), 'data-week が jumpMonths の weekKey と一致');
-  assert.deepEqual(opts.map((o) => o[3]), data.jumpMonths.map((m) => m.label), 'ラベルも一致');
 });
 
 test('週起点未設定テナントは .wknav を出さない（過去移動の実日付が無いため）', async () => {
@@ -202,16 +193,16 @@ test('今日と学校年度が異なる過去週は月セルを出さず .goalba
 
 /* ───────────────────────── clientScript / editorScript の配線 ───────────────────────── */
 
-test('clientScript: 窓制御（applyWindow・stepWeek・jumpToMonth・goToday）と週ナビ部品の配線が含まれる', () => {
+test('clientScript: 窓制御（applyWindow・stepWeek・goToday）と週ナビ部品の配線が含まれる。年月で飛ぶは無い', () => {
   const js = clientScript();
   assert.match(js, /function applyWindow\(/, 'applyWindow が存在');
   assert.match(js, /function stepWeek\(/, 'stepWeek が存在');
-  assert.match(js, /function jumpToMonth\(/, 'jumpToMonth が存在');
   assert.match(js, /function goToday\(/, 'goToday が存在');
   assert.match(js, /wk-prev/, '.wk-prev の配線がある');
   assert.match(js, /wk-next/, '.wk-next の配線がある');
   assert.match(js, /wk-today/, '.wk-today の配線がある');
-  assert.match(js, /wk-jump-sel/, '.wk-jump-sel の配線がある');
+  assert.doesNotMatch(js, /function jumpToMonth\(/, 'jumpToMonth は廃止済み');
+  assert.doesNotMatch(js, /wk-jump-sel/, '.wk-jump-sel の配線は廃止済み');
 });
 
 test('editorScript: copySourceCandidates の定義が注入されている', () => {

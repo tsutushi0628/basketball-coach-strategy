@@ -1062,7 +1062,11 @@ server.get('*', async (req, res) => {
     const storage = createFirestoreStorage({ db, tenantId: ctx.tenantId, teamId: BOYS_TEAM });
     const girlsStorage = createFirestoreStorage({ db, tenantId: ctx.tenantId, teamId: GIRLS_TEAM });
 
-    const data = await buildPlanData({ storage, girlsStorage, school: schoolName });
+    const weekParam = typeof req.query.week === 'string' ? req.query.week : null;
+    if (weekParam !== null && !/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+      throw new Error(`invalid week query: ${weekParam}`);
+    }
+    const data = await buildPlanData({ storage, girlsStorage, school: schoolName, weekQuery: weekParam ?? undefined });
 
     const patternId = typeof req.query.p === 'string' && /^[a-z-]+$/.test(req.query.p)
       ? req.query.p
