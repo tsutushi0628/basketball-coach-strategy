@@ -10,7 +10,7 @@
 ## A. エンジン（`engine/`）
 
 - [x] テスト作成 `engine/test/scrimmage.test.js`（決定論・seed 差・人数配分・目的関数各項・履歴罰点・不正入力）。
-- [x] テスト作成 `engine/test/roster.test.js`（区切り6種・未知語・補完・skipped・missing）。
+- [x] テスト作成 `engine/test/roster.test.js`（役割3列の結合・未知語・Tier の S／A／B／C／D と旧表記の数字・補完・skipped・missing・選手IDの自動付与）。
 - [x] 実装 `engine/src/scrimmage.js`（`splitTeams`・`scoreTeams`・`teamSizes`・`ROLE_GROUPS`・`ROLE_LABELS`・mulberry32・蛇行は目標人数到達チームを除外して継続）。
 - [x] 実装 `engine/src/roster.js`（`normalizeRoster`）。
 - [x] 実走：`node --test test/scrimmage.test.js test/roster.test.js` 20件 pass。
@@ -20,7 +20,7 @@
 - [x] テスト作成 `functions/scrimmage-api.test.mjs`（純判定3本と実HTTP。403／400／採番／sync の 403・400・422・roster 不変）。
 - [x] テスト作成 `functions/scrimmage-integration.test.mjs`（モック db で sync → split → decide の通し）。
 - [x] 実装 `functions/index.mjs`（`GET /scrimmage`、`POST /api/scrimmage/split`・`/decide`、`POST /api/roster/sync`、純判定 `scrimmageSplitDecision`・`scrimmageDecideDecision`・`rosterSyncDecision`、差分 499 超の 422 ガード）。
-- [x] 実装 `functions/roster-sheet.mjs`（`fetchSheetValues`。ADC と `spreadsheets.readonly`、エミュレータは `functions/fixtures/roster-synthetic.json`）。
+- [x] 実装 `functions/roster-sheet.mjs`（`fetchRosterTabs`・`writeBackPlayerIds`・`buildPlayerIdUpdateData`。ADC と `https://www.googleapis.com/auth/spreadsheets`、「男子」「女子」2タブの `values:batchGet`（`A1:M300`）、選手IDの `values:batchUpdate`、エミュレータは `functions/fixtures/roster-synthetic.json`）。
 - [x] `functions/package.json` に `google-auth-library` を明記、`firestore.indexes.json` に scrimmages（gender asc・createdAt desc）。
 - [x] `scripts/set-roster-sheet.mjs`（初回の `rosterSheetId` 設定。`--sheet` 引数・`--prod` 安全弁・実IDはファイルに書かない）。
 - [x] `scripts/verify-scrimmage.mjs`（エミュレータ実HTTPの通し確認。PASS/FAIL 明示）。
@@ -36,11 +36,11 @@
 
 ### 運用（このPCでの本番スクリプト実行前提）
 
-- `GOOGLE_APPLICATION_CREDENTIALS` にリポ外の ADC ファイル（`C:\Users\tsutu\.tmp\adc-personal.json`。中身はコミットしない）を指定する。
+- `GOOGLE_APPLICATION_CREDENTIALS` にリポ外の ADC ファイル（`%USERPROFILE%\.tmp\adc-personal.json`。中身はコミットしない）を指定する。
 - `GOOGLE_CLOUD_QUOTA_PROJECT=ai-bb-coach` を併せて設定する（無いと ADC 経由の一部 API が quota project 未設定で 403 になる）。
 - 上記2つを環境変数で与えれば `scripts/set-roster-sheet.mjs --prod`・`scripts/serve-local.mjs` は対話ログイン無しで本番 Firestore に接続できる（firebase-admin 標準経路）。
 
 - [ ] エミュレータ実走：`npm --prefix functions run build` 後に `scripts/verify-scrimmage.mjs` を `emulators:exec` 配下で通す（PASS の実出力を `docs/findings/` に残す）。
-- [ ] オーナー作業：名簿シートの共有に Functions の実行サービスアカウントを閲覧者で追加し、`scripts/set-roster-sheet.mjs --prod --sheet <ID>` を1回実行する。
-- [ ] 本番デプロイ（`firebase deploy`）と本番 `/scrimmage` の1クリック確認。y/n 確認の対象。
+- [x] 名簿シートの共有に Functions の実行サービスアカウント（Default compute service account）を編集者で追加し、テナントに名簿シートIDを設定する。どちらも 2026-10-03 に完了（権限は Drive API で付与。共有されていたのは別のサービスアカウントだったため、実行時に名乗るアドレスを `gcloud functions describe` の `serviceConfig.serviceAccountEmail` で確かめてから付け直した）。
+- [x] 本番デプロイと本番確認。2026-10-03 に完了。名簿同期は 2 名が入り、取りこぼし 0・補完 0。初回は選手IDを 2 件自動付与してシートA列へ書き戻し、2 回目は既存IDを振り直さなかった。シートの Tier `B` が Firestore の `tier:3` で保存。`/api/health` 200・`/login` 200・`/scrimmage`（未認証）302。
 - [ ] モック `docs/findings/design-20260905-scrimmage-split-mock.html` の差し替え（道具列入口と面2b を外し、「この分けで決める」とヘッダの「名簿」を足す）。承認後に `design.md` 6 章へ見た目を追記する。

@@ -281,10 +281,26 @@ test('POST /api/roster/sync: 実 normalizeRoster の出力を roster に書き�
   const app = await startApp(db);
   const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-'));
   const fixturePath = join(tmpDir, 'roster.json');
+  const headerRow = [
+    '選手ID', '表示名', '学年', 'ポジション', '利き手', '在籍状態', '身長cm', 'Tier',
+    '役割1', '役割2', '役割3', '本人の目標', 'メモ',
+  ];
   writeFileSync(fixturePath, JSON.stringify({
-    values: [
-      ['選手ID', '表示名', '性別', '学年', 'ポジション', '利き手', '本人の目標', '在籍状態', 'メモ', '身長cm', 'Tier', '役割'],
-      ['M01', 'アオキ', '男', '3', 'PG', '右', '大会で優勝', '在籍', '要フォロー', '170', '4', 'ハンドラー'],
+    tabs: [
+      {
+        title: '男子',
+        values: [
+          headerRow,
+          ['M001', 'アオキ', '3', 'PG', '右', '在籍', '170', 'A', 'ハンドラー', '', '', '大会で優勝', '要フォロー'],
+        ],
+      },
+      {
+        title: '女子',
+        values: [
+          headerRow,
+          ['F001', 'エガワ', '2', 'SG', '左', '在籍', '160', 'B', 'シューター', '', '', '', ''],
+        ],
+      },
     ],
   }), 'utf8');
   const prevPath = process.env.ROSTER_FIXTURE_PATH;
@@ -292,12 +308,19 @@ test('POST /api/roster/sync: 実 normalizeRoster の出力を roster に書き�
   try {
     const r = await post(app.base, '/api/roster/sync', { sheetId: 'a'.repeat(20) });
     assert.equal(r.status, 200, JSON.stringify(r.json));
-    assert.equal(r.json.count, 1);
+    assert.equal(r.json.count, 2, '男子タブ・女子タブの両方が1つの roster にまとまる');
+    assert.equal(r.json.assigned, 0, '選手IDが入っているので自動付与は起きない');
+    assert.equal(db.store.get('tenants/tenant-local/roster/F001').gender, 'F', '女子タブの行は gender:F');
+    assert.equal(db.store.get('tenants/tenant-local/roster/M001').gender, 'M', '男子タブの行は gender:M');
 
-    const expected = normalizeRoster(JSON.parse(readFileSync(fixturePath, 'utf8')).values);
-    const saved = db.store.get('tenants/tenant-local/roster/M01');
+    const tabs = JSON.parse(readFileSync(fixturePath, 'utf8')).tabs;
+    const expected = normalizeRoster(tabs[0].values, 'M');
+    const saved = db.store.get('tenants/tenant-local/roster/M001');
     assert.equal(saved.name, expected.players[0].name);
     assert.equal(saved.tier, expected.players[0].tier);
+    // シート表記 'A' が内部 tier 4 として保存される（S=5 / A=4 / B=3 / C=2 / D=1）。
+    assert.equal(saved.tier, 4);
+    assert.equal(db.store.get('tenants/tenant-local/roster/F001').tier, 3, "'B' は tier 3");
     assert.equal(saved.heightCm, expected.players[0].heightCm);
     assert.deepEqual(saved.roles, expected.players[0].roles);
     // spec 8章「利き手・本人の目標・メモ・ポジションが無い」。
@@ -314,8 +337,7 @@ test('POST /api/roster/sync: 実 normalizeRoster の出力を roster に書き�
 
 // ── roster/sync: 差分 write 500 超は 422 で roster 不変（実 normalizeRoster を通した set 分＋
 //    大量の「sheet に無くなった既存 roster」による delete 分で、実際に閾値を超えさせる）───────
-// 選手ID書式（^[MF]\d{2}$）は性別ごと00-99の100通りが上限なので、sheet 側の新規行（set 対象）
-// だけで500件超は作れない（M+Fで最大200人）。そこで delete 対象（sheet から消えた＝toDelete）を
+// sheet 側の新規行（set 対象）だけで500件超を作るとテストが重くなるので、delete 対象（sheet から消えた＝toDelete）を
 // 実データの制約を受けない「既存 roster（sync 前に別途投入した古いドキュメント）」側で水増しし、
 // set(実 normalizeRoster 出力・20件) + delete(既存480件) + tenant merge(1件) = 501 > 499 を作る。
 // 差分件数の事前計算そのものは実装コード（set全件+delete全件+1）をそのまま通すので、
@@ -335,17 +357,23 @@ test('POST /api/roster/sync: 実正規化した set 分＋大量 delete 分で�
   const app = await startApp(db);
   const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-big-'));
   const fixturePath = join(tmpDir, 'roster-big.json');
-  const header = ['選手ID', '表示名', '性別', '学年', 'ポジション', '利き手', '本人の目標', '在籍状態', 'メモ', '身長cm', 'Tier', '役割'];
+  const header = [
+    '選手ID', '表示名', '学年', 'ポジション', '利き手', '在籍状態', '身長cm', 'Tier',
+    '役割1', '役割2', '役割3', '本人の目標', 'メモ',
+  ];
   const rows = [header];
   for (let i = 0; i < 20; i++) {
     const n = String(i).padStart(2, '0');
-    rows.push([`M${n}`, `合成${n}`, '男', '2', '', '', '', '在籍', '', '175', '3', 'シューター']);
+    // 選手ID は空欄（自動付与対象）。422 で止まるなら書き戻しも起きない、という向きの確認も兼ねる。
+    rows.push(['', `合成${n}`, '2', '', '', '在籍', '175', '3', 'シューター', '', '', '', '']);
   }
-  writeFileSync(fixturePath, JSON.stringify({ values: rows }), 'utf8');
+  writeFileSync(fixturePath, JSON.stringify({ tabs: [{ title: '男子', values: rows }] }), 'utf8');
+  const fixtureBefore = readFileSync(fixturePath, 'utf8');
 
   // 実 normalizeRoster を通して set 対象が実際に20件になることを確認する（統合性の担保）。
-  const parsed = normalizeRoster(rows);
+  const parsed = normalizeRoster(rows, 'M');
   assert.equal(parsed.players.length, 20);
+  assert.equal(parsed.assignedIds.length, 20);
   // set(20) + delete(480) + tenant merge(1) = 501 > 499。
 
   const prevPath = process.env.ROSTER_FIXTURE_PATH;
@@ -358,10 +386,184 @@ test('POST /api/roster/sync: 実正規化した set 分＋大量 delete 分で�
     const afterCount = [...db.store.keys()].filter((k) => k.startsWith('tenants/tenant-local/roster/')).length;
     assert.equal(afterCount, 480, 'roster 件数が一切変わらない（set も delete も起きていない）');
     assert.equal(db.store.has('tenants/tenant-local/roster/OLD-0000'), true, '既存ドキュメントが残っている');
-    assert.equal(db.store.has('tenants/tenant-local/roster/M00'), false, '新規ドキュメントも書かれていない');
+    assert.equal(db.store.has('tenants/tenant-local/roster/M001'), false, '新規ドキュメントも書かれていない');
+    assert.equal(readFileSync(fixturePath, 'utf8'), fixtureBefore, '422 のときはシートへ選手IDを書き戻さない');
   } finally {
     if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
     else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    rmSync(tmpDir, { recursive: true, force: true });
+    await app.close();
+  }
+});
+
+// ── roster/sync: 選手IDの自動付与とシートへの書き戻し ─────────────────────────────────
+const ROSTER_HEADER = [
+  '選手ID', '表示名', '学年', 'ポジション', '利き手', '在籍状態', '身長cm', 'Tier',
+  '役割1', '役割2', '役割3', '本人の目標', 'メモ',
+];
+
+/** 2タブ fixture を一時ファイルへ書き、パスを返す。 */
+function writeTabsFixture(dir, tabs) {
+  const path = join(dir, 'roster-tabs.json');
+  writeFileSync(path, JSON.stringify({ tabs }), 'utf8');
+  return path;
+}
+
+test('POST /api/roster/sync: 選手ID空欄の行に男女別の連番IDを振り、シート（fixture）のA列へ書き戻す', async () => {
+  const db = makeMockDb();
+  const app = await startApp(db);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-assign-'));
+  const fixturePath = writeTabsFixture(tmpDir, [
+    {
+      title: '男子',
+      values: [
+        ROSTER_HEADER,
+        ['M002', 'アオキ', '3', 'PG', '右', '在籍', '170', 'S', 'ハンドラー', '', '', '', ''],
+        ['', 'イシダ', '2', 'SF', '左', '在籍', '178', 'B', 'スラッシャー', 'リバウンダー', '', '', ''],
+        ['', 'ウエダ', '1', 'C', '右', '在籍', '182', 'C', 'リムプロテクター', '', '', '', ''],
+      ],
+    },
+    {
+      title: '女子',
+      values: [
+        ROSTER_HEADER,
+        ['', 'エガワ', '3', 'PG', '右', '在籍', '158', 'A', 'パサー', '', '', '', ''],
+      ],
+    },
+  ]);
+  const prevPath = process.env.ROSTER_FIXTURE_PATH;
+  process.env.ROSTER_FIXTURE_PATH = fixturePath;
+  try {
+    const r = await post(app.base, '/api/roster/sync', { sheetId: 'a'.repeat(20) });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.assigned, 3, '男子2行＋女子1行に自動付与');
+
+    // 既存ID（M002）は変わらず、空欄行は未使用の最小番号（M001・M003）、女子は F001。
+    assert.equal(db.store.get('tenants/tenant-local/roster/M002').name, 'アオキ');
+    assert.equal(db.store.get('tenants/tenant-local/roster/M001').name, 'イシダ');
+    assert.equal(db.store.get('tenants/tenant-local/roster/M003').name, 'ウエダ');
+    assert.equal(db.store.get('tenants/tenant-local/roster/F001').name, 'エガワ');
+    assert.equal(db.store.get('tenants/tenant-local/roster/F001').gender, 'F');
+    assert.deepEqual(db.store.get('tenants/tenant-local/roster/M001').roles, ['slasher', 'rebounder']);
+
+    // シート（fixture）側のA列に書き戻されている＝次回同期で採番がぶれない。
+    const after = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    const men = after.tabs.find((t) => t.title === '男子').values;
+    const women = after.tabs.find((t) => t.title === '女子').values;
+    assert.equal(men[1][0], 'M002', '既存IDは書き換えない');
+    assert.equal(men[2][0], 'M001');
+    assert.equal(men[3][0], 'M003');
+    assert.equal(women[1][0], 'F001');
+    // 行全体は壊れていない（表示名以降がそのまま残る）。
+    assert.equal(men[2][1], 'イシダ');
+    assert.equal(men[2].length, ROSTER_HEADER.length);
+  } finally {
+    if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
+    else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    rmSync(tmpDir, { recursive: true, force: true });
+    await app.close();
+  }
+});
+
+test('POST /api/roster/sync: 片方のタブしか無くても、あるタブだけで成立する', async () => {
+  const db = makeMockDb();
+  const app = await startApp(db);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-one-tab-'));
+  const fixturePath = writeTabsFixture(tmpDir, [
+    {
+      title: '女子',
+      values: [
+        ROSTER_HEADER,
+        ['', 'エガワ', '3', 'PG', '右', '在籍', '158', 'A', 'パサー', '', '', '', ''],
+        ['', 'オダギリ', '2', 'SG', '右', '在籍', '162', '3', 'シューター', '', '', '', ''],
+      ],
+    },
+  ]);
+  const prevPath = process.env.ROSTER_FIXTURE_PATH;
+  process.env.ROSTER_FIXTURE_PATH = fixturePath;
+  try {
+    const r = await post(app.base, '/api/roster/sync', { sheetId: 'a'.repeat(20) });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.assigned, 2);
+    assert.equal(db.store.has('tenants/tenant-local/roster/F001'), true);
+    assert.equal(db.store.has('tenants/tenant-local/roster/F002'), true);
+  } finally {
+    if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
+    else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    rmSync(tmpDir, { recursive: true, force: true });
+    await app.close();
+  }
+});
+
+test('POST /api/roster/sync: 表示名が空の行はスキップされ、IDも振られない', async () => {
+  const db = makeMockDb();
+  const app = await startApp(db);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-skip-'));
+  const fixturePath = writeTabsFixture(tmpDir, [
+    {
+      title: '男子',
+      values: [
+        ROSTER_HEADER,
+        ['', '   ', '3', 'PG', '右', '在籍', '170', '4', 'ハンドラー', '', '', '', ''],
+        ['', 'イシダ', '2', 'SF', '左', '在籍', '178', '3', 'スラッシャー', '', '', '', ''],
+      ],
+    },
+  ]);
+  const prevPath = process.env.ROSTER_FIXTURE_PATH;
+  process.env.ROSTER_FIXTURE_PATH = fixturePath;
+  try {
+    const r = await post(app.base, '/api/roster/sync', { sheetId: 'a'.repeat(20) });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.skipped, 1);
+    assert.equal(r.json.assigned, 1);
+    const after = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    const men = after.tabs.find((t) => t.title === '男子').values;
+    assert.equal(men[1][0], '', '表示名が空の行にはIDを書かない');
+    assert.equal(men[2][0], 'M001');
+  } finally {
+    if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
+    else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    rmSync(tmpDir, { recursive: true, force: true });
+    await app.close();
+  }
+});
+
+test('POST /api/roster/sync: 選手IDの書き戻しが失敗したら 502 で roster を一切変えない（fail-closed）', async () => {
+  // 安全側の向き: 選手IDは roster/{playerId} と scrimmages の参照キーなので、シートにIDが
+  // 残らないまま Firestore を更新すると次回の採番が行順でずれ、同じ選手が別IDで二重登録される。
+  // そのため書き戻し失敗は Firestore 同期もしない（両方巻き戻す向き）。
+  const db = makeMockDb({
+    'tenants/tenant-local/roster/M009': { playerId: 'M009', name: '既存', gender: 'M', active: true, grade: 1, tier: 3, heightCm: 170, roles: [], missing: [] },
+  });
+  const app = await startApp(db);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'scrim-fixture-wbfail-'));
+  const fixturePath = writeTabsFixture(tmpDir, [
+    {
+      title: '男子',
+      values: [
+        ROSTER_HEADER,
+        ['', 'アオキ', '3', 'PG', '右', '在籍', '170', '4', 'ハンドラー', '', '', '', ''],
+      ],
+    },
+  ]);
+  const prevPath = process.env.ROSTER_FIXTURE_PATH;
+  const prevWb = process.env.ROSTER_FIXTURE_WRITEBACK_PATH;
+  process.env.ROSTER_FIXTURE_PATH = fixturePath;
+  // 書き戻し先を存在しないディレクトリへ向けて失敗させる（本番の Sheets 書き込み権限不足と同型）。
+  process.env.ROSTER_FIXTURE_WRITEBACK_PATH = join(tmpDir, 'no-such-dir', 'roster.json');
+  try {
+    const r = await post(app.base, '/api/roster/sync', { sheetId: 'a'.repeat(20) });
+    assert.equal(r.status, 502, JSON.stringify(r.json));
+    assert.match(r.json.error, /書き戻/);
+    assert.equal(db.store.has('tenants/tenant-local/roster/M001'), false, '新規選手は書かれない');
+    assert.equal(db.store.has('tenants/tenant-local/roster/M009'), true, '既存 roster も消えない');
+    const tenant = db.store.get('tenants/tenant-local');
+    assert.equal(tenant.rosterSyncedAt, undefined, '同期時刻も記録しない');
+  } finally {
+    if (prevPath === undefined) delete process.env.ROSTER_FIXTURE_PATH;
+    else process.env.ROSTER_FIXTURE_PATH = prevPath;
+    if (prevWb === undefined) delete process.env.ROSTER_FIXTURE_WRITEBACK_PATH;
+    else process.env.ROSTER_FIXTURE_WRITEBACK_PATH = prevWb;
     rmSync(tmpDir, { recursive: true, force: true });
     await app.close();
   }

@@ -7,7 +7,7 @@
  *   decide: owner でない → 403 ／ teams が attendees のちょうど1回ずつの分割でない → 400 ／
  *           同日2回確定すると n が連番（-1・-2）で採番される。
  *   sync:   isAdmin でない → 403 ／ sheetId が書式（20文字以上の英数・-・_）を満たさない → 400 ／
- *           Sheets 取得失敗（fetchSheetValues の throw）→ 502 かつ roster に一切書き込まない。
+ *           Sheets 取得失敗（fetchRosterTabs の throw）→ 502 かつ roster に一切書き込まない。
  *
  * engine/src/scrimmage.js・engine/src/roster.js（並行実装の A 分担）はこのテスト実行時点で未着地のため、
  * それらへ到達する前に確定する認可・入力検証・越境チェックの分岐だけを実HTTPで検証する
@@ -381,7 +381,7 @@ test('POST /api/roster/sync: sheetId 指定時に tenants/{tid}.rosterSheetId �
   }
 });
 
-test('POST /api/roster/sync: Sheets 取得失敗（fetchSheetValues throw）は 502 で roster 不変', async () => {
+test('POST /api/roster/sync: Sheets 取得失敗（fetchRosterTabs throw）は 502 で roster 不変', async () => {
   const db = makeMockDb(rosterSeed);
   const app = await startApp(db);
   // roster-sheet.mjs は自作モジュールなので実際に throw させる: ROSTER_FIXTURE_PATH を
@@ -400,4 +400,35 @@ test('POST /api/roster/sync: Sheets 取得失敗（fetchSheetValues throw）は 
     else process.env.ROSTER_FIXTURE_PATH = prevPath;
     await app.close();
   }
+});
+
+// ── 純判定: 選手ID書き戻しの範囲式（roster-sheet.mjs・行指定の1セルだけ更新する）────────
+const { buildPlayerIdUpdateData, ROSTER_TABS } = await import('./roster-sheet.mjs');
+
+test('ROSTER_TABS: タブ名が性別を決める（男子→M・女子→F）', () => {
+  assert.deepEqual(ROSTER_TABS, [
+    { title: '男子', gender: 'M' },
+    { title: '女子', gender: 'F' },
+  ]);
+});
+
+test('buildPlayerIdUpdateData: タブ名と行番号から選手ID列の1セルだけの範囲を組む', () => {
+  const data = buildPlayerIdUpdateData([
+    { title: '男子', row: 2, playerId: 'M001' },
+    { title: '女子', row: 7, playerId: 'F003' },
+  ]);
+  assert.deepEqual(data, [
+    { range: "'男子'!A2", values: [['M001']] },
+    { range: "'女子'!A7", values: [['F003']] },
+  ]);
+});
+
+test('buildPlayerIdUpdateData: 空の更新リストは空配列（書き戻しを呼ばない）', () => {
+  assert.deepEqual(buildPlayerIdUpdateData([]), []);
+  assert.deepEqual(buildPlayerIdUpdateData(undefined), []);
+});
+
+test('buildPlayerIdUpdateData: ヘッダ行（1行目）以下を指す行番号は throw（行全体の上書き事故を防ぐ）', () => {
+  assert.throws(() => buildPlayerIdUpdateData([{ title: '男子', row: 1, playerId: 'M001' }]), /行が不正/);
+  assert.throws(() => buildPlayerIdUpdateData([{ title: '男子', row: 0, playerId: 'M001' }]), /行が不正/);
 });

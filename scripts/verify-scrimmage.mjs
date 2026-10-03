@@ -88,7 +88,7 @@ async function main() {
   check('scrimmage page: ホーム画面追加メタが出る', page.text.includes('apple-mobile-web-app-capable'));
 
   // ── 3) チーム分け（split）─────────────────────────────────────────────────────
-  const attendees = ['M01', 'M02', 'M03'];
+  const attendees = ['M001', 'M002', 'M003'];
   console.log(`POST ${HOST}/api/scrimmage/split`);
   const split1 = await postJson(`${HOST}/api/scrimmage/split`, { gender: 'M', teamCount: 2, attendees, seed: 4242 });
   check('split: 200', split1.status === 200, `status=${split1.status} body=${split1.text.slice(0, 300)}`);

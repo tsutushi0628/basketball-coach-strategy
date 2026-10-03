@@ -456,7 +456,9 @@ export function rosterSyncDecision(ctx, body) {
 export function mountWriteApi(appServer, dbInstance) {
   // JSON ボディ解析は /api 配下だけに効かせる（HTML を返す GET '*' を巻き込まない）。
   const json = express.json({ limit: '256kb' });
-  appServer.get('/healthz', (_req, res) => {
+  // '/healthz' は Google Frontend が完全一致・小文字のときだけ横取りして 404 を返す
+  // （アプリには届かない。'/healthz/' や '/HEALTHZ' は 200）。本番の疎通確認は '/api/health' を使う。
+  appServer.get(['/healthz', '/api/health'], (_req, res) => {
     res.json({ status: 'ok', database: DATABASE_NAME });
   });
 
@@ -819,8 +821,9 @@ export function mountWriteApi(appServer, dbInstance) {
 
   // ── 名簿同期（管理者スコープ・Sheets → Firestore roster）──────────────────────────
   // engine/src/roster.js（normalizeRoster）も A 分担の未着地かもしれないため split と同様に動的 import。
-  // 手順（spec 3章）: sheetId 解決 → Sheets 取得（失敗 502・roster 不変）→ 正規化 →
-  // 差分件数の事前計算（500 超は 422・roster 不変）→ 1 batch で set/delete + tenant doc merge。
+  // 手順（spec 3章）: sheetId 解決 → Sheets の「男子」「女子」2タブ取得（失敗 502・roster 不変）→
+  // タブごとに正規化（性別はタブ名・選手ID空欄は自動採番）→ 差分件数の事前計算（500 超は 422・roster 不変）
+  // → 採番した選手IDをシートへ書き戻し（失敗 502・roster 不変）→ 1 batch で set/delete + tenant doc merge。
   appServer.post('/api/roster/sync', json, async (req, res) => {
     let ctx;
     try {
@@ -855,19 +858,36 @@ export function mountWriteApi(appServer, dbInstance) {
       return;
     }
 
-    let values;
+    let sheetMod;
+    let tabs;
     try {
-      const sheetMod = await import('./roster-sheet.mjs');
-      values = await sheetMod.fetchSheetValues({ sheetId });
+      sheetMod = await import('./roster-sheet.mjs');
+      tabs = await sheetMod.fetchRosterTabs({ sheetId });
     } catch {
       res.status(502).json({ ok: false, error: '名簿シートを読めませんでした' });
       return;
     }
 
-    let normalized;
+    // 「男子」「女子」の2タブを1つの roster にまとめる（性別はタブ名が決める）。
+    // 選手IDが空欄の行は normalizeRoster が採番し、どのシート行に振ったかを assignedIds で返す。
+    const normalized = { players: [], skipped: 0 };
+    const idWriteBacks = [];
     try {
       const rosterMod = await import('../engine/src/roster.js');
-      normalized = rosterMod.normalizeRoster(values);
+      const seenIds = new Set();
+      for (const tab of tabs) {
+        const one = rosterMod.normalizeRoster(tab.values, tab.gender);
+        normalized.skipped += one.skipped;
+        for (const p of one.players) {
+          // 男女タブ間で選手IDが重複した場合は後に読んだタブ側を捨てる（同一 doc の上書きを防ぐ）。
+          if (seenIds.has(p.playerId)) { normalized.skipped += 1; continue; }
+          seenIds.add(p.playerId);
+          normalized.players.push(p);
+        }
+        for (const a of one.assignedIds) {
+          idWriteBacks.push({ title: tab.title, row: a.row, playerId: a.playerId });
+        }
+      }
     } catch {
       // 正規化不能な応答（想定外の列・空シート等）も Sheets 側の問題として扱う（roster は不変のまま）。
       res.status(502).json({ ok: false, error: '名簿シートを読めませんでした' });
@@ -886,6 +906,18 @@ export function mountWriteApi(appServer, dbInstance) {
       if (writeCount > 499) {
         res.status(422).json({ ok: false, error: '名簿の変更が500件を超えています' });
         return;
+      }
+
+      // 自動付与した選手IDはシートへ書き戻してから Firestore を更新する（fail-closed）。
+      // 理由: 選手IDは roster/{playerId} と scrimmages の参照キーなので、シートに残らないまま
+      // 同期すると次回の採番が行順でずれ、同じ選手が別IDで二重登録されて履歴が壊れる。
+      if (idWriteBacks.length > 0) {
+        try {
+          await sheetMod.writeBackPlayerIds({ sheetId, updates: idWriteBacks });
+        } catch {
+          res.status(502).json({ ok: false, error: '名簿シートに選手IDを書き戻せませんでした' });
+          return;
+        }
       }
 
       const syncedAt = new Date();
@@ -918,6 +950,7 @@ export function mountWriteApi(appServer, dbInstance) {
         syncedAt: syncedAt.toISOString(),
         count: normalized.players.length,
         skipped: normalized.skipped,
+        assigned: idWriteBacks.length,
         missing,
       });
     } catch {
