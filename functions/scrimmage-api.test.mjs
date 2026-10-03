@@ -71,6 +71,40 @@ test('scrimmageSplitDecision: 正当な入力は ok', () => {
   assert.deepEqual(d.attendees, ['M01', 'M02', 'M03']);
 });
 
+test('scrimmageSplitDecision: 名簿同期が振る3桁の選手IDを受ける', () => {
+  // 自動付与は `M001`/`F001` の3桁。2桁しか通さない書式だとチーム分けが全件 400 で弾かれる。
+  const attendees = ['M001', 'M002', 'M003', 'M015'];
+  const d = scrimmageSplitDecision({ role: 'owner' }, { gender: 'M', teamCount: 2, attendees });
+  assert.equal(d.ok, true);
+  assert.deepEqual(d.attendees, attendees);
+});
+
+test('scrimmageSplitDecision: 2桁と3桁の選手IDが混ざっていても受ける', () => {
+  const attendees = ['M01', 'M002', 'M003'];
+  const d = scrimmageSplitDecision({ role: 'owner' }, { gender: 'M', teamCount: 2, attendees });
+  assert.equal(d.ok, true);
+  assert.deepEqual(d.attendees, attendees);
+});
+
+test('scrimmageSplitDecision: ドキュメントIDに使えない文字の選手IDは 400', () => {
+  for (const bad of ['M 01', 'M/01', '', 'M'.repeat(33), '../x']) {
+    const d = scrimmageSplitDecision({ role: 'owner' }, { gender: 'M', teamCount: 2, attendees: ['M001', bad] });
+    assert.equal(d.ok, false, `受けてはいけない: ${JSON.stringify(bad)}`);
+    assert.equal(d.status, 400);
+  }
+});
+
+test('scrimmageDecideDecision: 3桁の選手IDを受ける', () => {
+  const d = scrimmageDecideDecision({ role: 'owner' }, {
+    date: '2026-10-03', gender: 'M', teamCount: 2,
+    attendees: ['M001', 'M002', 'M003', 'M004'],
+    teams: [['M001', 'M002'], ['M003', 'M004']],
+    seed: 1,
+  });
+  assert.equal(d.ok, true);
+  assert.deepEqual(d.teams, [['M001', 'M002'], ['M003', 'M004']]);
+});
+
 // ── 純判定: scrimmageDecideDecision ───────────────────────────────────────────────
 const validDecideBody = {
   date: '2026-09-05', gender: 'M', teamCount: 2,

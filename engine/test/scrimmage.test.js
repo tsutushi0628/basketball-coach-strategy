@@ -5,6 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { splitTeams, scoreTeams, teamSizes } from '../src/scrimmage.js';
 
@@ -199,4 +200,127 @@ test('splitTeams: throws when attendee count is below teamCount', () => {
       seed: 1,
     }),
   );
+});
+
+// ---------------------------------------------------------------------------
+// Member order inside each team (strength desc, tie → id asc)
+// ---------------------------------------------------------------------------
+
+/** s = tier + 0.5 × (grade − 1) — the spec §4.2 definition, restated here. */
+function strengthOf(p) {
+  return p.tier + 0.5 * (p.grade - 1);
+}
+
+test('splitTeams: each team lists members strength-desc with tier and grade mixed', () => {
+  // Strengths: M01=1.0, M02=2.0, M03=3.0, M04=4.0, M05=5.0, M06=6.0 — all
+  // distinct, and tier alone would order them differently from grade alone.
+  const roster = [
+    { id: 'M01', grade: 1, tier: 1, heightCm: 170, roles: [] },
+    { id: 'M02', grade: 3, tier: 1, heightCm: 170, roles: [] },
+    { id: 'M03', grade: 1, tier: 3, heightCm: 170, roles: [] },
+    { id: 'M04', grade: 3, tier: 3, heightCm: 170, roles: [] },
+    { id: 'M05', grade: 1, tier: 5, heightCm: 170, roles: [] },
+    { id: 'M06', grade: 3, tier: 5, heightCm: 170, roles: [] },
+  ];
+  const attendees = roster.map((p) => p.id);
+  const byId = new Map(roster.map((p) => [p.id, p]));
+
+  for (const teamCount of [2, 3]) {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { teams } = splitTeams({ roster, attendees, teamCount, history: [], seed });
+      for (const team of teams) {
+        const expected = [...team].sort((a, b) => {
+          const d = strengthOf(byId.get(b)) - strengthOf(byId.get(a));
+          if (d !== 0) return d;
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
+        assert.deepEqual(team, expected, `teamCount=${teamCount} seed=${seed}`);
+        for (let i = 1; i < team.length; i++) {
+          assert.ok(
+            strengthOf(byId.get(team[i - 1])) >= strengthOf(byId.get(team[i])),
+            `strength must not increase: ${team.join(',')}`,
+          );
+        }
+      }
+    }
+  }
+});
+
+test('splitTeams: explicit expected order for one concrete split', () => {
+  // Strength rises with the id here — M01=1.0, M02=2.0, M03=3.0, M04=4.0,
+  // M05=5.0, M06=6.0 — built from mixed tier and grade (M02 is tier 1 / grade 3
+  // = 2.0 while M03 is tier 3 / grade 1 = 3.0), so strength-desc is the exact
+  // reverse of id-asc and the old contract cannot pass this assertion.
+  const roster = [
+    { id: 'M01', grade: 1, tier: 1, heightCm: 170, roles: ['handler'] },
+    { id: 'M02', grade: 3, tier: 1, heightCm: 171, roles: ['shooter'] },
+    { id: 'M03', grade: 1, tier: 3, heightCm: 172, roles: ['rimProtector'] },
+    { id: 'M04', grade: 3, tier: 3, heightCm: 173, roles: ['handler'] },
+    { id: 'M05', grade: 1, tier: 5, heightCm: 174, roles: ['shooter'] },
+    { id: 'M06', grade: 3, tier: 5, heightCm: 175, roles: ['rebounder'] },
+  ];
+  const attendees = roster.map((p) => p.id);
+  const { teams } = splitTeams({ roster, attendees, teamCount: 2, history: [], seed: 7 });
+  // Team 1: 6.0 → 3.0 → 1.0. Team 2: 5.0 → 4.0 → 2.0. Pre-change this same
+  // split read [['M01','M03','M06'], ['M02','M04','M05']].
+  assert.deepEqual(teams, [
+    ['M06', 'M03', 'M01'],
+    ['M05', 'M04', 'M02'],
+  ]);
+});
+
+test('splitTeams: equal strength ties break on id ascending', () => {
+  // Two strength-2.0 pairs: (M04 grade3/tier1) and (M05 grade1/tier2), plus
+  // (M07 grade1/tier2) and (M08 grade3/tier1) — four ids all at 2.0.
+  const roster = [
+    { id: 'M04', grade: 3, tier: 1, heightCm: 170, roles: [] },
+    { id: 'M05', grade: 1, tier: 2, heightCm: 170, roles: [] },
+    { id: 'M07', grade: 1, tier: 2, heightCm: 170, roles: [] },
+    { id: 'M08', grade: 3, tier: 1, heightCm: 170, roles: [] },
+  ];
+  const attendees = roster.map((p) => p.id);
+  // Every attendee has strength 2.0, so each team's order is decided purely
+  // by the id tiebreak.
+  const { teams } = splitTeams({ roster, attendees, teamCount: 2, history: [], seed: 9 });
+  for (const team of teams) {
+    assert.deepEqual(team, [...team].sort(), `equal strength → id asc: ${team.join(',')}`);
+  }
+  // And the union is still the full attendee set.
+  assert.deepEqual([...teams.flat()].sort(), ['M04', 'M05', 'M07', 'M08']);
+});
+
+test('splitTeams: same seed twice → byte-identical member order', () => {
+  const roster = makeRoster(13);
+  const attendees = roster.map((p) => p.id);
+  for (const teamCount of [2, 3]) {
+    const a = splitTeams({ roster, attendees, teamCount, history: [], seed: 20260905 });
+    const b = splitTeams({ roster, attendees, teamCount, history: [], seed: 20260905 });
+    assert.equal(JSON.stringify(a.teams), JSON.stringify(b.teams), `teamCount=${teamCount}`);
+  }
+});
+
+test('splitTeams: allocation (the member set per team) is unchanged by the reorder', () => {
+  // Golden fixture captured from the pre-reorder implementation (teams were
+  // then returned id-ascending). Sorting today's teams by id must reproduce it
+  // exactly — proof that only the presentation order moved and the §4.3
+  // distribution logic was not touched.
+  const golden = JSON.parse(
+    readFileSync(new URL('./scrimmage-allocation.golden.json', import.meta.url), 'utf8'),
+  );
+  const roster = makeRoster(13);
+  const attendees = roster.map((p) => p.id);
+  for (const teamCount of [2, 3]) {
+    for (let seed = 1; seed <= 20; seed++) {
+      const { teams } = splitTeams({ roster, attendees, teamCount, history: [], seed });
+      assert.deepEqual(
+        teams.map((t) => [...t].sort()),
+        golden[`${teamCount}:${seed}`],
+        `teamCount=${teamCount} seed=${seed}`,
+      );
+      assert.deepEqual(
+        teams.map((t) => t.length),
+        teamSizes(attendees.length, teamCount),
+      );
+    }
+  }
 });

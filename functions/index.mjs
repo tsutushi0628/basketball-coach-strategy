@@ -311,8 +311,10 @@ export function goalWriteDecision(ctx, body) {
 // 性別コード（players/roster とも 'M'|'F'）とチーム数（2 または 3）の許容集合。
 const SCRIMMAGE_GENDERS = ['M', 'F'];
 const SCRIMMAGE_TEAM_COUNTS = [2, 3];
-// 選手ID書式（spec 2.1）。
-const PLAYER_ID_RE = /^[MF]\d{2}$/;
+// 選手ID書式（spec 2.1）。名簿同期の自動付与は `M001`/`F001` の3桁で、旧シートの2桁ID（`M01`）も
+// 温存するため、engine/src/roster.js の受け入れ書式と同じ範囲に揃える（Firestore のドキュメントIDに
+// 安全な文字だけ）。実在する選手かどうかは roster との突合で確かめるので、書式はここで狭めない。
+const PLAYER_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 // 名簿シートID書式（spec 5章）。Google スプレッドシートIDは英数・-・_ のみで20文字以上。
 const SHEET_ID_RE = /^[A-Za-z0-9_-]{20,}$/;
 

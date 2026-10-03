@@ -120,6 +120,22 @@ function strength(player) {
 }
 
 /**
+ * Comparator over player ids: strength desc, tie → id asc. Used both for the
+ * §4.3 step-1 fill order and for the member order inside each returned team,
+ * so the two never drift apart.
+ * @param {Map<string, ScrimmagePlayer>} byId
+ * @returns {(a: string, b: string) => number}
+ */
+function compareStrengthDesc(byId) {
+  return (a, b) => {
+    const sa = strength(byId.get(a));
+    const sb = strength(byId.get(b));
+    if (sb !== sa) return sb - sa;
+    return a < b ? -1 : a > b ? 1 : 0;
+  };
+}
+
+/**
  * Ids of the `teamCount` tallest attendees (height desc, tie → id asc).
  * §4.2 "身長上位 teamCount 名".
  * @param {ScrimmagePlayer[]} attendeePlayers
@@ -218,6 +234,8 @@ export function scoreTeams({ roster, teams, history }) {
  * Split `attendees` into `teamCount` balanced teams. Deterministic for a
  * given `(roster, attendees, teamCount, history, seed)`. §4.3, §10-A.
  *
+ * Each returned team lists its members strength-desc (tie → id asc).
+ *
  * @param {{
  *   roster: ScrimmagePlayer[],
  *   attendees: string[],
@@ -254,14 +272,7 @@ export function splitTeams({ roster, attendees, teamCount, history, seed }) {
 
   // Step 1: strength-desc (tie id-asc) serpentine fill, skipping teams that
   // already reached their target size.
-  const byStrengthDesc = [...sortedAttendees].sort((a, b) => {
-    const pa = byId.get(a);
-    const pb = byId.get(b);
-    const sa = strength(pa);
-    const sb = strength(pb);
-    if (sb !== sa) return sb - sa;
-    return a < b ? -1 : a > b ? 1 : 0;
-  });
+  const byStrengthDesc = [...sortedAttendees].sort(compareStrengthDesc(byId));
 
   /** @type {string[][]} */
   const teams = Array.from({ length: teamCount }, () => []);
@@ -336,6 +347,10 @@ export function splitTeams({ roster, attendees, teamCount, history, seed }) {
     if (!improved) break;
   }
 
-  const finalTeams = teams.map((teamIds) => [...teamIds].sort());
+  // Members of each team come back strength-desc (tie → id asc) so the
+  // strongest player heads the list. Team order itself is untouched, and only
+  // ids are returned (no tier / strength leaks to the UI).
+  const memberOrder = compareStrengthDesc(byId);
+  const finalTeams = teams.map((teamIds) => [...teamIds].sort(memberOrder));
   return { teams: finalTeams, seed: normalizedSeed };
 }
