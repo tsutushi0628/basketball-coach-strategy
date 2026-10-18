@@ -22,6 +22,7 @@ textarea.ed-in{min-height:64px;resize:vertical}
  * 色は on-surface-muted のみ（新規色を足さない・押せない地の文と同じ扱い）。空のときは高さを持たない。 */
 .ed-row-msg{font-size:12px;line-height:1.5;color:var(--on-surface-muted);margin:0 0 10px}
 .ed-row-msg:empty{display:none;margin:0}
+#ed-start-msg{display:block;min-height:3em;margin:0 0 10px}
 .ed-times{display:inline-flex;align-items:center;gap:6px}
 .ed-times .ed-sep{color:var(--on-surface-muted);font-size:14px}
 /* 行番号は押せない標識のアクセント（3.7節許可リスト）。直参照を維持 */

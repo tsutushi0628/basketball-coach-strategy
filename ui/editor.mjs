@@ -879,6 +879,9 @@ export function editorScript() {
     var btn=e.target.closest('[data-act]');if(!btn)return;
     var act=btn.getAttribute('data-act');
     if(act==='toggle-both'){return;}
+    if(act==='cancel'||act==='revert-auto'||act==='load-seed'||act==='copy-from'){
+      syncPracticeStart();
+    }
     if(act==='save'){doSave();return;}
     if(act==='cancel'){
       if(!collectInputs()){return;}
@@ -997,6 +1000,9 @@ export function editorScript() {
   function onPracticeStartEdit(e){
     var input=e.target.closest('#ed-start');
     if(!input){return;}
+    if(e.type==='focusout'&&e.relatedTarget&&panel.contains(e.relatedTarget)&&e.relatedTarget.closest('[data-act]')){
+      return;
+    }
     if(e.type==='focusout'||e.key==='Enter'){
       if(input.value!==input.defaultValue){collectInputs();}
       return;

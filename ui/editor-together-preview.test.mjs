@@ -8,10 +8,11 @@ import { buildPlanData } from './plan-data.mjs';
 import { localStorages, LOCAL_FIXTURE_TODAY } from './build.mjs';
 import { render } from './pattern-timeline.mjs';
 import { renderPage } from './render-shared.mjs';
-import { editorDataIsland, editorScript } from './editor.mjs';
+import { EDITOR_CSS, editorDataIsland, editorScript } from './editor.mjs';
 
 const HTML = join(process.cwd(), '.tmp', 'editor-together-preview.test.html');
 const keyboardEvidence = [];
+const pointerEvidence = [];
 let browser;
 let page;
 
@@ -30,6 +31,7 @@ after(async () => {
   const evidence = new URL('../.tmp/e2e/evidence/', import.meta.url);
   mkdirSync(evidence, { recursive: true });
   writeFileSync(new URL('practice-start-keyboard.json', evidence), JSON.stringify(keyboardEvidence, null, 2));
+  writeFileSync(new URL('practice-start-pointer.json', evidence), JSON.stringify(pointerEvidence, null, 2));
   try { unlinkSync(HTML); } catch {}
 });
 
@@ -89,8 +91,8 @@ test('a fully differing preview keeps every row split with a single leading head
 const PRACTICE_TIMES = [['09:00', '09:20'], ['09:20', '10:00'], ['10:10', '11:30']];
 
 /** 時刻だけ異なる編集用の日を、既存のデータ島と実スクリプトで開く。 */
-async function openPracticePanel(t, times, copyTimes = PRACTICE_TIMES) {
-  const practicePage = await browser.newPage({ locale: 'ja-JP' });
+async function openPracticePanel(t, times, copyTimes = PRACTICE_TIMES, pageOptions = {}) {
+  const practicePage = await browser.newPage({ locale: 'ja-JP', reducedMotion: 'reduce', ...pageOptions });
   t.after(() => practicePage.close());
   const makeRows = (values) => values.map(([from, to], index) => ({
     from, to, both: { block: 'ファンダ', label: `練習${index + 1}`, items: [{ name: 'パス', note: '' }] },
@@ -104,11 +106,10 @@ async function openPracticePanel(t, times, copyTimes = PRACTICE_TIMES) {
       { from: '07:30', to: '08:00', block: 'ファンダ', items: [{ name: 'パス' }] },
     ] }],
   };
-  await practicePage.setContent(`<!doctype html><html lang="ja"><body>
+  await practicePage.setContent(renderPage({ title: 'editor practice start', css: EDITOR_CSS, body: `
     <button id="ed-edit" type="button">編集</button><span id="ed-msg"></span>
     <article class="day" data-date="2026-10-17" data-day="土"></article>
-    ${editorDataIsland(data)}<script>${editorScript()}</script>
-    </body></html>`);
+    ${editorDataIsland(data)}`, script: editorScript() }));
   await practicePage.click('#ed-edit');
   return practicePage;
 }
@@ -160,7 +161,7 @@ test('練習開始: blur前の保存で17:00へ一度だけずらし、blurと�
     if (blurFirst) {
       await practicePage.locator('#ed-aim').focus();
     }
-    await practicePage.evaluate(() => document.querySelector('[data-act="save"]').click());
+    await practicePage.click('[data-act="save"]');
     await practicePage.waitForFunction(() => window.__saveRequests.length === 1);
     const committed = await practiceState(practicePage);
     const expectedTimes = [['17:00', '17:20'], ['17:20', '18:00'], ['18:10', '19:30']];
@@ -194,7 +195,7 @@ test('練習開始: blur前の保存で00:00前・24:00以上になる値を拒�
     const initial = await practiceState(practicePage);
     await practicePage.locator('#ed-start').focus();
     await changePracticeTime(practicePage, '#ed-start', boundary.value, 'input');
-    await practicePage.evaluate(() => document.querySelector('[data-act="save"]').click());
+    await practicePage.click('[data-act="save"]');
     const rejected = await practiceState(practicePage);
     assert.deepEqual(await practicePage.evaluate(() => window.__saveRequests), []);
     assert.equal(rejected.start, initial.start);
@@ -218,13 +219,12 @@ test('練習開始: プレビュー・行追加・項目追加・男女切替も
       if (operation === 'only-gender') {
         practicePage.once('dialog', (dialog) => dialog.accept());
       }
-      const preview = await practicePage.evaluate((operation) => {
-        if (operation === 'preview') {
-          return window.__bcsEditor.buildOverride();
-        }
-        document.querySelector('[data-act="' + operation + '"]').click();
-        return null;
-      }, operation);
+      let preview = null;
+      if (operation === 'preview') {
+        preview = await practicePage.evaluate(() => window.__bcsEditor.buildOverride());
+      } else {
+        await practicePage.click('[data-act="' + operation + '"]');
+      }
       const state = await practiceState(practicePage);
       if (value === '23:00') {
         assert.equal(preview, null);
@@ -256,6 +256,190 @@ test('練習開始: プレビュー・行追加・項目追加・男女切替も
       assert.deepEqual(await practiceState(practicePage), state, operation + '後のblurでも二重適用しない');
     }
   }
+});
+
+for (const pointer of [
+  { method: 'click', viewport: { width: 1280, height: 1600 }, hasTouch: false },
+  { method: 'tap', viewport: { width: 390, height: 844 }, hasTouch: true },
+]) {
+  for (const value of ['17:00', '23:00']) {
+    test(`練習開始: ${pointer.method}で${value}の保存を1回押し、通知の前後でボタン位置を保つ`, async (t) => {
+      const practicePage = await openPracticePanel(t, PRACTICE_TIMES, PRACTICE_TIMES, {
+        viewport: pointer.viewport, hasTouch: pointer.hasTouch,
+      });
+      await capturePracticeSave(practicePage);
+      const initial = await practiceState(practicePage);
+      await practicePage.locator('#ed-start').focus();
+      await changePracticeTime(practicePage, '#ed-start', value, 'input');
+      const save = practicePage.locator('[data-act="save"]');
+      await save.scrollIntoViewIfNeeded();
+      await practicePage.evaluate(() => window.scrollTo({ top: window.scrollY, behavior: 'instant' }));
+      const scrollBefore = await practicePage.evaluate(() => window.scrollY);
+      const before = await save.evaluate((button) => button.getBoundingClientRect().top);
+      if (pointer.hasTouch) {
+        await practicePage.tap('[data-act="save"]');
+      } else {
+        await practicePage.click('[data-act="save"]');
+      }
+      await practicePage.mouse.move(0, 0);
+      await practicePage.waitForFunction(() => document.querySelector('[data-act="save"]').getAnimations().length === 0);
+      const after = await save.evaluate((button) => button.getBoundingClientRect().top);
+      const scrollAfter = await practicePage.evaluate(() => window.scrollY);
+      const message = practicePage.locator('#ed-start-msg');
+      const measurement = await message.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return {
+          rect: element.getBoundingClientRect().toJSON(),
+          lineCount: new Set([...range.getClientRects()].map((rect) => rect.top)).size,
+          text: element.textContent,
+          lineHeight: getComputedStyle(element).lineHeight,
+        };
+      });
+      pointerEvidence.push({ ...pointer, value, before, after, scrollBefore, scrollAfter, measurement });
+      t.diagnostic(JSON.stringify({ ...pointer, value, before, after, scrollBefore, scrollAfter, measurement }));
+      assert.equal(after, before, '通知の表示で保存ボタンを動かさない');
+      assert.equal(scrollAfter, scrollBefore, 'スクロールで位置の変化を相殺していない');
+      assert.equal(await message.isVisible(), true);
+      const state = await practiceState(practicePage);
+      const requests = await practicePage.evaluate(() => window.__saveRequests);
+      if (value === '23:00') {
+        assert.equal(requests.length, 0, '拒否した値でも元の時刻でも保存しない');
+        assert.equal(await practicePage.locator('.ed-panel').isVisible(), true);
+        assert.deepEqual(state.rows, initial.rows);
+        assert.deepEqual(state.times, initial.times);
+        assert.equal(state.start, initial.start);
+        assert.match(state.message, /24:00以降/);
+        await practicePage.locator('#ed-start').scrollIntoViewIfNeeded();
+        assert.equal(await message.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= innerHeight;
+        }), true, '拒否理由を開始欄の直下で読める');
+        return;
+      }
+      assert.equal(requests.length, 1, '1回の操作で1件だけ保存する');
+      const expectedTimes = [['17:00', '17:20'], ['17:20', '18:00'], ['18:10', '19:30']];
+      assert.deepEqual(state.times, expectedTimes);
+      assert.deepEqual(requests[0].override.rows.map((row) => [row.from, row.to]), expectedTimes);
+      await practicePage.locator('#ed-start').focus();
+      await practicePage.locator('#ed-aim').focus();
+      assert.deepEqual(await practiceState(practicePage), state, '確定後のblurで二重適用しない');
+      await practicePage.evaluate(() => window.__completeSave());
+      await practicePage.waitForFunction(() => !document.querySelector('.ed-panel'));
+      assert.match(await practicePage.locator('.day').innerText(), /17:00/);
+    });
+  }
+
+  for (const operation of ['cancel', 'revert-auto', 'load-seed', 'copy-from']) {
+    test(`練習開始: ${pointer.method}の${operation}は未確定値を捨てて1回で確認へ進む`, async (t) => {
+      for (const value of ['17:00', '23:00']) {
+        const practicePage = await openPracticePanel(t, PRACTICE_TIMES, [['12:00', '13:00']], {
+          viewport: pointer.viewport, hasTouch: pointer.hasTouch,
+        });
+        if (operation === 'copy-from') {
+          await practicePage.locator('.cf-radio').check();
+        }
+        const initial = await practiceState(practicePage);
+        await practicePage.locator('#ed-start').focus();
+        await changePracticeTime(practicePage, '#ed-start', value, 'input');
+        let confirmations = 0;
+        if (operation === 'load-seed' || operation === 'copy-from') {
+          practicePage.once('dialog', async (dialog) => {
+            confirmations += 1;
+            await dialog.dismiss();
+          });
+        }
+        if (pointer.hasTouch) {
+          await practicePage.tap(`[data-act="${operation}"]`);
+        } else {
+          await practicePage.click(`[data-act="${operation}"]`);
+        }
+        if (operation === 'cancel' || operation === 'revert-auto') {
+          assert.equal(await practicePage.locator('#ed-cd').isVisible(), true);
+          await practicePage.click('#ed-cd .rc-cancel');
+        } else {
+          assert.equal(confirmations, 1, '未確定の範囲外値で上書き確認を止めない');
+        }
+        assert.deepEqual(await practiceState(practicePage), initial, '開始時刻の検査・移動・通知を行わず有効値へ戻す');
+        if (operation === 'load-seed' || operation === 'copy-from') {
+          await practicePage.locator('#ed-start').focus();
+          await changePracticeTime(practicePage, '#ed-start', value, 'input');
+          practicePage.once('dialog', (dialog) => dialog.accept());
+          if (pointer.hasTouch) {
+            await practicePage.tap(`[data-act="${operation}"]`);
+          } else {
+            await practicePage.click(`[data-act="${operation}"]`);
+          }
+          let expectedTimes = [['07:30', '08:00']];
+          if (operation === 'copy-from') {
+            expectedTimes = [['12:00', '13:00']];
+          }
+          assert.deepEqual((await practiceState(practicePage)).times, expectedTimes);
+        }
+      }
+    });
+  }
+}
+
+test('練習開始: 390pxで文字を拡大して通知が2行になっても表示・消去でボタンを動かさない', async (t) => {
+  const viewport = { width: 390, height: 844 };
+  for (const value of ['17:00', '23:00']) {
+    const practicePage = await openPracticePanel(t, PRACTICE_TIMES, PRACTICE_TIMES, { viewport, hasTouch: true });
+    await practicePage.clock.install();
+    await practicePage.locator('#ed-start-msg').evaluate((message) => {
+      message.style.fontSize = parseFloat(getComputedStyle(message).fontSize) * 1.25 + 'px';
+    });
+    const start = practicePage.locator('#ed-start');
+    const save = practicePage.locator('[data-act="save"]');
+    await start.focus();
+    await changePracticeTime(practicePage, '#ed-start', value, 'input');
+    const before = await save.evaluate((button) => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return button.getBoundingClientRect().top;
+    });
+    await practicePage.keyboard.press('Enter');
+    const after = await save.evaluate((button) => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return button.getBoundingClientRect().top;
+    });
+    const lineCount = await practicePage.locator('#ed-start-msg').evaluate((message) => {
+      const range = document.createRange();
+      range.selectNodeContents(message);
+      return new Set([...range.getClientRects()].map((rect) => rect.top)).size;
+    });
+    assert.equal(lineCount, 2);
+    assert.equal(after, before);
+    await practicePage.clock.runFor(5000);
+    assert.equal(await practicePage.locator('#ed-start-msg').textContent(), '');
+    const cleared = await save.evaluate((button) => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return button.getBoundingClientRect().top;
+    });
+    assert.equal(cleared, before);
+    pointerEvidence.push({ viewport, value, textScale: 1.25, lineCount, before, after, cleared });
+  }
+});
+
+test('練習開始: Tabで操作ボタンに移るだけでは確定せずEnterで上書きの確認へ進む', async (t) => {
+  const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
+  const initial = await practiceState(practicePage);
+  await practicePage.locator('#ed-start').focus();
+  await practicePage.keyboard.type('2300');
+  await practicePage.keyboard.press('Tab');
+  await practicePage.keyboard.press('Tab');
+  assert.equal(await practicePage.locator('[data-act="load-seed"]').evaluate((button) => button === document.activeElement), true);
+  const pending = await practiceState(practicePage);
+  assert.equal(pending.start, '23:00');
+  assert.deepEqual(pending.rows, initial.rows);
+  assert.equal(pending.message, '');
+  let confirmations = 0;
+  practicePage.once('dialog', async (dialog) => {
+    confirmations += 1;
+    await dialog.dismiss();
+  });
+  await practicePage.keyboard.press('Enter');
+  assert.equal(confirmations, 1);
+  assert.deepEqual(await practiceState(practicePage), initial);
 });
 
 test('練習開始: 時間帯だけを変更してプレビューを繰り返しても元の開始時刻へずらさない', async (t) => {
@@ -516,7 +700,7 @@ test('練習開始: 実キーの分↑は確定まで全行を保ち、Enter・b
 });
 
 test('練習開始: 分↑の09:59→09:00は確定まで行を保ち、Escapeで直前の有効値に戻す', async (t) => {
-  for (const commitKey of ['Enter', 'Tab']) {
+  for (const commitKey of ['Enter', 'blur']) {
     const practicePage = await openPracticePanel(t, [['09:59', '10:19']]);
     const initial = await practiceState(practicePage);
     const start = practicePage.locator('#ed-start');
@@ -537,10 +721,10 @@ test('練習開始: 分↑の09:59→09:00は確定まで行を保ち、Escape�
     await practicePage.keyboard.press('ArrowRight');
     await practicePage.keyboard.press('ArrowUp');
     assert.equal(await start.inputValue(), '09:00');
-    await practicePage.keyboard.press(commitKey);
-    if (commitKey === 'Tab') {
-      await practicePage.keyboard.press('Tab');
-      assert.equal(await start.evaluate((input) => input === document.activeElement), false);
+    if (commitKey === 'Enter') {
+      await practicePage.keyboard.press(commitKey);
+    } else {
+      await practicePage.locator('#ed-aim').focus();
     }
     const committed = await practiceState(practicePage);
     assert.deepEqual(committed.times, [['09:00', '09:20']]);
@@ -577,8 +761,8 @@ test('終了時刻: changeは対象行のtoだけをモデルに取り込み、�
   assert.deepEqual(changed.times, [['09:00', '09:25'], ['08:00', '10:00'], ['10:10', '12:00']]);
 });
 
-test('練習開始: 実キー1430は入力途中の行を保ち、Enter・欄外へのTabで14:30に確定する', async (t) => {
-  for (const commitKey of ['Enter', 'Tab']) {
+test('練習開始: 実キー1430は入力途中の行を保ち、Enter・別の入力欄への移動で14:30に確定する', async (t) => {
+  for (const commitKey of ['Enter', 'blur']) {
     const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
     const initial = await practiceState(practicePage);
     const originalInput = await practicePage.locator('#ed-start').elementHandle();
@@ -591,10 +775,10 @@ test('練習開始: 実キー1430は入力途中の行を保ち、Enter・欄外
       assert.deepEqual(pending.times, initial.times, '数字の入力途中は表をずらさない');
     }
     assert.equal(await practicePage.locator('#ed-start').inputValue(), '14:30');
-    await practicePage.keyboard.press(commitKey);
-    if (commitKey === 'Tab') {
-      await practicePage.keyboard.press('Tab');
-      assert.equal(await originalInput.evaluate((input) => input === document.activeElement), false);
+    if (commitKey === 'Enter') {
+      await practicePage.keyboard.press(commitKey);
+    } else {
+      await practicePage.locator('#ed-aim').focus();
     }
     const shifted = await practiceState(practicePage);
     keyboardEvidence.push({ operation: `1430/${commitKey}/committed`, state: shifted });
