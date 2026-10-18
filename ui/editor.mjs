@@ -1122,6 +1122,7 @@ export function editorScript() {
       }
       if(fRow)fRow.from=fromEl.value;
       syncPracticeStart();
+      panel.querySelector('#ed-start').defaultValue=practiceStart();
       return;
     }
     var toInput=e.target.closest('[data-k="to"]');
@@ -1130,6 +1131,7 @@ export function editorScript() {
       var tRi=Number(tRowEl.getAttribute('data-ri'));var tRow=model.rows[tRi];
       if(tRow){tRow.to=toInput.value;}
       syncPracticeStart();
+      panel.querySelector('#ed-start').defaultValue=practiceStart();
       return;
     }
     var box=e.target.closest('[data-act="toggle-both"]');if(!box)return;

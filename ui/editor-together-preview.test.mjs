@@ -658,6 +658,61 @@ for (const browserName of ['chromium', 'webkit']) {
   });
 }
 
+test('練習開始: Chromiumで範囲外の入力中に最早行を手直しし、元の16:00を打ち直すと全行を一度だけ30分ずらして保存する', async (t) => {
+  for (const blurFirst of [false, true]) {
+    const practicePage = await openPracticePanel(t, [
+      ['16:00', '16:20'], ['16:20', '17:00'], ['17:10', '18:30'],
+    ]);
+    await capturePracticeSave(practicePage);
+    const initial = await practiceState(practicePage);
+    const start = practicePage.locator('#ed-start');
+    await start.focus();
+    await practicePage.keyboard.type('2300');
+    await practicePage.click('#ed-aim');
+    const rejected = await practiceState(practicePage);
+    assert.equal(rejected.start, '23:00');
+    assert.deepEqual(rejected.rows, initial.rows);
+    assert.match(rejected.message, /24:00/);
+
+    await practicePage.locator('.ed-row[data-ri="0"] [data-k="from"]').focus();
+    await practicePage.keyboard.type('1530');
+    await practicePage.click('#ed-aim');
+    const edited = await practiceState(practicePage);
+    assert.equal(edited.start, rejected.start);
+    assert.equal(edited.message, rejected.message);
+    assert.deepEqual(edited.times, [['15:30', '16:20'], ...initial.times.slice(1)]);
+    assert.deepEqual(edited.rows.map((row) => [row.from, row.to]), edited.times);
+
+    await start.focus();
+    await practicePage.keyboard.press('ArrowLeft');
+    await practicePage.keyboard.type('1600');
+    assert.equal(await start.inputValue(), '16:00');
+    if (blurFirst) {
+      await practicePage.click('#ed-aim');
+    }
+    await practicePage.click('[data-act="save"]');
+    await practicePage.waitForFunction(() => window.__saveRequests.length === 1);
+    const requests = await practicePage.evaluate(() => window.__saveRequests);
+    const expectedTimes = [['16:00', '16:50'], ['16:50', '17:30'], ['17:40', '19:00']];
+    assert.deepEqual(requests[0].override.rows.map((row) => [row.from, row.to, row.minutes]), [
+      ['16:00', '16:50', 50], ['16:50', '17:30', 40], ['17:40', '19:00', 80],
+    ]);
+    assert.equal(Object.hasOwn(requests[0].override, 'start'), false);
+    const committed = await practiceState(practicePage);
+    assert.equal(committed.start, '16:00');
+    assert.deepEqual(committed.times, expectedTimes);
+    assert.deepEqual(committed.rows, edited.rows.map((row, index) => ({
+      ...row, from: expectedTimes[index][0], to: expectedTimes[index][1],
+    })));
+    await practicePage.click('#ed-aim');
+    assert.deepEqual(await practiceState(practicePage), committed);
+    await practicePage.evaluate(() => window.__completeSave());
+    await practicePage.waitForFunction(() => !document.querySelector('.ed-panel'));
+    await practicePage.click('#ed-edit');
+    assert.deepEqual((await practiceState(practicePage)).times, expectedTimes);
+  }
+});
+
 test('練習開始: 時間帯だけを変更してプレビューを繰り返しても元の開始時刻へずらさない', async (t) => {
   const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
   await practicePage.locator('.ed-row [data-k="from"]').first().evaluate((input) => { input.value = '09:10'; });
