@@ -669,12 +669,95 @@ export function editorScript() {
       '</div>'+
     '</div>';
   }
+  /** 行の並び順にかかわらず、入力済みの最早開始を返す。 */
+  function practiceStart(){
+    var earliest=null;
+    model.rows.forEach(function(row){
+      var from=toMin(row.from);
+      if(from!==null&&(earliest===null||from<earliest)){
+        earliest=from;
+      }
+    });
+    if(earliest===null){return '';}
+    return minToHm(earliest);
+  }
+  /** 時間帯の編集・再描画後に、練習開始の値と利用可能な状態を揃える。 */
+  function syncPracticeStart(){
+    var input=panel.querySelector('#ed-start');
+    var hint=panel.querySelector('#ed-start-hint');
+    input.value=practiceStart();
+    input.disabled=!model.rows.some(function(row){
+      return toMin(row.from)!==null||toMin(row.to)!==null;
+    });
+    if(input.disabled){
+      hint.textContent='時間帯に時刻を入れると使えます';
+    }else{
+      hint.textContent='変えると全部の時間帯が同じだけずれます';
+    }
+  }
+  /** 全時刻が同じ日に収まることを確かめてから、練習開始の差分を一括反映する。 */
+  function shiftPracticeStart(input){
+    collectInputs();
+    var previous=practiceStart();
+    var next=input.value;
+    if(next===previous){return;}
+    if(previous===''){
+      input.value='';
+      flashMessage(panel.querySelector('#ed-start-msg'),'時間帯の開始時刻を1つ入力してから、練習開始を変えてください');
+      return;
+    }
+    if(next===''){
+      input.value=previous;
+      return;
+    }
+    var previousMin=toMin(previous);
+    var delta=toMin(next)-previousMin;
+    if(delta===0){return;}
+    var earliest=Infinity,latest=-Infinity;
+    model.rows.forEach(function(row){
+      [row.from,row.to].forEach(function(time){
+        var minute=toMin(time);
+        if(minute===null){return;}
+        earliest=Math.min(earliest,minute);
+        latest=Math.max(latest,minute);
+      });
+    });
+    if(earliest+delta<0){
+      input.value=previous;
+      flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が00:00より前になるため、開始を'+minToHm(previousMin-earliest)+'より早くできません');
+      return;
+    }
+    if(latest+delta>=toMin('24:00')){
+      input.value=previous;
+      flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が24:00以降になるため、開始を'+minToHm(previousMin+toMin('23:59')-latest)+'より後にできません');
+      return;
+    }
+    model.rows.forEach(function(row,ri){
+      if(row.from!==''){row.from=minToHm(toMin(row.from)+delta);}
+      if(row.to!==''){row.to=minToHm(toMin(row.to)+delta);}
+      var rowEl=panel.querySelector('.ed-row[data-ri="'+ri+'"]');
+      rowEl.querySelector('[data-k="from"]').value=row.from;
+      rowEl.querySelector('[data-k="to"]').value=row.to;
+    });
+    var sign='+';
+    if(delta<0){sign='−';}
+    var hours=Math.floor(Math.abs(delta)/60),minutes=Math.abs(delta)%60;
+    var amount='';
+    if(hours>0){amount+=hours+'時間';}
+    if(minutes>0){amount+=minutes+'分';}
+    flashMessage(panel.querySelector('#ed-start-msg'),'全部の時間帯を'+sign+amount+'ずらしました（'+previous+'→'+next+'開始）');
+  }
+  /* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V4 */
   function panelHtml(){
     var rows=model.rows.map(function(r,ri){return rowHtmlForm(r,ri);}).join('');
     return '<div class="ed-h">この日を編集（'+esc(dateLabelISO(model.date,model.weekday))+'）</div>'+
       onlyGenderToggleHtml()+
       catalogDatalist()+
       copyFromOptions()+
+      '<div class="ed-field"><label class="ed-lab" for="ed-start">練習開始</label>'+
+        '<p class="ed-hint" id="ed-start-hint"></p>'+
+        '<input type="time" class="ed-time" id="ed-start" aria-describedby="ed-start-hint ed-start-msg">'+
+        '<div class="ed-row-msg" id="ed-start-msg" role="status" aria-live="polite"></div></div>'+
       seedLoadOptions()+
       '<div class="ed-field"><span class="ed-lab">この日のねらい</span>'+
         '<textarea class="ed-in" id="ed-aim" rows="3" placeholder="この日のねらい（改行できます）">'+esc(model.aim)+'</textarea></div>'+
@@ -727,7 +810,7 @@ export function editorScript() {
     cell.items.splice(newI,0,moved);
     renderPanel();
   }
-  function renderPanel(){destroySortables();panel.innerHTML=panelHtml();initSortables();}
+  function renderPanel(){destroySortables();panel.innerHTML=panelHtml();syncPracticeStart();initSortables();}
   // 属性値内のダブルクォートだけ無害化（data-side は日本語可・"both"等）。
   function cssAttr(s){return String(s).replace(/"/g,'\\\\"');}
   // 再構築後に指定セレクタの入力へフォーカス（無ければ無視）。
@@ -898,7 +981,29 @@ export function editorScript() {
       return;
     }
   }
+  /** time入力は数字の途中でもchangeが発生するため、数字はEnterか欄外移動で確定する。 */
+  function onPracticeStartEdit(e){
+    var input=e.target.closest('#ed-start');
+    if(!input){return;}
+    if(e.type==='focusout'||e.key==='Enter'){
+      input._isTyping=false;
+      shiftPracticeStart(input);
+      return;
+    }
+    if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+      input._isTyping=false;
+      return;
+    }
+    if(/^[0-9]$/.test(e.key)||e.key==='Backspace'||e.key==='Delete'){
+      input._isTyping=true;
+    }
+  }
   function onPanelChange(e){
+    var startInput=e.target.closest('#ed-start');
+    if(startInput){
+      if(!startInput._isTyping){shiftPracticeStart(startInput);}
+      return;
+    }
     var copyRadio=e.target.closest('.cf-radio');
     if(copyRadio){
       var radioHidden=panel.querySelector('#ed-copyfrom');
@@ -952,6 +1057,13 @@ export function editorScript() {
         }
       }
       if(fRow)fRow.from=fromEl.value;
+      syncPracticeStart();
+      return;
+    }
+    var toInput=e.target.closest('[data-k="to"]');
+    if(toInput){
+      collectInputs();
+      syncPracticeStart();
       return;
     }
     var box=e.target.closest('[data-act="toggle-both"]');if(!box)return;
@@ -1297,6 +1409,8 @@ export function editorScript() {
     renderPanel();
     panel.addEventListener('click',onPanelClick);
     panel.addEventListener('change',onPanelChange);
+    panel.addEventListener('keydown',onPracticeStartEdit);
+    panel.addEventListener('focusout',onPracticeStartEdit);
     panel.addEventListener('click',onPanelRowFocusClick);
     setNavDisabled(true); // 編集中は日・週・月・レベルの移動を止める
     panel.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1410,6 +1524,10 @@ export function editorScript() {
   function flashRow(ri,t){
     var rowEl=panel&&panel.querySelector('.ed-row[data-ri="'+ri+'"]');
     var el=rowEl&&rowEl.querySelector('.ed-row-msg');
+    flashMessage(el,t);
+  }
+  /** 操作箇所の通知を5秒表示し、続けて通知したときは表示時間を取り直す。 */
+  function flashMessage(el,t){
     if(!el){flash(t);return;}
     el.textContent=t;
     if(el._msgTimer)clearTimeout(el._msgTimer);
