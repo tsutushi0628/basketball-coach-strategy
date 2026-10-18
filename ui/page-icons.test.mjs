@@ -17,7 +17,7 @@ const pages = [
   ['tenantPickerHtml', () => tenantPickerHtml({ tenants: [{ tenantId: 'synthetic-team', name: 'Synthetic', role: 'owner' }] })],
 ];
 
-/** PNGの実画素から四隅の色、不透明性、背景以外の描画範囲を測る。 */
+/** PNGの実画素から四隅と中央の色、不透明性、背景以外の描画範囲を測る。 */
 async function measurePng(png) {
   const browser = await chromium.launch();
   try {
@@ -38,6 +38,8 @@ async function measurePng(png) {
       const { data } = context.getImageData(0, 0, width, height);
       const corners = [0, width - 1, (height - 1) * width, width * height - 1]
         .map((pixel) => Array.from(data.slice(pixel * 4, pixel * 4 + 4)));
+      const centerOffset = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
+      const center = Array.from(data.slice(centerOffset, centerOffset + 4));
       let opaque = true;
       const bounds = [width, height, -1, -1];
       for (let y = 0; y < height; y += 1) {
@@ -55,7 +57,7 @@ async function measurePng(png) {
           bounds[3] = Math.max(bounds[3], y);
         }
       }
-      return { width, height, corners, opaque, bounds };
+      return { width, height, corners, center, opaque, bounds };
     }, png.toString('base64'));
   } finally {
     await browser.close();
@@ -91,6 +93,7 @@ test('アイコン再生成: faviconを保ちapple-touch-iconの背景色はト�
     await import(new URL('scripts/generate-icons.mjs', fixture).href);
     const svg = readFileSync(new URL('public/favicon.svg', fixture), 'utf8');
     assert.doesNotMatch(svg, /(?:fill|stroke)="var\(/);
+    assert.doesNotMatch(svg, /\bstyle=/);
     const orange = TOKENS.match(/--orange:([^;]+);/)[1];
     const ink = TOKENS.match(/--ink:([^;]+);/)[1];
     assert.ok(svg.includes(`fill="${orange}"`));
@@ -99,8 +102,13 @@ test('アイコン再生成: faviconを保ちapple-touch-iconの背景色はト�
     assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.equal(png.readUInt32BE(16), 32);
     assert.equal(png.readUInt32BE(20), 32);
-    assert.equal(svg, readFileSync(new URL('../public/favicon.svg', import.meta.url), 'utf8'));
-    assert.deepEqual(png, readFileSync(new URL('../public/favicon-32.png', import.meta.url)));
+    assert.equal(svg.replace(/\r\n/g, '\n'), readFileSync(new URL('../public/favicon.svg', import.meta.url), 'utf8').replace(/\r\n/g, '\n'));
+    const favicon = await measurePng(png);
+    assert.equal(favicon.width, 32);
+    assert.equal(favicon.height, 32);
+    assert.ok(favicon.corners.every((corner) => corner[3] === 0));
+    const orangeRgba = [...orange.slice(1).match(/../g).map((channel) => Number.parseInt(channel, 16)), 255];
+    assert.deepEqual(favicon.center, orangeRgba);
     const apple = await measurePng(readFileSync(new URL('public/apple-touch-icon.png', fixture)));
     const rgba = [...background.slice(1).match(/../g).map((channel) => Number.parseInt(channel, 16)), 255];
     assert.deepEqual(apple.corners, [rgba, rgba, rgba, rgba]);
@@ -115,9 +123,10 @@ test('Hosting公開資産: SVGはpathだけでCが右に開き、16pxで線幅2p
   const svg = readFileSync(new URL(`../${hosting.public}/favicon.svg`, import.meta.url), 'utf8');
   assert.doesNotMatch(svg, /<text\b|gradient|filter|shadow/i);
   assert.doesNotMatch(svg, /(?:fill|stroke)="var\(/);
-  for (const name of ['orange', 'ink']) {
+  assert.doesNotMatch(svg, /\bstyle=/);
+  for (const [name, attribute, count] of [['orange', 'fill', 1], ['ink', 'stroke', 3]]) {
     const value = TOKENS.match(new RegExp(`--${name}:([^;]+);`))[1];
-    assert.ok(svg.includes(`--${name}:${value}`));
+    assert.equal([...svg.matchAll(new RegExp(`${attribute}="${value}"`, 'g'))].length, count);
   }
   const browser = await chromium.launch();
   try {
@@ -175,6 +184,9 @@ for (const [file, size, backgroundToken] of [['favicon-32.png', 32, null], ['app
     const measurement = await measurePng(png);
     assert.equal(measurement.width, size);
     assert.equal(measurement.height, size);
+    const orange = TOKENS.match(/--orange:(#[0-9a-f]{6});/i)[1];
+    const orangeRgba = [...orange.slice(1).match(/../g).map((channel) => Number.parseInt(channel, 16)), 255];
+    assert.deepEqual(measurement.center, orangeRgba);
     if (backgroundToken) {
       const background = TOKENS.match(new RegExp(`--${backgroundToken}:(#[0-9a-f]{6});`, 'i'))[1];
       const rgba = [...background.slice(1).match(/../g).map((channel) => Number.parseInt(channel, 16)), 255];

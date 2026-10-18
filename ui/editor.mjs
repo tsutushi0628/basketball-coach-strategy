@@ -686,9 +686,7 @@ export function editorScript() {
     var input=panel.querySelector('#ed-start');
     var hint=panel.querySelector('#ed-start-hint');
     input.value=practiceStart();
-    input.disabled=!model.rows.some(function(row){
-      return toMin(row.from)!==null||toMin(row.to)!==null;
-    });
+    input.disabled=input.value==='';
     if(input.disabled){
       hint.textContent='時間帯に時刻を入れると使えます';
     }else{
@@ -747,7 +745,6 @@ export function editorScript() {
     if(minutes>0){amount+=minutes+'分';}
     flashMessage(panel.querySelector('#ed-start-msg'),'全部の時間帯を'+sign+amount+'ずらしました（'+previous+'→'+next+'開始）');
   }
-  /* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V4 */
   function panelHtml(){
     var rows=model.rows.map(function(r,ri){return rowHtmlForm(r,ri);}).join('');
     return '<div class="ed-h">この日を編集（'+esc(dateLabelISO(model.date,model.weekday))+'）</div>'+
@@ -981,29 +978,20 @@ export function editorScript() {
       return;
     }
   }
-  /** time入力は数字の途中でもchangeが発生するため、数字はEnterか欄外移動で確定する。 */
+  /** 練習開始はEnterか欄外移動で確定し、Escapeで直前の有効値に戻す。 */
   function onPracticeStartEdit(e){
     var input=e.target.closest('#ed-start');
     if(!input){return;}
     if(e.type==='focusout'||e.key==='Enter'){
-      input._isTyping=false;
       shiftPracticeStart(input);
       return;
     }
-    if(e.key==='ArrowUp'||e.key==='ArrowDown'){
-      input._isTyping=false;
-      return;
-    }
-    if(/^[0-9]$/.test(e.key)||e.key==='Backspace'||e.key==='Delete'){
-      input._isTyping=true;
+    if(e.key==='Escape'){
+      e.preventDefault();
+      input.value=practiceStart();
     }
   }
   function onPanelChange(e){
-    var startInput=e.target.closest('#ed-start');
-    if(startInput){
-      if(!startInput._isTyping){shiftPracticeStart(startInput);}
-      return;
-    }
     var copyRadio=e.target.closest('.cf-radio');
     if(copyRadio){
       var radioHidden=panel.querySelector('#ed-copyfrom');
@@ -1062,7 +1050,9 @@ export function editorScript() {
     }
     var toInput=e.target.closest('[data-k="to"]');
     if(toInput){
-      collectInputs();
+      var tRowEl=toInput.closest('.ed-row');if(!tRowEl)return;
+      var tRi=Number(tRowEl.getAttribute('data-ri'));var tRow=model.rows[tRi];
+      if(tRow){tRow.to=toInput.value;}
       syncPracticeStart();
       return;
     }

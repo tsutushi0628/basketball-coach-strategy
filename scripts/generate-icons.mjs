@@ -13,7 +13,7 @@ for (const name of ['orange', 'ink', 'bg']) {
   colors[name] = match[1];
 }
 
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" style="--orange:${colors.orange};--ink:${colors.ink}">
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <path fill="${colors.orange}" d="M32 2a30 30 0 1 1 0 60a30 30 0 1 1 0-60Z"/>
   <path fill="none" stroke="${colors.ink}" stroke-width="2" d="M32 2V13"/>
   <path fill="none" stroke="${colors.ink}" stroke-width="2" d="M32 51V62"/>
