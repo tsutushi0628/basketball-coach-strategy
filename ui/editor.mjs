@@ -687,7 +687,7 @@ export function editorScript() {
   /** 時間帯の編集・再描画後に、練習開始の値と利用可能な状態を揃える。 */
   function syncPracticeStart(){
     var input=panel.querySelector('#ed-start');
-    if(document.activeElement===input){return;}
+    if(document.activeElement===input||input.value!==input.defaultValue){return;}
     var hint=panel.querySelector('#ed-start-hint');
     input.value=practiceStart();
     input.defaultValue=input.value;
@@ -703,6 +703,8 @@ export function editorScript() {
     var previous=practiceStart();
     var next=input.value;
     input.defaultValue=previous;
+    var message=panel.querySelector('#ed-start-msg');
+    if(message._msgTimer===null){message.textContent='';}
     if(next===previous){return true;}
     if(previous===''){
       input.value='';
@@ -726,13 +728,11 @@ export function editorScript() {
       });
     });
     if(earliest+delta<0){
-      input.value=previous;
-      flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が00:00より前になるため、開始を'+minToHm(previousMin-earliest)+'より早くできません');
+      flashMessage(message,'時間帯が00:00より前になるため、開始を'+minToHm(previousMin-earliest)+'より早くできません',true);
       return false;
     }
     if(latest+delta>=toMin('24:00')){
-      input.value=previous;
-      flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が24:00以降になるため、開始を'+minToHm(previousMin+toMin('23:59')-latest)+'より後にできません');
+      flashMessage(message,'時間帯が24:00以降になるため、開始を'+minToHm(previousMin+toMin('23:59')-latest)+'より後にできません',true);
       return false;
     }
     model.rows.forEach(function(row,ri){
@@ -831,7 +831,7 @@ export function editorScript() {
   }
 
   /** フォーム入力を取り込み、未確定の練習開始を適用する。拒否時はfalseを返す。 */
-  function collectInputs(){
+  function collectInputs(focusInvalidStart=true){
     var input=panel.querySelector('#ed-start');
     var hasPendingStart=input.value!==input.defaultValue;
     var aim=panel.querySelector('#ed-aim');var court=panel.querySelector('#ed-court');
@@ -855,7 +855,16 @@ export function editorScript() {
         });
       });
     });
-    if(hasPendingStart){return shiftPracticeStart(input);}
+    if(hasPendingStart){
+      if(shiftPracticeStart(input)){return true;}
+      if(focusInvalidStart){
+        var behavior='smooth';
+        if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){behavior='instant';}
+        input.scrollIntoView({behavior:behavior,block:'center'});
+        input.focus({preventScroll:true});
+      }
+      return false;
+    }
     syncPracticeStart();
     return true;
   }
@@ -900,15 +909,15 @@ export function editorScript() {
   function onPanelPointerEnd(e){
     if(e.pointerId!==panelPointerId){return;}
     if(panelPointerFrame!==null||panelPointerTimer!==null){return;}
-    // タップの互換clickはpointerupと別タスクになるため、次フレーム後に未操作を判定する。
+    // iPhoneの遅延clickを先に処理できるよう、次フレームから400ms待って未操作を判定する。
     panelPointerFrame=requestAnimationFrame(function(){
       panelPointerFrame=null;
       panelPointerTimer=setTimeout(function(){
         clearPanelPointer();
         if(!panel){return;}
         var input=panel.querySelector('#ed-start');
-        if(input.value!==input.defaultValue){collectInputs();}
-      },0);
+        if(input.value!==input.defaultValue){collectInputs(false);}
+      },400);
     });
   }
   // ── フォーム操作（委譲）──
@@ -918,7 +927,10 @@ export function editorScript() {
     if(act==='toggle-both'){return;}
     if(act==='cancel'||act==='revert-auto'||act==='load-seed'||act==='copy-from'){
       var input=panel.querySelector('#ed-start');
-      input.value=input.defaultValue;
+      input.value=practiceStart();
+      input.defaultValue=input.value;
+      var message=panel.querySelector('#ed-start-msg');
+      if(message._msgTimer===null){message.textContent='';}
     }
     if(act==='save'){doSave();return;}
     if(act==='cancel'){
@@ -1038,16 +1050,21 @@ export function editorScript() {
   function onPracticeStartEdit(e){
     var input=e.target.closest('#ed-start');
     if(!input){return;}
+    var message=panel.querySelector('#ed-start-msg');
+    if(e.type==='input'||e.key==='Escape'||input.value===input.defaultValue){
+      if(message._msgTimer===null){message.textContent='';}
+    }
     if(e.type==='focusout'&&panelPointerId!==null){
       return;
     }
     if(e.type==='focusout'||e.key==='Enter'){
-      if(input.value!==input.defaultValue){collectInputs();}
+      if(input.value!==input.defaultValue){collectInputs(e.type!=='focusout');}
       return;
     }
     if(e.key==='Escape'){
       e.preventDefault();
       input.value=practiceStart();
+      input.defaultValue=input.value;
     }
   }
   function onPanelChange(e){
@@ -1469,6 +1486,7 @@ export function editorScript() {
       }
     });
     panel.addEventListener('change',onPanelChange);
+    panel.addEventListener('input',onPracticeStartEdit);
     panel.addEventListener('keydown',onPracticeStartEdit);
     panel.addEventListener('focusout',onPracticeStartEdit);
     panel.addEventListener('click',onPanelRowFocusClick);
@@ -1589,11 +1607,12 @@ export function editorScript() {
     var el=rowEl&&rowEl.querySelector('.ed-row-msg');
     flashMessage(el,t);
   }
-  /** 操作箇所の通知を5秒表示し、続けて通知したときは表示時間を取り直す。 */
-  function flashMessage(el,t){
+  function flashMessage(el,t,persistent=false){
     if(!el){flash(t);return;}
     el.textContent=t;
     if(el._msgTimer)clearTimeout(el._msgTimer);
+    el._msgTimer=null;
+    if(persistent){return;}
     el._msgTimer=setTimeout(function(){el.textContent='';},ROW_MSG_MS);
   }
 
