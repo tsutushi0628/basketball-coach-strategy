@@ -485,6 +485,9 @@ export function editorScript() {
 
   // ── フォーム描画（編集モデル→DOM）。状態は model に保持、描画は丸ごと差し替え。──
   var panel=null; // 編集パネル要素
+  var panelPointerId=null;
+  var panelPointerTimer=null;
+  var panelPointerFrame=null;
   var model=null; // 現在の編集モデル
   var editingArticle=null; // 編集対象 article
   var copySourceMonths=[]; // renderPanel 時に算出した年月別候補。change 時は再計算せず参照する。
@@ -684,6 +687,7 @@ export function editorScript() {
   /** 時間帯の編集・再描画後に、練習開始の値と利用可能な状態を揃える。 */
   function syncPracticeStart(){
     var input=panel.querySelector('#ed-start');
+    if(document.activeElement===input){return;}
     var hint=panel.querySelector('#ed-start-hint');
     input.value=practiceStart();
     input.defaultValue=input.value;
@@ -874,13 +878,47 @@ export function editorScript() {
     if(!row.matches(':focus-within'))row.focus();
   }
 
+  /** ボタン操作の印と、clickが来ない場合の確定待ちを解除する。 */
+  function clearPanelPointer(){
+    if(panelPointerFrame!==null){
+      cancelAnimationFrame(panelPointerFrame);
+      panelPointerFrame=null;
+    }
+    if(panelPointerTimer!==null){
+      clearTimeout(panelPointerTimer);
+      panelPointerTimer=null;
+    }
+    panelPointerId=null;
+  }
+  /** Safariでもblurより先に、操作ボタンを押していることを記録する。 */
+  function onPanelPointerDown(e){
+    if(e.button!==0||!e.target.closest('[data-act]')){return;}
+    clearPanelPointer();
+    panelPointerId=e.pointerId;
+  }
+  /** ボタン外で離す・操作を中断する場合も、clickを待って未確定入力を確定する。 */
+  function onPanelPointerEnd(e){
+    if(e.pointerId!==panelPointerId){return;}
+    if(panelPointerFrame!==null||panelPointerTimer!==null){return;}
+    // タップの互換clickはpointerupと別タスクになるため、次フレーム後に未操作を判定する。
+    panelPointerFrame=requestAnimationFrame(function(){
+      panelPointerFrame=null;
+      panelPointerTimer=setTimeout(function(){
+        clearPanelPointer();
+        if(!panel){return;}
+        var input=panel.querySelector('#ed-start');
+        if(input.value!==input.defaultValue){collectInputs();}
+      },0);
+    });
+  }
   // ── フォーム操作（委譲）──
   function onPanelClick(e){
     var btn=e.target.closest('[data-act]');if(!btn)return;
     var act=btn.getAttribute('data-act');
     if(act==='toggle-both'){return;}
     if(act==='cancel'||act==='revert-auto'||act==='load-seed'||act==='copy-from'){
-      syncPracticeStart();
+      var input=panel.querySelector('#ed-start');
+      input.value=input.defaultValue;
     }
     if(act==='save'){doSave();return;}
     if(act==='cancel'){
@@ -1000,7 +1038,7 @@ export function editorScript() {
   function onPracticeStartEdit(e){
     var input=e.target.closest('#ed-start');
     if(!input){return;}
-    if(e.type==='focusout'&&e.relatedTarget&&panel.contains(e.relatedTarget)&&e.relatedTarget.closest('[data-act]')){
+    if(e.type==='focusout'&&panelPointerId!==null){
       return;
     }
     if(e.type==='focusout'||e.key==='Enter'){
@@ -1419,7 +1457,17 @@ export function editorScript() {
     article.parentNode.insertBefore(panel,article.nextSibling);
     article.hidden=true; // 記事本体を隠してフォームを見せる
     renderPanel();
-    panel.addEventListener('click',onPanelClick);
+    panel.addEventListener('pointerdown',onPanelPointerDown);
+    document.addEventListener('pointerup',onPanelPointerEnd);
+    document.addEventListener('pointercancel',onPanelPointerEnd);
+    panel.addEventListener('click',function(e){
+      if(!e.target.closest('[data-act]')){return;}
+      try{
+        onPanelClick(e);
+      }finally{
+        clearPanelPointer();
+      }
+    });
     panel.addEventListener('change',onPanelChange);
     panel.addEventListener('keydown',onPracticeStartEdit);
     panel.addEventListener('focusout',onPracticeStartEdit);
@@ -1428,6 +1476,9 @@ export function editorScript() {
     panel.scrollIntoView({behavior:'smooth',block:'start'});
   }
   function closePanel(){
+    clearPanelPointer();
+    document.removeEventListener('pointerup',onPanelPointerEnd);
+    document.removeEventListener('pointercancel',onPanelPointerEnd);
     destroySortables();
     setNavDisabled(false); // 移動の制限を解除
     if(panel&&panel.parentNode)panel.parentNode.removeChild(panel);
