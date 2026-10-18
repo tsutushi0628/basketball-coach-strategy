@@ -18,6 +18,7 @@
  */
 
 import { AUTH_PAGE_CSS, GOOGLE_MARK_SVG } from './login.mjs';
+import { ICON_LINKS } from './render-shared.mjs';
 
 const FB_VERSION = '12.0.0';
 
@@ -42,6 +43,7 @@ export function joinPageHtml(cfg) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+${ICON_LINKS}
 <title>招待を受ける — 練習計画</title>
 <style>${AUTH_PAGE_CSS}</style>
 </head>

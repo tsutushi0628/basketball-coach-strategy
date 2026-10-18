@@ -12,6 +12,11 @@
 import { loadCss } from './styles/load-css.mjs';
 import { isAllTogetherTwoColRows, isTogetherRow } from './two-col-together.mjs';
 
+/** HTMLの全配信経路で共有する、Hosting公開ルートのアイコンリンク。 */
+export const ICON_LINKS = `<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />`;
+
 /** ST-labo デザイントークン（warmブランド: クリーム地＋オレンジ）。実体は styles/tokens.css。
  * T5: --shadow/--shadow-soft/--inset を削除し、border+面の濃淡2値で区切りを表現する。
  * 残すのは: 強い区切り=--line-2（セクション外周）、弱い区切り=--hair（カード・行間）。
@@ -746,6 +751,7 @@ export function renderPage({ title, css, body, script }) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+${ICON_LINKS}
 <title>${esc(title)}</title>
 <style>${BASE_CSS}${css || ''}</style>
 </head>
