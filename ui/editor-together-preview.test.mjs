@@ -134,6 +134,183 @@ async function practiceState(practicePage) {
   }));
 }
 
+/** 保存要求を記録し、blur後にサーバ応答を返せるようにする。 */
+async function capturePracticeSave(practicePage) {
+  await practicePage.evaluate(() => {
+    window.__saveRequests = [];
+    window.fetch = (url, options) => {
+      const override = JSON.parse(options.body);
+      window.__saveRequests.push({ url, method: options.method, override });
+      return new Promise((resolve) => {
+        window.__completeSave = () => resolve({
+          status: 200,
+          json: async () => ({ ok: true, override }),
+        });
+      });
+    };
+  });
+}
+
+test('練習開始: blur前の保存で17:00へ一度だけずらし、blurと保存の順序によらず同じ内容を送る', async (t) => {
+  for (const blurFirst of [false, true]) {
+    const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
+    await capturePracticeSave(practicePage);
+    await practicePage.locator('#ed-start').focus();
+    await changePracticeTime(practicePage, '#ed-start', '17:00', 'input');
+    if (blurFirst) {
+      await practicePage.locator('#ed-aim').focus();
+    }
+    await practicePage.evaluate(() => document.querySelector('[data-act="save"]').click());
+    await practicePage.waitForFunction(() => window.__saveRequests.length === 1);
+    const committed = await practiceState(practicePage);
+    const expectedTimes = [['17:00', '17:20'], ['17:20', '18:00'], ['18:10', '19:30']];
+    assert.deepEqual(committed.times, expectedTimes);
+    assert.equal(committed.start, '17:00');
+    await practicePage.locator('#ed-aim').focus();
+    assert.deepEqual(await practiceState(practicePage), committed, '保存前確定後のblurでは二重適用しない');
+    const requests = await practicePage.evaluate(() => window.__saveRequests);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/api/override');
+    assert.equal(requests[0].method, 'POST');
+    assert.deepEqual(requests[0].override.rows.map((row) => [row.from, row.to, row.minutes]), [
+      ['17:00', '17:20', 20], ['17:20', '18:00', 40], ['18:10', '19:30', 80],
+    ]);
+    assert.equal(Object.hasOwn(requests[0].override, 'start'), false);
+    await practicePage.evaluate(() => window.__completeSave());
+    await practicePage.waitForFunction(() => !document.querySelector('.ed-panel'));
+    assert.match(await practicePage.locator('.day').innerText(), /17:00/);
+    await practicePage.click('#ed-edit');
+    assert.deepEqual((await practiceState(practicePage)).times, expectedTimes, '保存内容を再編集しても一度分の移動を保つ');
+  }
+});
+
+test('練習開始: blur前の保存で00:00前・24:00以上になる値を拒否し、保存要求を送らない', async (t) => {
+  for (const boundary of [
+    { times: [['09:00', '09:20'], ['', '00:10']], value: '08:00', reason: /00:00/ },
+    { times: [['09:00', '09:20'], ['16:00', '17:00']], value: '17:00', reason: /24:00/ },
+  ]) {
+    const practicePage = await openPracticePanel(t, boundary.times);
+    await capturePracticeSave(practicePage);
+    const initial = await practiceState(practicePage);
+    await practicePage.locator('#ed-start').focus();
+    await changePracticeTime(practicePage, '#ed-start', boundary.value, 'input');
+    await practicePage.evaluate(() => document.querySelector('[data-act="save"]').click());
+    const rejected = await practiceState(practicePage);
+    assert.deepEqual(await practicePage.evaluate(() => window.__saveRequests), []);
+    assert.equal(rejected.start, initial.start);
+    assert.deepEqual(rejected.rows, initial.rows);
+    assert.deepEqual(rejected.times, initial.times);
+    assert.match(rejected.message, boundary.reason);
+    assert.equal(await practicePage.locator('#ed-start').evaluate((input) => input.nextElementSibling.id), 'ed-start-msg');
+    assert.equal(await practicePage.locator('#ed-msg').textContent(), '');
+    await practicePage.locator('#ed-aim').focus();
+    assert.deepEqual(await practiceState(practicePage), rejected);
+  }
+});
+
+test('練習開始: プレビュー・行追加・項目追加・男女切替も未確定値を先に適用し、拒否時は操作を止める', async (t) => {
+  for (const operation of ['preview', 'add-row', 'add-item', 'only-gender', 'toggle-both']) {
+    for (const value of ['17:00', '23:00']) {
+      const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
+      const initial = await practiceState(practicePage);
+      await practicePage.locator('#ed-start').focus();
+      await changePracticeTime(practicePage, '#ed-start', value, 'input');
+      if (operation === 'only-gender') {
+        practicePage.once('dialog', (dialog) => dialog.accept());
+      }
+      const preview = await practicePage.evaluate((operation) => {
+        if (operation === 'preview') {
+          return window.__bcsEditor.buildOverride();
+        }
+        document.querySelector('[data-act="' + operation + '"]').click();
+        return null;
+      }, operation);
+      const state = await practiceState(practicePage);
+      if (value === '23:00') {
+        assert.equal(preview, null);
+        assert.deepEqual(state.rows, initial.rows, operation);
+        assert.deepEqual(state.times, initial.times, operation);
+        assert.equal(state.start, initial.start, operation);
+        assert.match(state.message, /24:00/, operation);
+        assert.equal(await practicePage.locator('[data-act="toggle-both"]').first().isChecked(), true);
+        continue;
+      }
+      const expectedTimes = [['17:00', '17:20'], ['17:20', '18:00'], ['18:10', '19:30']];
+      if (operation === 'add-row') {
+        expectedTimes.push(['19:30', '19:30']);
+      }
+      assert.deepEqual(state.times, expectedTimes, operation);
+      assert.equal(state.start, value, operation);
+      if (operation === 'preview') {
+        assert.deepEqual(preview.rows.map((row) => [row.from, row.to]), expectedTimes);
+        assert.deepEqual(await practicePage.evaluate(() => window.__bcsEditor.buildOverride()), preview);
+      } else if (operation === 'add-item') {
+        assert.equal(state.rows[0].both.items.length, initial.rows[0].both.items.length + 1);
+      } else if (operation === 'only-gender') {
+        assert.equal(await practicePage.evaluate(() => window.__bcsEditor.model().onlyGender), '女子');
+      } else if (operation === 'toggle-both') {
+        assert.equal(await practicePage.locator('[data-act="toggle-both"]').first().isChecked(), false);
+        assert.equal(state.rows[0].both, null);
+      }
+      await practicePage.locator('#ed-aim').focus();
+      assert.deepEqual(await practiceState(practicePage), state, operation + '後のblurでも二重適用しない');
+    }
+  }
+});
+
+test('練習開始: 時間帯だけを変更してプレビューを繰り返しても元の開始時刻へずらさない', async (t) => {
+  const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
+  await practicePage.locator('.ed-row [data-k="from"]').first().evaluate((input) => { input.value = '09:10'; });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const preview = await practicePage.evaluate(() => window.__bcsEditor.buildOverride());
+    assert.deepEqual(preview.rows.map((row) => [row.from, row.to]), [
+      ['09:10', '09:20'], ['09:20', '10:00'], ['10:10', '11:30'],
+    ]);
+  }
+  assert.equal((await practiceState(practicePage)).start, '09:10');
+});
+
+test('練習開始: 並べ替え前にも確定し、拒否時は行と項目の表示順も戻す', async (t) => {
+  for (const selector of ['.ed-rows', '.ed-items']) {
+    for (const value of ['17:00', '23:00']) {
+      const practicePage = await openPracticePanel(t, PRACTICE_TIMES);
+      await practicePage.evaluate(() => {
+        window.__bcsEditor.model().rows[0].both.items.push({ name: 'ドリブル', note: '' });
+        window.__sortables = [];
+        window.Sortable = { create(element, options) {
+          const sortable = { element, options, destroy() {} };
+          window.__sortables.push(sortable);
+          return sortable;
+        } };
+        window.__bcsEditor.setOnlyGender(null);
+      });
+      const initial = await practiceState(practicePage);
+      await practicePage.locator('#ed-start').focus();
+      await changePracticeTime(practicePage, '#ed-start', value, 'input');
+      await practicePage.evaluate((selector) => {
+        const sortable = window.__sortables.find(({ element }) => element.matches(selector));
+        sortable.element.appendChild(sortable.element.firstElementChild);
+        sortable.options.onEnd({ from: sortable.element, oldIndex: 0, newIndex: sortable.element.children.length - 1 });
+      }, selector);
+      const state = await practiceState(practicePage);
+      if (value === '23:00') {
+        assert.deepEqual(state.rows, initial.rows, selector);
+        assert.deepEqual(state.times, initial.times, selector);
+        assert.match(state.message, /24:00/);
+      } else if (selector === '.ed-rows') {
+        assert.deepEqual(state.times, [['17:20', '18:00'], ['18:10', '19:30'], ['17:00', '17:20']]);
+      } else {
+        assert.deepEqual(state.times, [['17:00', '17:20'], ['17:20', '18:00'], ['18:10', '19:30']]);
+        assert.deepEqual(state.rows[0].both.items.map((item) => item.name), ['ドリブル', 'パス']);
+      }
+      const names = await practicePage.locator('.ed-row').evaluateAll((rows) => rows.map((row) => (
+        [...row.querySelectorAll('[data-k="name"]')].map((input) => input.value)
+      )));
+      assert.deepEqual(names, state.rows.map((row) => row.both.items.map((item) => item.name)), selector);
+    }
+  }
+});
+
 test('練習開始: 最早開始を表示し、欄外移動で一度だけ全行をずらして長さ・すき間・順序・内容を保つ', async (t) => {
   const practicePage = await openPracticePanel(t, [PRACTICE_TIMES[2], ...PRACTICE_TIMES.slice(0, 2)]);
   const initial = await practiceState(practicePage);
@@ -494,7 +671,7 @@ test('練習開始: 開始なしの日は無効で、開始の入力とクリア
     const practicePage = await openPracticePanel(t, times);
     const start = practicePage.locator('#ed-start');
     assert.equal(await start.isDisabled(), true);
-    assert.equal(await practicePage.locator('#ed-start-hint').textContent(), '時間帯に時刻を入れると使えます');
+    assert.equal(await practicePage.locator('#ed-start-hint').textContent(), '時間帯の開始時刻を入れると使えます');
     await start.focus();
     assert.equal(await start.evaluate((input) => input === document.activeElement), false);
     await practicePage.keyboard.press('Tab');
@@ -522,7 +699,7 @@ test('練習開始: 開始なしの日は無効で、開始の入力とクリア
     assert.equal(await start.isDisabled(), true, '終了時刻が残っていても開始がなければ無効');
     await to.fill('');
     assert.equal(await start.isDisabled(), true);
-    assert.equal(await practicePage.locator('#ed-start-hint').textContent(), '時間帯に時刻を入れると使えます');
+    assert.equal(await practicePage.locator('#ed-start-hint').textContent(), '時間帯の開始時刻を入れると使えます');
   }
 });
 

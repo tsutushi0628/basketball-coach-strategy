@@ -686,31 +686,32 @@ export function editorScript() {
     var input=panel.querySelector('#ed-start');
     var hint=panel.querySelector('#ed-start-hint');
     input.value=practiceStart();
+    input.defaultValue=input.value;
     input.disabled=input.value==='';
     if(input.disabled){
-      hint.textContent='時間帯に時刻を入れると使えます';
+      hint.textContent='時間帯の開始時刻を入れると使えます';
     }else{
       hint.textContent='変えると全部の時間帯が同じだけずれます';
     }
   }
   /** 全時刻が同じ日に収まることを確かめてから、練習開始の差分を一括反映する。 */
   function shiftPracticeStart(input){
-    collectInputs();
     var previous=practiceStart();
     var next=input.value;
-    if(next===previous){return;}
+    input.defaultValue=previous;
+    if(next===previous){return true;}
     if(previous===''){
       input.value='';
       flashMessage(panel.querySelector('#ed-start-msg'),'時間帯の開始時刻を1つ入力してから、練習開始を変えてください');
-      return;
+      return false;
     }
     if(next===''){
       input.value=previous;
-      return;
+      return true;
     }
     var previousMin=toMin(previous);
     var delta=toMin(next)-previousMin;
-    if(delta===0){return;}
+    if(delta===0){return true;}
     var earliest=Infinity,latest=-Infinity;
     model.rows.forEach(function(row){
       [row.from,row.to].forEach(function(time){
@@ -723,12 +724,12 @@ export function editorScript() {
     if(earliest+delta<0){
       input.value=previous;
       flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が00:00より前になるため、開始を'+minToHm(previousMin-earliest)+'より早くできません');
-      return;
+      return false;
     }
     if(latest+delta>=toMin('24:00')){
       input.value=previous;
       flashMessage(panel.querySelector('#ed-start-msg'),'時間帯が24:00以降になるため、開始を'+minToHm(previousMin+toMin('23:59')-latest)+'より後にできません');
-      return;
+      return false;
     }
     model.rows.forEach(function(row,ri){
       if(row.from!==''){row.from=minToHm(toMin(row.from)+delta);}
@@ -737,6 +738,7 @@ export function editorScript() {
       rowEl.querySelector('[data-k="from"]').value=row.from;
       rowEl.querySelector('[data-k="to"]').value=row.to;
     });
+    input.defaultValue=next;
     var sign='+';
     if(delta<0){sign='−';}
     var hours=Math.floor(Math.abs(delta)/60),minutes=Math.abs(delta)%60;
@@ -744,6 +746,7 @@ export function editorScript() {
     if(hours>0){amount+=hours+'時間';}
     if(minutes>0){amount+=minutes+'分';}
     flashMessage(panel.querySelector('#ed-start-msg'),'全部の時間帯を'+sign+amount+'ずらしました（'+previous+'→'+next+'開始）');
+    return true;
   }
   function panelHtml(){
     var rows=model.rows.map(function(r,ri){return rowHtmlForm(r,ri);}).join('');
@@ -791,7 +794,10 @@ export function editorScript() {
   // 行（時間ブロック）の並べ替えを model に反映してから再描画。
   function moveRow(oldI,newI){
     if(oldI==null||newI==null||oldI===newI)return;
-    collectInputs(); // 入力値は data-ri 基準で取り込むので、視覚順が変わっても正しく拾える
+    if(!collectInputs()){
+      panel.querySelector('.ed-rows').insertBefore(panel.querySelector('.ed-row[data-ri="'+oldI+'"]'),panel.querySelector('.ed-row[data-ri="'+(oldI+1)+'"]'));
+      return;
+    }
     var moved=model.rows.splice(oldI,1)[0];
     model.rows.splice(newI,0,moved);
     renderPanel();
@@ -799,7 +805,10 @@ export function editorScript() {
   // セル内ドリルの並べ替えを model に反映してから再描画。
   function moveItem(fromEl,oldI,newI){
     if(oldI==null||newI==null||oldI===newI)return;
-    collectInputs();
+    if(!collectInputs()){
+      fromEl.insertBefore(fromEl.querySelector('.ed-item[data-ii="'+oldI+'"]'),fromEl.querySelector('.ed-item[data-ii="'+(oldI+1)+'"]'));
+      return;
+    }
     var cellEl=fromEl.closest('.ed-cell');if(!cellEl)return;
     var ri=Number(cellEl.getAttribute('data-ri'));var side=cellEl.getAttribute('data-side');
     var cell=cellOf(model.rows[ri],side);if(!cell)return;
@@ -817,8 +826,10 @@ export function editorScript() {
     if(el&&typeof el.focus==='function')el.focus();
   }
 
-  // フォーム入力値を model に取り込む（保存・both切替の前に呼ぶ）。
+  /** フォーム入力を取り込み、未確定の練習開始を適用する。拒否時はfalseを返す。 */
   function collectInputs(){
+    var input=panel.querySelector('#ed-start');
+    var hasPendingStart=input.value!==input.defaultValue;
     var aim=panel.querySelector('#ed-aim');var court=panel.querySelector('#ed-court');
     if(aim)model.aim=aim.value;
     if(court)model.court=court.value;
@@ -840,6 +851,9 @@ export function editorScript() {
         });
       });
     });
+    if(hasPendingStart){return shiftPracticeStart(input);}
+    syncPracticeStart();
+    return true;
   }
   function cellOf(row,side){
     if(side==='both')return row.both;
@@ -864,9 +878,10 @@ export function editorScript() {
   function onPanelClick(e){
     var btn=e.target.closest('[data-act]');if(!btn)return;
     var act=btn.getAttribute('data-act');
+    if(act==='toggle-both'){return;}
     if(act==='save'){doSave();return;}
     if(act==='cancel'){
-      collectInputs(); // DOMの最新入力値を取り込んでから「空」を判定する（change未発火の入力欄も拾う）
+      if(!collectInputs()){return;}
       confirmThen({
         isEmpty:!modelHasContent(),
         h:'保存していない入力を捨てて編集を閉じます。',
@@ -878,9 +893,9 @@ export function editorScript() {
       return;
     }
     if(act==='export'){exportJson();return;}
-    if(act==='revert-auto'){collectInputs();revertAuto(btn);return;}
+    if(act==='revert-auto'){if(!collectInputs()){return;}revertAuto(btn);return;}
     if(act==='load-seed'){
-      collectInputs(); // DOMの最新入力値を取り込んでから「空」を判定する（change未発火の入力欄も拾う）
+      if(!collectInputs()){return;}
       var seed=SEEDPREFILL[model.date];
       if(!seed){flash('この日の叩き台はありません');return;}
       if(modelHasContent()&&!window.confirm('いまの内容を、自動生成の叩き台で上書きします。よろしいですか？'))return;
@@ -889,7 +904,7 @@ export function editorScript() {
       flash('叩き台を読み込みました。確認して保存してください');
       return;
     }
-    collectInputs(); // 構造変更の前に現在値を取り込む
+    if(!collectInputs()){return;}
     if(act==='only-gender'){
       var wantG=btn.getAttribute('data-only-gender')||null;
       var target=(wantG==='男子'||wantG==='女子')?wantG:null;
@@ -983,7 +998,7 @@ export function editorScript() {
     var input=e.target.closest('#ed-start');
     if(!input){return;}
     if(e.type==='focusout'||e.key==='Enter'){
-      shiftPracticeStart(input);
+      if(input.value!==input.defaultValue){collectInputs();}
       return;
     }
     if(e.key==='Escape'){
@@ -1057,7 +1072,7 @@ export function editorScript() {
       return;
     }
     var box=e.target.closest('[data-act="toggle-both"]');if(!box)return;
-    collectInputs();
+    if(!collectInputs()){box.checked=!box.checked;return;}
     var rowEl=box.closest('.ed-row');var ri=Number(rowEl.getAttribute('data-ri'));
     var row=model.rows[ri];if(!row)return;
     if(box.checked){
@@ -1275,6 +1290,7 @@ export function editorScript() {
     return {block:cell.block||'',label:label||cell.block||'',items:items};
   }
   function buildOverride(){
+    if(!collectInputs()){return null;}
     var onlyGender=(model.onlyGender==='男子'||model.onlyGender==='女子')?model.onlyGender:null;
     var rows=[];
     model.rows.forEach(function(r){
@@ -1332,8 +1348,8 @@ export function editorScript() {
     }catch(_){return path;}
   }
   function doSave(){
-    collectInputs();
     var ov=buildOverride();
+    if(!ov){return;}
     var art=editingArticle;
     var myPanel=panel; // 並行操作（別日編集/キャンセル）でグローバルが差し替わっても誤操作しないため捕捉
     flash('保存中…');
