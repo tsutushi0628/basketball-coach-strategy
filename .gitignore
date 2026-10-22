@@ -25,3 +25,5 @@ ui/e2e/
 # ルート直下のQA足場（製品依存は engine/package.json。ルートは Playwright 検証用のローカル足場）
 /package.json
 /package-lock.json
+
+.claude
