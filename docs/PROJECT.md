@@ -36,5 +36,5 @@ source_worklog: handoff-20260531-play-diagrams.md
 - Google Driveコネクタは資料の所在アカウント（個人アカウント）に接続すること。会社アカウントでは一部資料に到達不可。
 
 ## 6. 根拠となる最近の記録
-- [handoff-20260531-play-diagrams](findings/handoff-20260531-play-diagrams.md)
-- [handoff-20260530-practice-knowledge](findings/handoff-20260530-practice-knowledge.md)
+- [handoff-20260531-play-diagrams](../../s.t.findings/basketball-coach-strategy/202605/handoff-20260531-play-diagrams.md)
+- [handoff-20260530-practice-knowledge](../../s.t.findings/basketball-coach-strategy/202605/handoff-20260530-practice-knowledge.md)
