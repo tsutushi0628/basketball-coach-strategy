@@ -25,5 +25,8 @@ ui/e2e/
 # ルート直下のQA足場（製品依存は engine/package.json。ルートは Playwright 検証用のローカル足場）
 /package.json
 /package-lock.json
-
+# 作業用の一時ファイル（Codex の隔離作業場所を含む・コミットしない）
+.tmp/
+# firebase deploy のキャッシュ
+.firebase/
 .claude

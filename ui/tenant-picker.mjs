@@ -10,7 +10,7 @@
  * 等幅3カラムのfeature-card-gridにせず、縦積みの選択リスト（押せる行）にする。
  */
 
-import { loadCssWithTokens } from './render-shared.mjs';
+import { ICON_LINKS, loadCssWithTokens } from './render-shared.mjs';
 
 /** HTMLエスケープ。 */
 const esc = (s) =>
@@ -60,6 +60,7 @@ export function tenantPickerHtml({ tenants }) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+${ICON_LINKS}
 <title>チームを選ぶ — 練習計画</title>
 <style>${PICKER_CSS}</style>
 </head>

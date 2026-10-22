@@ -12,7 +12,7 @@
  * 状態: 待機（ボタン表示）／処理中（ログイン中…）／失敗（再試行可・エラー文言）。
  */
 
-import { loadCssWithTokens } from './render-shared.mjs';
+import { ICON_LINKS, loadCssWithTokens } from './render-shared.mjs';
 
 const FB_VERSION = '12.0.0';
 
@@ -49,6 +49,7 @@ export function loginPageHtml(cfg) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+${ICON_LINKS}
 <title>ログイン — 練習計画</title>
 <style>${AUTH_PAGE_CSS}</style>
 </head>

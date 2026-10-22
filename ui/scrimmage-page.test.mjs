@@ -7,20 +7,14 @@
  *   - model.players 全員の名前が描画結果（データ島含む）に出る。
  *   - 管理者でないとき「名簿」への導線がどこにも出ない。管理者のときは出る。
  *   - 実ブラウザ（Playwright/chromium）で 390px 幅・出欠→分ける→結果→もう一回→決める の通しが動き、
- *     横スクロール0・タップ目標44px以上・選手名18px以上を実測する（e2e/evidence 配下に保存）。
+ *     横スクロール0・タップ目標44px以上・選手名18px以上を実測する。
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 
 import { renderScrimmagePage } from './scrimmage-page.mjs';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = resolve(__dirname, 'e2e', 'evidence');
 
 /** `<style>...</style>` を除いた本文（可視テキスト＋データ島）だけを対象に語チェックする。
  * design-system の CSS コメントは「役割」等をUI部品の意味ロールとして使っており、
@@ -95,6 +89,11 @@ test('renderScrimmagePage: 管理者のとき「名簿」への導線と面3が�
 
 test('renderScrimmagePage: ホーム画面追加用メタが head に出る', () => {
   const html = renderScrimmagePage(NON_ADMIN_MODEL);
+  const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];
+  assert.match(head, /<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32\.png"\s*\/>/);
+  assert.ok(head.indexOf('href="/favicon-32.png"') < head.indexOf('href="/favicon.svg"'));
+  assert.match(head, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"\s*\/>/);
+  assert.match(head, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png"\s*\/>/);
   assert.ok(html.includes('apple-mobile-web-app-capable'));
   assert.ok(html.includes('apple-mobile-web-app-title" content="チーム分け"'));
   assert.ok(html.includes('name="theme-color"'));
@@ -114,7 +113,6 @@ let httpServer;
 let baseUrl;
 
 before(async () => {
-  mkdirSync(EVIDENCE_DIR, { recursive: true });
   const pages = {
     '/non-admin': renderScrimmagePage(NON_ADMIN_MODEL),
     '/admin': renderScrimmagePage(ADMIN_MODEL),
@@ -195,11 +193,6 @@ test('実ブラウザ: 出欠→分ける→結果→もう一回→決める �
       namesCount: names.length,
     };
   });
-
-  writeFileSync(
-    resolve(EVIDENCE_DIR, `scrimmage-page-dom-${new Date().toISOString().replace(/[:.]/g, '-')}.json`),
-    JSON.stringify(measured, null, 2),
-  );
 
   assert.ok(measured.scrollWidth <= measured.viewportWidth, `横スクロールが発生している（scrollWidth=${measured.scrollWidth} > viewportWidth=${measured.viewportWidth}）`);
   assert.deepEqual(measured.tappableUnder44, [], 'タップ目標44px未満の要素がある');
